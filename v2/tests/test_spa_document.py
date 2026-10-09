@@ -35,6 +35,14 @@ def test_react_owned_forms_do_not_fall_back_to_legacy_posts():
             '<form method="post" action={session.links.logout} className="account-form">',
         ),
         (
+            Path('features/admin/admin-shell.tsx'),
+            '<form method="GET" action={location.pathname} className="admin-shell__lang">',
+        ),
+        (
+            Path('features/admin/admin-shell.tsx'),
+            '<form method="post" action={session.links.logout} className="admin-shell__logout">',
+        ),
+        (
             Path('features/legacy/legacy-shell.tsx'),
             '<form method="GET" action={location.pathname} className="lang-select-form">',
         ),

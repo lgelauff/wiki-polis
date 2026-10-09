@@ -2600,11 +2600,24 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/admin',
     r'/admin/conversations/\d+',
     r'/admin/conversations/\d+/settings',
+    r'/admin/conversations/\d+/settings/basics',
+    r'/admin/conversations/\d+/settings/access',
+    r'/admin/conversations/\d+/settings/invitations',
+    r'/admin/conversations/\d+/settings/vouchers',
+    r'/admin/conversations/\d+/settings/roles',
     r'/admin/conversations/\d+/termination',
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
+    r'/admin/conversations/\d+/content',
+    r'/admin/conversations/\d+/content/statements',
+    r'/admin/conversations/\d+/content/participants',
     r'/admin/conversations/\d+/flags',
+    r'/admin/conversations/\d+/moderation',
+    r'/admin/conversations/\d+/moderation/queue',
+    r'/admin/conversations/\d+/moderation/flags',
+    r'/admin/conversations/\d+/moderation/featured',
+    r'/admin/conversations/\d+/moderation/people',
     r'/admin/conversations/\d+/invites',
     r'/admin/conversations/\d+/roles',
 )
@@ -3684,6 +3697,8 @@ def _admin_participant_roster_api_payload(conv_id: int) -> dict:
             conversation_id=conv.id,
         ),
         conversation_link=_admin_client_link(conv.id),
+        # A moderator who does not also organize sees pseudonyms only.
+        include_usernames=_can_organize(conv),
     )
 
 
@@ -3738,6 +3753,7 @@ def _admin_invitation_roster_api_payload(conv_id: int) -> dict:
         conversation=conv,
         self_link=self_link,
         conversation_link=conversation_link,
+        can_manage=_can_organize(conv),
     )
 
 
@@ -4140,7 +4156,8 @@ def _ensure_statement_moderation_policy(conv: Conversation) -> str:
 
 
 def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Strict moderation is a consultation setting: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     outcome = _set_statement_moderation_policy_command(conv, body['mode'])
     return {
         'mode': outcome.policy,
@@ -4579,7 +4596,8 @@ def _initialize_admin_phase6_command(conv: Conversation):
 
 
 def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # A phase control, like Move on: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     _initialize_admin_phase6_command(conv)
     return {
         'initialized': True,
@@ -4712,7 +4730,8 @@ def _replace_admin_roles_api_payload(
 
 
 def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Invitations are access: organizers (and site admins) only (owner, 2026-10-09).
+    conv = _require_organizer_for_conv(conv_id)
     usernames = [username.strip() for username in body['usernames']]
     result = add_conversation_invites(
         db.session, conversation_id=conv.id, usernames=usernames,
@@ -4735,7 +4754,8 @@ def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
 
 
 def _remove_admin_invitation_api_payload(conv_id: int, invite_id: int) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Invitations are access: organizers (and site admins) only (owner, 2026-10-09).
+    conv = _require_organizer_for_conv(conv_id)
     try:
         remove_conversation_invite(
             db.session, conversation_id=conv.id, invite_id=invite_id,

@@ -1,0 +1,1123 @@
+/* The admin console's one stylesheet (#477).
+ *
+ *  Every token is declared on `.admin-shell`, never on `:root`: the console is a frame
+ *  inside a site that also serves the participant experience, and a token that leaked out
+ *  of here would repaint screens this file has no business touching. Logical properties
+ *  throughout, so the frame works in a right-to-left locale without a second rule set.
+ *
+ *  Look, per the owner's standing rules: green accent, white content areas, boxes only on
+ *  the controls (the disclosure button, the language select, the log-out button), statuses
+ *  and counts as plain text, and one focus ring everywhere. */
+
+.admin-shell {
+  --focus: #0f6b3c;
+  --accent: #14663c;
+  --shell-ink: #16211a;
+  --shell-body: #3f4340;
+  --shell-muted: #5a655e;
+  --shell-line: #d5e0d8;
+  --shell-sunken: #eef3ef;
+  --shell-surface: #ffffff;
+  --shell-danger: #a3282b;
+  --shell-gap: 1rem;
+  /* The three widths a field may have: a number or an id, a name, a sentence. */
+  --field-short: 8rem;
+  --field-medium: 22rem;
+  --field-wide: 40rem;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* One column that may shrink below its content's width: without it a long title in
+     the breadcrumb widens the whole frame and the page scrolls sideways at 320px. */
+  grid-template-columns: minmax(0, 1fr);
+  /* The whole viewport at least, so the footer sits at the bottom of a short page rather
+     than under its last line, halfway up the screen. */
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  color: var(--shell-body);
+  background: var(--shell-sunken);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-shell :is(a, button, select, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────────────── */
+
+.admin-shell__topbar {
+  /* static/style.css fixes every <header> at 56px; this one wraps onto a second row
+     when the tools do not fit beside the breadcrumb, so it takes its content's height. */
+  block-size: auto;
+  min-block-size: 56px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  padding: .625rem 1.25rem;
+  background: var(--shell-surface);
+  border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell__crumbs {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.admin-shell__crumbs ol {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-shell__crumb {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--shell-ink);
+  font-weight: 500;
+}
+
+.admin-shell__crumb + .admin-shell__crumb::before {
+  content: '/';
+  margin-inline-end: .5rem;
+  color: var(--shell-muted);
+  font-weight: 400;
+}
+
+.admin-shell__crumb[aria-current] {
+  flex: none;
+  color: var(--shell-muted);
+  font-weight: 400;
+}
+
+.admin-shell__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin-inline-start: auto;
+}
+
+.admin-shell__switch {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.admin-shell__switch-option {
+  display: inline-flex;
+  align-items: center;
+  padding: .25rem .625rem;
+  color: var(--shell-body);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-shell__switch-option + .admin-shell__switch-option {
+  border-inline-start: 1px solid var(--shell-line);
+}
+
+.admin-shell__switch-option.is-current {
+  background: var(--shell-sunken);
+  color: var(--shell-ink);
+  font-weight: 500;
+}
+
+.admin-shell__identity {
+  display: flex;
+  align-items: center;
+  gap: .5rem .75rem;
+  color: var(--shell-ink);
+}
+
+.admin-shell__user {
+  max-inline-size: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.admin-shell__role {
+  display: inline-flex;
+  align-items: center;
+  gap: .3125rem;
+  white-space: nowrap;
+}
+
+.admin-shell__role-glyph {
+  flex: none;
+  color: var(--accent);
+}
+
+.admin-shell__logout {
+  display: inline;
+  margin: 0;
+}
+
+.admin-shell__logout button,
+.admin-shell__lang-select,
+.admin-shell__sections-toggle {
+  min-block-size: 24px;
+  padding: .125rem .5rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  font-size: 13px;
+}
+
+.admin-shell__lang-select {
+  padding-block-end: 0;
+}
+
+.admin-shell__lang {
+  display: inline-flex;
+  margin: 0;
+}
+
+/* 16px on a touch screen: below that iOS zooms the page when the select takes focus
+   (admin console spec: inputs 16px on touch). */
+@media (pointer: coarse) {
+  .admin-shell__lang-select {
+    font-size: 16px;
+  }
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+
+.admin-shell__body {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  align-items: start;
+  min-block-size: 0;
+}
+
+.admin-shell__side {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: 1rem 1.25rem;
+  background: var(--shell-sunken);
+  border-inline-end: 1px solid var(--shell-line);
+  min-block-size: 100%;
+}
+
+.admin-shell__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: var(--shell-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-shell__mark-glyph {
+  flex: none;
+  color: var(--accent);
+}
+
+.admin-shell__sections {
+  display: flex;
+  flex-direction: column;
+  gap: .125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* `hidden` already means display:none; this keeps a later `display` on the list from
+   quietly putting the closed links back into the tab order. */
+.admin-shell__sections[hidden] {
+  display: none;
+}
+
+.admin-shell__section-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  min-block-size: 24px;
+  padding: .25rem .5rem;
+  border-radius: 4px;
+  color: var(--shell-body);
+  text-decoration: none;
+}
+
+.admin-shell__section-link:hover {
+  background: var(--shell-surface);
+}
+
+.admin-shell__section-link[aria-current] {
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font-weight: 600;
+}
+
+/* A count badge is the one shape allowed on a link: a boxed word on a link would say
+   "press me" about something that is already a link. */
+.admin-shell__badge {
+  flex: none;
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Sub-navigation strips (Settings, Moderation, Content) ────────────────── */
+
+/* One row of links that names the pages of a section. It wraps rather than scrolls: at
+   320px four tabs are two rows, which is why the gap is on both axes and nothing is
+   given a fixed width. The current tab is text with a rule under it, not a box: the
+   section sidebar already marks where you are, and two marked places for one page is
+   noise. */
+.admin-shell .admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem 1.25rem;
+  margin-block: .75rem 1.25rem;
+  border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell .admin-tabs__tab {
+  padding-block: .375rem;
+  color: var(--shell-body);
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+}
+
+.admin-shell .admin-tabs__tab[aria-current] {
+  color: var(--shell-ink);
+  font-weight: 600;
+  border-block-end-color: var(--accent);
+}
+
+/* ── Settings pages ───────────────────────────────────────────────────────── */
+
+/* The settings form's rules come from the site stylesheet, written for a full-page
+   layout. Inside the console the page is an `.admin-page` like every other section, and
+   the form takes the console's rule colour, spacing and sub-heading style: sentence case,
+   no section numbers, nothing uppercase, and no text smaller than 12px. */
+.admin-shell .settings-form > section {
+  padding-block: 1.25rem;
+  border-block-end: 1px solid var(--shell-line);
+}
+
+/* The tab strip already leaves room under itself: the first section starts right there,
+   and a section's first line takes no margin above the section's own padding. */
+.admin-shell .settings-form > section:first-of-type {
+  padding-block-start: 0;
+}
+
+.admin-shell .settings-form > section > :first-child {
+  margin-block-start: 0;
+}
+
+.admin-shell .settings-form h2 {
+  margin: 0 0 .5rem;
+  color: var(--shell-ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.admin-shell .settings-form :is(label, legend, .access-answer-legend, .access-answer-value,
+  .access-choice, .settings-hint, .settings-eligibility, .settings-eligibility p,
+  .settings-tier span, .access-summary ul, .access-field-error, .access-confirm p),
+.admin-shell .settings-form > footer p {
+  font-size: 13px;
+}
+
+/* The site stylesheet makes every input of the form a full-width block; a checkbox sits
+   beside its label instead. */
+.admin-shell .settings-form .checkbox-label {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  color: var(--shell-body);
+  font-weight: 400;
+}
+
+.admin-shell .settings-form input[type="checkbox"] {
+  display: inline-block;
+  inline-size: auto;
+  margin: 0;
+  padding: 0;
+}
+
+/* A value shown as text sits at the rhythm of the fields it replaces. */
+.admin-shell .settings-form .access-answer {
+  margin-block: 0 .75rem;
+}
+
+/* An organizer text shown rendered to a viewer who may not change it. */
+.admin-shell .settings-value-html {
+  color: var(--shell-body);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* A value shown to a viewer who may not change it keeps its line breaks. */
+.admin-shell .settings-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Invitations and Roles are Settings tabs too: their sub-headings take the same style,
+   sentence case and never uppercase. */
+.admin-shell .settings-page h2 {
+  margin-block: 1.5rem .5rem;
+  color: var(--shell-ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* A field that cannot be used right now (the Invitations form while the invitation list
+   is not in effect) is greyed as well as faded; the fading is the console's one disabled
+   style, under Buttons. */
+.admin-shell .settings-page :is(textarea, input):disabled {
+  background: var(--shell-sunken);
+}
+
+.admin-shell .settings-page > .admin-shell__coming {
+  margin-block-start: .5rem;
+}
+
+/* ── Pages, rows and the controls that sit on them ────────────────────────── */
+
+/* One page: a heading, then content at the readable width the rest of the console uses. */
+.admin-shell .admin-page {
+  max-inline-size: 60rem;
+}
+
+.admin-shell .admin-page > h1 {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+.admin-shell .admin-page h2,
+.admin-shell .admin-page h3 {
+  margin-block: 1.5rem .5rem;
+  color: var(--shell-ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* The controls of one page sit on one line at the top of it, and wrap rather than scroll:
+   the state switch on the left, the sort on the right, both at the top of a phone screen. */
+.admin-shell .admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  margin-block: 1rem;
+}
+
+/* A position switch: boxes only on the controls, so these are the only boxed things. */
+.admin-shell .admin-switch {
+  display: inline-flex;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.admin-shell .admin-switch > button {
+  min-inline-size: 2.5rem;
+  min-block-size: 2rem;
+  padding: .25rem .625rem;
+  border: 0;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-shell .admin-switch > button[aria-pressed="true"] {
+  background: var(--shell-sunken);
+  color: var(--shell-ink);
+  font-weight: 600;
+}
+
+.admin-shell .admin-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: var(--shell-muted);
+  font-size: 13px;
+}
+
+
+/* One list, one grid: every row of a list shares the list's three columns (text, facts,
+   actions) through subgrid, so counts, facts and buttons line up from row to row whatever
+   each row's text is. The text is always the first column and the actions the last, even
+   in a row with no facts. Below 720px the row stacks: text, then facts, then actions. */
+.admin-shell .admin-rows {
+  display: grid;
+  /* The text keeps at least 12rem, so a long facts column cannot squeeze a name into a
+     one-word column. */
+  grid-template-columns: minmax(min(12rem, 100%), 1fr) auto auto;
+  column-gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-shell .admin-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  row-gap: .25rem;
+  min-inline-size: 0;
+  padding: .5rem 0;
+  border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell .admin-row > * {
+  min-inline-size: 0;
+}
+
+.admin-shell .admin-row__text {
+  grid-column: 1;
+  color: var(--shell-ink);
+}
+
+.admin-shell .admin-row > :is(.admin-row__counts, .admin-row__facts) {
+  grid-column: 2;
+}
+
+.admin-shell .admin-row > .admin-row__actions {
+  grid-column: 3;
+  justify-content: flex-end;
+}
+
+/* Anything else in a row (a note, a sub-list) takes the whole width under the text. */
+.admin-shell .admin-row > :is(.admin-row__note, .admin-row__sub) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 719px) {
+  .admin-shell .admin-rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-shell .admin-row > :is(.admin-row__text, .admin-row__counts, .admin-row__facts,
+    .admin-row__actions) {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+}
+
+.admin-shell .admin-row__suffix,
+.admin-shell .admin-row__source {
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+/* Wraps rather than holding its width: the block form's input and button must fit a
+   320px row, under the text, without pushing the page sideways. */
+.admin-shell .admin-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .375rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.admin-shell .admin-row__time {
+  color: var(--shell-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.admin-shell .admin-row__glyph {
+  min-inline-size: 2rem;
+  min-block-size: 2rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-shell .admin-row__text-button {
+  min-block-size: 2rem;
+  padding: .25rem .5rem;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Red only where the action cannot be undone (deleting an argument and its ratings). */
+.admin-shell .admin-row__text-button--danger {
+  color: var(--shell-danger);
+}
+
+/* A link in a row's actions reads like the row's text buttons: it is one of them. */
+.admin-shell .admin-row__link {
+  display: inline-block;
+  padding: .25rem .5rem;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.admin-shell .admin-row__block-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .375rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+/* The field's look is the console's one input rule (below); here only its size in a row. */
+.admin-shell .admin-row__block-form input {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+  max-inline-size: 14rem;
+}
+
+/* A labelled field inside a row's form: the label is short muted text beside the input,
+   never a placeholder standing in for one. */
+.admin-shell .admin-row__field {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .375rem;
+  min-inline-size: 0;
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+/* A note someone left on a handled row, on a line of its own under the row's text. */
+.admin-shell .admin-row__note {
+  margin: 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+.admin-shell .admin-empty {
+  margin: 1rem 0;
+  color: var(--shell-body);
+}
+
+/* The muted paragraphs on a console page: the one fact about what the numbers mean, and
+   the line that names what is not built yet. No box, no rule: they are not controls. */
+.admin-shell .admin-note {
+  margin: .5rem 0 1rem;
+  color: var(--shell-muted);
+  font-size: 13px;
+}
+
+/* A row's counts and facts sit between the text and the actions, and wrap under the text
+   at phone width rather than squeezing it. */
+.admin-shell .admin-row__counts {
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-shell .admin-row__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem .875rem;
+  max-inline-size: 30rem;
+  margin: 0;
+}
+
+.admin-shell .admin-row__facts > div {
+  display: flex;
+  gap: .25rem;
+}
+
+.admin-shell .admin-row__facts dt {
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+.admin-shell .admin-row__facts dd {
+  margin: 0;
+  color: var(--shell-body);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell .admin-row__star {
+  color: var(--accent);
+}
+
+
+/* Links on a console page take the console's green, not the participant site's blue. The
+   tab strip and the muted "↳ #N" links keep their own colours. */
+.admin-shell .admin-page a:not(.admin-tabs__tab, .admin-row__source) {
+  color: var(--accent);
+}
+
+/* ── Fields, labels and errors ─────────────────────────────────────────────── */
+
+/* One input rule for every page of the console, whatever stylesheet the page's markup
+   came from: the console's line colour, 4px corners, the interface's own sans at 14px.
+   Monospace only where the value is an identifier (`.admin-mono`: slugs, ids, codes).
+   The selector is deliberately specific enough to win over the site stylesheet's form
+   rules, which are written for the participant pages. */
+.admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+  box-sizing: border-box;
+  min-block-size: 2rem;
+  margin: 0;
+  padding: .375rem .5rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 14px;
+  /* Not the label's semibold, which `font: inherit` would otherwise carry into the field. */
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.admin-shell .admin-page textarea {
+  resize: vertical;
+}
+
+/* 16px on a touch screen: below that iOS zooms the page when a field takes focus. */
+@media (pointer: coarse) {
+  .admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+    font-size: 16px;
+  }
+}
+
+.admin-shell .admin-page .admin-mono {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.admin-shell .admin-page [aria-invalid="true"] {
+  border-color: var(--shell-danger);
+}
+
+/* A field: its label above it, 13px semibold, "(optional)" part of the label. */
+.admin-shell .admin-page .admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-inline-size: var(--field-wide);
+  margin: 0 0 .75rem;
+  color: var(--shell-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-shell .admin-page .admin-field > :is(input, select, textarea) {
+  inline-size: 100%;
+  font-weight: 400;
+}
+
+/* A short field: the input is short, its label keeps the room to stay on one line. */
+.admin-shell .admin-page .admin-field--short {
+  max-inline-size: var(--field-medium);
+}
+
+.admin-shell .admin-page .admin-field--short > input {
+  max-inline-size: var(--field-short);
+}
+
+.admin-shell .admin-page .admin-field--medium {
+  max-inline-size: var(--field-medium);
+}
+
+/* A form's buttons, and the one line under them that says how it went. */
+.admin-shell .admin-page .admin-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin-block: .25rem 0;
+}
+
+.admin-shell .admin-page .admin-form__count {
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An error is a sentence at the field or under the form's button, never only a colour:
+   the words say what went wrong, the colour only helps find them. */
+.admin-shell .admin-page :is(.admin-error, .access-field-error) {
+  margin: .25rem 0 0;
+  color: var(--shell-danger);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.admin-shell .admin-page .admin-status {
+  margin: .25rem 0 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+/* The Settings form's own summary of refused fields: the same words and colour, no box. */
+.admin-shell .settings-form .access-summary {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.admin-shell .settings-form .access-summary ul {
+  color: var(--shell-danger);
+}
+
+.admin-shell .settings-form > footer p {
+  color: var(--shell-body);
+}
+
+.admin-shell .settings-form > footer p[role="alert"] {
+  color: var(--shell-danger);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+
+/* Two button styles: a quiet one, and the primary one (the console's green) for the one
+   command a form exists for. Row actions are glyph buttons or text buttons (above).
+   Sentence case everywhere; red only for what cannot be undone. The selectors carry
+   `.admin-page` to win over the site stylesheet's button rules. */
+.admin-shell .admin-page .admin-button {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  padding: .25rem .875rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.admin-shell .admin-page .admin-button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* One disabled look for every control of the console: faded, and no pointer that
+   promises a click. */
+.admin-shell :is(button, input, select, textarea, .admin-button):disabled,
+.admin-shell .admin-page [aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+/* A list under a row's text (the arguments of a featured statement): its own small rows. */
+.admin-shell .admin-row__sub {
+  margin: .25rem 0 0;
+  padding: 0 0 0 1rem;
+  list-style: none;
+}
+
+.admin-shell .admin-row__sub > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem .75rem;
+  padding: .25rem 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+.admin-shell .admin-row__sub .admin-row__actions {
+  margin-inline-start: auto;
+}
+
+/* ── Tables, counts, statuses and dates ───────────────────────────────────── */
+
+/* A table only where its columns are compared (the featured suggestions' responses, the
+   consultations). Headers are sentence case, in the console's colours; the actions column
+   is named. */
+.admin-shell .admin-page .admin-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-shell .admin-page .admin-table :is(th, td) {
+  padding: .5rem .75rem .5rem 0;
+  border-block-end: 1px solid var(--shell-line);
+  color: var(--shell-ink);
+  text-align: start;
+  vertical-align: baseline;
+}
+
+.admin-shell .admin-page .admin-table th {
+  background: none;
+  color: var(--shell-muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.admin-shell .admin-page .admin-table .admin-num {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* A count is a bare number beside what it counts: muted, tabular, never in brackets. */
+.admin-shell .admin-count {
+  color: var(--shell-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell .admin-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A group of rows under the table, closed by default. */
+.admin-shell .admin-group {
+  margin-block: 1rem;
+}
+
+.admin-shell .admin-group > summary {
+  color: var(--shell-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* A statement's number in front of its text, as an identifier: muted, tabular. */
+.admin-shell .admin-row__id {
+  color: var(--shell-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A form on a page: no box around it (boxes are for the controls), only room above. */
+.admin-shell .admin-page .admin-form {
+  margin-block: 1rem 1.5rem;
+}
+
+/* A group of checkboxes: its legend is a label like any other, the boxes in one line. */
+.admin-shell .admin-page .admin-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem 1.25rem;
+  margin: 0 0 .75rem;
+  padding: 0;
+  border: 0;
+}
+
+.admin-shell .admin-page .admin-choices > legend {
+  margin-block-end: .25rem;
+  padding: 0;
+  color: var(--shell-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-shell .admin-page .admin-choices > label {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+}
+
+/* The settings form's remaining site-stylesheet colours, in the console's tokens. */
+.admin-shell .settings-form :is(.settings-tier span, .settings-hint, .settings-eligibility p) {
+  color: var(--shell-muted);
+  font-family: inherit;
+}
+
+.admin-shell .settings-form .settings-tier {
+  border-color: var(--shell-line);
+}
+
+.admin-shell .settings-form .access-choice input,
+.admin-shell .admin-page input:is([type="checkbox"], [type="radio"]) {
+  accent-color: var(--accent);
+}
+
+.admin-shell .settings-form .access-confirm {
+  padding: .5rem 0;
+  border: 0;
+  background: none;
+}
+
+.admin-shell .settings-form .settings-eligibility {
+  border-inline-start-color: var(--shell-line);
+  background: none;
+}
+
+.admin-shell .settings-form .settings-eligibility span {
+  color: var(--shell-body);
+  font-family: inherit;
+}
+
+/* ── Coming lines ─────────────────────────────────────────────────────────── */
+
+.admin-shell__coming {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ── Main ─────────────────────────────────────────────────────────────────── */
+
+.admin-shell__main {
+  display: block;
+  /* White down to the footer on a short page, not a white block over a grey one. */
+  align-self: stretch;
+  min-inline-size: 0;
+  padding: 1.25rem;
+  background: var(--shell-surface);
+}
+
+.admin-shell__main:focus {
+  outline: none;
+}
+
+/* The notification slot floats over the bottom corner of the viewport, out of the flow: a
+   toast inserted above the heading pushed every row down by its own height, so the pointer
+   that had just pressed a row action landed on the next row's. Its text is read out through
+   the shell's announcer, not from here.
+
+   So that a floating toast does not hide the element that has focus (WCAG 2.4.11), three
+   rules work together, all sized from the same two numbers:
+   - the toast's height is capped at --admin-toast-max (a longer message scrolls inside it),
+     so the toast plus its distance from the viewport's bottom edge never exceeds
+     --admin-toast-clearance, on phones as well;
+   - while a toast is shown, <main> gets that clearance as extra bottom padding, so even a
+     page too short to scroll has room below its last control and can be scrolled clear;
+   - and the same clearance is the root's scroll-padding, so keyboard focus scrolls a control
+     to above the toast rather than under it.
+   The cap is the smaller of a fixed height and a share of the viewport, so at high zoom
+   the toast and the clearance stay a fraction of the screen. */
+:root {
+  --admin-toast-max: min(5.5rem, 25vh);
+  --admin-toast-clearance: calc(var(--admin-toast-max) + 2rem);
+}
+
+.admin-shell__notices {
+  position: fixed;
+  inset-block-end: 1.5rem;
+  inset-inline-end: 1.5rem;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  max-inline-size: min(340px, calc(100vw - 2rem));
+  /* Only the toasts take the pointer, not the empty corner between them. */
+  pointer-events: none;
+}
+
+.admin-shell__notices > * {
+  pointer-events: auto;
+  box-sizing: border-box;
+  max-block-size: var(--admin-toast-max);
+  overflow: auto;
+}
+
+.admin-shell__notices:empty {
+  display: none;
+}
+
+:root:has(.admin-shell__notices:not(:empty)) {
+  scroll-padding-block-end: var(--admin-toast-clearance);
+}
+
+:root:has(.admin-shell__notices:not(:empty)) .admin-shell__main {
+  padding-block-end: calc(1.25rem + var(--admin-toast-clearance));
+}
+
+@media (max-width: 719px) {
+  .admin-shell__notices {
+    inset-block-end: 1rem;
+    inset-inline: 1rem;
+    max-inline-size: none;
+  }
+}
+
+.admin-shell__announcer {
+  margin: 0;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+
+.admin-shell__footer {
+  padding: .5rem 1.25rem;
+  border-block-start: 1px solid var(--shell-line);
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+.admin-shell__footer a {
+  color: inherit;
+}
+
+/* ── Narrow ───────────────────────────────────────────────────────────────── */
+
+/* Below 1024px the sidebar has no room for a list of sections, so `AdminShell` swaps it
+   for the "Sections" disclosure. The breakpoint is in the stylesheet as well as in the
+   component: this rule lays the frame out in one column, the component decides what is in
+   it. */
+@media (max-width: 1023px) {
+  .admin-shell__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-shell__side {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--shell-line);
+    min-block-size: 0;
+  }
+
+  .admin-shell__topbar {
+    padding-inline: 1rem;
+  }
+
+  .admin-shell__main {
+    padding: 1rem;
+  }
+
+  .admin-shell__tools {
+    inline-size: 100%;
+    margin-inline-start: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell *,
+  .admin-shell *::before,
+  .admin-shell *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

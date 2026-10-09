@@ -129,6 +129,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
       pseudonym,
       notifyEmail,
       notifyTalkPage,
+      consent,
     }, csrfToken),
     onError: (error) => {
       if (error instanceof ApiContractError && error.code === 'pseudonym_unavailable') {

@@ -844,7 +844,7 @@
         "responses": {
           "200": {"description": "Batch outcome and refreshed roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationBatchResponse"}}}},
           "400": {"description": "Invalid usernames", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "503": {"description": "Invitations could not be saved atomically", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
@@ -858,7 +858,7 @@
         "operationId": "deleteAdminConversationInvitation", "summary": "Remove one invitation",
         "responses": {
           "200": {"description": "Removal receipt and refreshed roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationRemovalResponse"}}}},
-          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation or invitation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
@@ -948,7 +948,7 @@
       "put": {"operationId": "putAdminStatementModerationPolicy", "summary": "Set the default decision for future statements without reinterpreting existing statements", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationPolicyRequest"}}}}, "responses": {
         "200": {"description": "Policy receipt and refreshed statement workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationPolicyResponse"}}}},
         "400": {"description": "Invalid policy", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Upstream outcome may be unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Moderation baseline reconciliation failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "503": {"description": "Current state could not be verified or saved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
@@ -1053,7 +1053,7 @@
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "post": {"operationId": "createAdminPhase6Initialization", "summary": "Initialize the dedicated informed-voting round", "responses": {
         "201": {"description": "Initialization receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPhase6InitializationResponse"}}}},
-        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "State, concurrency, or unknown-outcome conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "The informed-voting round could not be prepared upstream", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -1531,7 +1531,7 @@
         "additionalProperties": false,
         "properties": {
           "participantId": {"type": "integer", "minimum": 1},
-          "username": {"type": "string"},
+          "username": {"type": ["string", "null"], "description": "The Wikimedia username; null when the viewer moderates but does not organize the consultation, who sees the pseudonym only."},
           "pseudonym": {"type": "string"},
           "statementProgress": {
             "oneOf": [
@@ -2162,7 +2162,7 @@
       },
       "CreateParticipationRequest": {
         "type": "object",
-        "required": ["pseudonym"],
+        "required": ["pseudonym", "consent"],
         "additionalProperties": false,
         "properties": {
           "pseudonym": {
@@ -2170,7 +2170,11 @@
             "pattern": "^[a-z]{2,20}-[a-z]{2,20}$"
           },
           "notifyEmail": {"type": "boolean", "default": false},
-          "notifyTalkPage": {"type": "boolean", "default": false}
+          "notifyTalkPage": {"type": "boolean", "default": false},
+          "consent": {
+            "type": "boolean",
+            "description": "The join page's required consent tick, which also grants the CC0 licence on what the participant writes. Anything but true is refused with validation_failed on the consent field."
+          }
         }
       },
       "ParticipationResponse": {

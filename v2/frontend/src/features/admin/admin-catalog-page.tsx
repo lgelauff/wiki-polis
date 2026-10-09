@@ -1,4 +1,4 @@
-import {useCallback, useState, type FormEvent} from 'react';
+import {useCallback, useId, useState, type FormEvent, type ReactNode} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
 
@@ -10,25 +10,92 @@ import {
   postGlobalAdminGrant,
   putGlobalAdmin,
 } from '../../api/queries';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {AdminComing} from './admin-coming';
+import {AdminShell} from './admin-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
-import {useMessage} from '../../i18n/messages';
+import {useMessage, type Message} from '../../i18n/messages';
 import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Catalog = components['schemas']['AdminCatalog'];
 type CreateRequest = components['schemas']['AdminConversationCreateRequest'];
+type Row = Catalog['conversations'][number];
 
 const emptyConversation: CreateRequest = {
   slug: '', title: '', introHtml: '', outroHtml: '', accessPolicy: 'public',
   phaseRoute: '', eligibilityEventId: '', eligibilityLabel: '', polisId: null,
 };
 
+/** The server's own status word, in the console's wording. `closed` and `archived` are two
+ *  different things and the table has to say which one it is. */
+function statusLabel(msg: Message, status: Row['status']): string {
+  switch (status) {
+    case 'active': return msg('admin-status-active');
+    case 'paused': return msg('admin-status-paused');
+    case 'closed': return msg('admin-status-closed');
+    case 'archived': return msg('admin-status-archived');
+  }
+}
+
 function errorMessage(error: Error | null) {
   if (!error) return null;
-  return error instanceof ApiContractError
-    ? error.message
-    : 'The site operation could not be completed.';
+  return error instanceof ApiContractError ? error.message : null;
+}
+
+/** One row: title, who gets in, where it stands, and the three ways into it. */
+function ConversationRow({conversation}: {conversation: Row}) {
+  const msg = useMessage();
+  return (
+    <tr>
+      <td><InternalLink href={conversation.links.participant}>{conversation.title}</InternalLink></td>
+      <td>{accessPolicyLabel(msg, conversation.accessPolicy)}</td>
+      {/* The status is a word, not a badge: plain text in the spec's words. */}
+      <td>{statusLabel(msg, conversation.status)}</td>
+      <td>
+        <InternalLink href={conversation.links.manage} className="admin-row__link">
+          {msg('admin-btn-manage')}
+        </InternalLink>
+        {' '}
+        {/* The settings page hangs off the manage path the server itself builds
+            (`_admin_client_link` in app.py), so the link is derived from that link
+            rather than from a second copy of the admin route table here. */}
+        <InternalLink href={`${conversation.links.manage}/settings`} className="admin-row__link">
+          {msg('admin-overview-card-settings')}
+        </InternalLink>
+      </td>
+    </tr>
+  );
+}
+
+/** The column names every table of consultations on this page shares, so a cell in a
+ *  group is named the same way as one in the main table. */
+function ColumnHeads() {
+  const msg = useMessage();
+  return (
+    <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th>{msg('admin-th-actions')}</th></tr></thead>
+  );
+}
+
+/**
+ * A group of rows under the table, closed by default and never remembered.
+ *
+ * What is in the Practice Environment is not a consultation (#472), so it is not listed
+ * among the consultations: it goes here instead, under its own name. A practice item that
+ * is also archived or closed is still a practice item first -- the space it sits in is the
+ * fact that decides where it belongs, not how far it got.
+ */
+function Group({label, count, children}: {label: string; count: number; children: ReactNode}) {
+  return (
+    <details className="admin-group">
+      <summary>{label}{' '}<span className="admin-count">{count}</span></summary>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <ColumnHeads />
+          <tbody>{children}</tbody>
+        </table>
+      </div>
+    </details>
+  );
 }
 
 export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
@@ -42,8 +109,12 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     phaseRoute: data.phaseRoutes[0]?.key ?? '',
   });
   const [username, setUsername] = useState('');
+  // Each form's refusal is said at the form; the toast is for the row action (remove).
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [grantError, setGrantError] = useState<string | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const grantErrorId = useId();
 
   function replaceCatalog(catalog: Catalog) {
     queryClient.setQueryData<Catalog>(options.queryKey, catalog);
@@ -52,30 +123,22 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const creation = useMutation({
     mutationFn: () => postAdminConversation(draft, csrfToken),
     onSuccess: (result) => { navigate(result.links.manage); },
-    onError: (error) => setToast({
-      id: Date.now(),
-      category: 'error',
-      message: errorMessage(error) ?? 'The site operation could not be completed.',
-    }),
+    onError: (error: Error) => setCreateError(errorMessage(error) ?? msg('adminconv-command-failed')),
   });
   const grant = useMutation({
     mutationFn: () => postGlobalAdminGrant({username}, csrfToken),
     onSuccess: (result) => {
       replaceCatalog(result.catalog);
       setUsername('');
+      setGrantError(null);
     },
-    onError: (error) => {
-      const attemptedUsername = username;
-      setUsername('');
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      setToast({
-        id: Date.now(),
-        category: 'error',
-        message: error instanceof ApiContractError && error.code === 'participant_not_found'
-          ? `No account found for "${attemptedUsername}". They must log in at least once first.`
-          : errorMessage(error) ?? 'The site operation could not be completed.',
-      });
+    onError: (error: Error) => {
+      // Said at the field, which keeps what was typed so one letter can be corrected. The
+      // server's own refusal for a name nobody has signed in with is keyed, worded exactly
+      // as it always has been (#479, default f).
+      setGrantError(error instanceof ApiContractError && error.code === 'participant_not_found'
+        ? msg('admin-site-grant-not-found', username)
+        : errorMessage(error) ?? msg('adminconv-command-failed'));
     },
   });
   const membership = useMutation({
@@ -85,10 +148,10 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     onSuccess: (result) => {
       replaceCatalog(result.catalog);
     },
-    onError: (error) => setToast({
+    onError: (error: Error) => setToast({
       id: Date.now(),
       category: 'error',
-      message: errorMessage(error) ?? 'The site operation could not be completed.',
+      message: errorMessage(error) ?? msg('adminconv-command-failed'),
     }),
   });
 
@@ -102,77 +165,95 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     grant.mutate();
   }
 
+  const practice = data.conversations.filter((row) => row.accessPolicy === 'demo');
+  const archived = data.conversations.filter(
+    (row) => row.accessPolicy !== 'demo' && row.status === 'archived',
+  );
+  const consultations = data.conversations.filter(
+    (row) => row.accessPolicy !== 'demo' && row.status !== 'archived',
+  );
+
   return (
-    <LegacyShell
-      headerMode="admin"
-      title="Admin panel — Proto"
-      headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><span>Admin panel</span></nav>}
+    <AdminShell
+      site={msg('admin-site-dashboard')}
+      title={`${msg('admin-site-dashboard')} — Proto`}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
-      <div className="container">
-        <h2>Admin panel</h2>
+      <div className="admin-page">
+        <h1>{msg('admin-site-dashboard')}</h1>
 
-        <h3 className="section-heading">Conversations</h3>
-        <table className="admin-table">
-          <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-slug')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th /></tr></thead>
-          <tbody>{data.conversations.map((conversation) => (
-            <tr key={conversation.id}>
-              <td><InternalLink href={conversation.links.participant}>{conversation.title}</InternalLink></td>
-              <td><code>{conversation.slug}</code></td>
-              <td>{accessPolicyLabel(msg, conversation.accessPolicy)}</td>
-              <td>{conversation.status === 'active'
-                ? <span className="badge-active-inline">active</span>
-                : conversation.status === 'paused'
-                  ? <span className="badge-paused-inline">paused</span>
-                  : <span className="badge-inactive">closed</span>}</td>
-              {/* The settings page hangs off the manage path the server itself builds
-                  (`_admin_client_link` in app.py), so the link is derived from that link
-                  rather than from a second copy of the admin route table here. */}
-              <td>
-                <InternalLink href={conversation.links.manage} className="btn-small">{msg('admin-btn-manage')}</InternalLink>
-                {' '}
-                <InternalLink href={`${conversation.links.manage}/settings`} className="btn-small">{msg('admin-site-link-settings')}</InternalLink>
-              </td>
-            </tr>
-          ))}</tbody>
-        </table>
+        <h2 id="admin-convs-heading">{msg('admin-convs-heading')}</h2>
+        {/* The table scrolls inside its own box when its columns cannot shrink to the
+            screen (320px), so the page itself never scrolls sideways. */}
+        <div className="admin-table-wrap">
+          <table className="admin-table" aria-labelledby="admin-convs-heading">
+            <ColumnHeads />
+            <tbody>{consultations.map((conversation) => (
+              <ConversationRow key={conversation.id} conversation={conversation} />
+            ))}</tbody>
+          </table>
+        </div>
 
-        <div className="edit-form">
-          <h3>New conversation</h3>
+        {practice.length > 0 && <Group label={msg('base-mode-demo')} count={practice.length}>
+          {practice.map((conversation) => (
+            <ConversationRow key={conversation.id} conversation={conversation} />
+          ))}
+        </Group>}
+
+        {archived.length > 0 && <Group label={msg('admin-site-group-other')} count={archived.length}>
+          {archived.map((conversation) => (
+            <ConversationRow key={conversation.id} conversation={conversation} />
+          ))}
+        </Group>}
+
+
+        <div className="admin-form">
+          <h2>{msg('admin-new-conv-heading')}</h2>
           <form onSubmit={submitConversation}>
-            <div className="edit-row-fields">
-              <label>Slug (URL-safe, immutable)<input type="text" placeholder="e.g. rfc-2024-adminship" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, numbers, and hyphens only — no spaces or special characters (e.g. climate-2026)" value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
-              <label>Title<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
-              <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-common-policy-open')}</option><option value="invite_only">{msg('admin-common-policy-invited')}</option><option value="demo">{msg('admin-common-policy-practice')}</option></select></label>
-              <label>Route<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
-              <label>Eligibility event ID<input type="text" maxLength={80} placeholder="optional AccountEligibility event" value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
-              <label>Eligibility label<input type="text" maxLength={255} placeholder="optional criteria summary" value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-slug')}<input type="text" className="admin-mono" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
+            <label className="admin-field">{msg('admin-label-title')}<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-access')}<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-common-policy-open')}</option><option value="invite_only">{msg('admin-common-policy-invited')}</option><option value="demo">{msg('admin-common-policy-practice')}</option></select></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-route')}<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
+            {/* The eligibility pair stays as it was (#406 follow-up). */}
+            <label className="admin-field admin-field--medium">{msg('admin-label-elig-event')}<input type="text" maxLength={80} placeholder={msg('admin-elig-event-ph')} value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-elig-label')}<input type="text" maxLength={255} placeholder={msg('admin-elig-label-ph')} value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>
+            <label className="admin-field">{msg('admin-label-intro')}<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
+            <label className="admin-field">{msg('admin-label-outro')}<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
+            <div className="admin-form__actions">
+              <button type="submit" className="admin-button admin-button--primary" disabled={creation.isPending}>{msg('admin-btn-create-conv')}</button>
             </div>
-            <div className="edit-row-texts">
-              <label>Intro text (HTML, optional)<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
-              <label>Outro text (HTML, optional)<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
-            </div>
-            <button type="submit" disabled={creation.isPending}>Create conversation</button>
+            {createError && <p className="admin-error" role="alert">{createError}</p>}
           </form>
         </div>
 
-        <h3 className="section-heading">Global admins</h3>
-        <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>Global admins have platform-wide access to all conversations and settings. To assign a moderator or organizer to a specific conversation, use <strong>manage → conversation roles</strong> on that conversation.</p>
-        {data.globalAdmins.length ? <table className="admin-table">
-          <thead><tr><th>Participant</th><th /></tr></thead>
-          <tbody>{data.globalAdmins.map((admin) => <tr key={admin.participantId}>
-            <td>{admin.username}</td>
-            <td><button type="button" className="btn-small btn-danger" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>remove</button></td>
-          </tr>)}</tbody>
-        </table> : <p className="muted" style={{fontSize: 14, marginBottom: '1rem'}}>No global admins assigned.</p>}
-        <div className="edit-form">
-          <h3>Grant global admin</h3>
+        <h2>{msg('admin-globals-heading')}</h2>
+        {/* One row per site admin: a list, not a table, since there is one column. */}
+        {data.globalAdmins.length ? <ul className="admin-rows">
+          {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
+            <div className="admin-row__text">{admin.username}</div>
+            <div className="admin-row__actions">
+              <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
+            </div>
+          </li>)}
+        </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
+        <div className="admin-form">
+          <h2>{msg('admin-grant-heading')}</h2>
           <form onSubmit={submitGrant}>
-            <div className="edit-row-fields"><label>Wikimedia username<input type="text" required autoComplete="off" placeholder="Type a username…" style={{width: 260}} value={username} onChange={(event) => setUsername(event.target.value)} /></label></div>
-            <button type="submit" disabled={grant.isPending}>Grant</button>
+            <label className="admin-field admin-field--medium">{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" value={username}
+              {...(grantError ? {'aria-invalid': true, 'aria-describedby': grantErrorId} : {})}
+              onChange={(event) => setUsername(event.target.value)} /></label>
+            {grantError && <p className="admin-error" id={grantErrorId} role="alert">{grantError}</p>}
+            <div className="admin-form__actions">
+              <button type="submit" className="admin-button admin-button--primary" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
+            </div>
           </form>
         </div>
+
+        {/* What is not built yet, last on the page (see `AdminComing`). */}
+        <AdminComing what="Admin home, one table of the consultations you have a role in" issue={473} />
+        <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />
+        <AdminComing what="voucher use, correct and wrong codes per consultation" issue={473} />
       </div>
-    </LegacyShell>
+    </AdminShell>
   );
 }

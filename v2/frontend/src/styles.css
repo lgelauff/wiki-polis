@@ -569,6 +569,9 @@ h1[tabindex="-1"]:focus { outline: none; }
 .admin-roster__notice { display: flex; gap: .8rem; margin-top: 1.5rem; padding: 1rem; border-left: 4px solid var(--signal); background: color-mix(in srgb, var(--signal) 7%, white); }
 .admin-roster__notice span { color: var(--muted); }
 .admin-roster__table-wrap { margin-top: 2rem; overflow-x: auto; }
+/* The site admin dashboard's consultation tables: wider than a 320px screen once the
+   action cell's two links sit beside the other columns, so they scroll in their own box. */
+.admin-table-wrap { max-width: 100%; overflow-x: auto; }
 .admin-roster table { width: 100%; border-collapse: collapse; background: var(--surface); }
 .admin-roster caption { padding: 0 0 1rem; color: var(--muted); font-size: .76rem; line-height: 1.45; text-align: left; caption-side: top; }
 .admin-roster thead { border-block: 1px solid var(--ink); }
@@ -657,25 +660,6 @@ h1[tabindex="-1"]:focus { outline: none; }
 .invitation-roster li { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, .7fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
 .invitation-roster li span { color: var(--muted); font-size: .7rem; }
 .invitation-roster li button { padding: .4rem 0; border: 0; color: var(--dissent); background: none; cursor: pointer; font-size: .68rem; text-decoration: underline; }
-.roles-shell { width: min(900px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
-.roles-heading { padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
-.roles-heading h1 { margin: .3rem 0 1rem; font-size: clamp(2.7rem, 7vw, 5.5rem); line-height: .92; letter-spacing: -.065em; }
-.roles-heading > p:last-child, .roles-editor > div > p:last-child { color: var(--muted); }
-.roles-roster { margin-top: 3rem; }
-.roles-roster > header { display: flex; gap: .7rem; align-items: baseline; border-bottom: 1px solid var(--ink); }
-.roles-roster h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; }
-.roles-roster header span { color: var(--muted); font: .68rem var(--mono); }
-.roles-roster ul { margin: 0; padding: 0; list-style: none; }
-.roles-roster li { display: flex; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
-.roles-roster li span { color: var(--civic); font: .7rem var(--mono); text-transform: uppercase; }
-.roles-editor { display: grid; grid-template-columns: .8fr 1fr; gap: 3rem; margin-top: 4rem; padding-top: 3rem; border-top: 1px solid var(--ink); }
-.roles-editor h2 { margin: 0; font-size: 1.7rem; }
-.roles-editor form > label { display: block; margin-bottom: .4rem; font-weight: 650; }
-.roles-editor select { width: 100%; padding: .7rem; border: 1px solid var(--ink); background: white; }
-.roles-editor fieldset { display: flex; gap: 1.2rem; margin: 1rem 0; border: 1px solid var(--rule); }
-.roles-editor fieldset label { text-transform: capitalize; }
-.roles-editor button { padding: .65rem .8rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
-.roles-editor form > p, .roles-readonly { color: var(--muted); font-size: .72rem; }
 
 .lifecycle-shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 7rem; }
 .lifecycle-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 3rem; padding: clamp(3rem, 7vw, 6rem) 0 2.2rem; border-bottom: 1px solid var(--ink); }
@@ -939,7 +923,7 @@ h1[tabindex="-1"]:focus { outline: none; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-catalog, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell, .settings-shell, .termination-shell, .statements-shell, .featured-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-catalog, .admin-roster, .moderation-shell, .invitation-shell, .lifecycle-shell, .settings-shell, .termination-shell, .statements-shell, .featured-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
@@ -998,7 +982,6 @@ h1[tabindex="-1"]:focus { outline: none; }
   .invitation-heading, .invitation-add { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
   .invitation-roster li { grid-template-columns: 1fr auto; }
   .invitation-roster li span { grid-column: 1 / -1; }
-  .roles-editor { grid-template-columns: 1fr; gap: 1.5rem; }
   .lifecycle-heading, .lifecycle-publication > header { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
   .lifecycle-heading__state { justify-items: start; }
   .lifecycle-phases ol { grid-template-columns: 1fr; }

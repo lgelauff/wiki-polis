@@ -70,6 +70,25 @@ function serve(payload: Lifecycle) {
   server.use(http.get(LIFECYCLE_URL, () => HttpResponse.json({data: payload})));
 }
 
+test('the page renders the console shell, not the legacy header and role bar', async () => {
+  serve(lifecycle);
+  const {container} = renderConsole();
+
+  // The frame is the shell's: the sidebar landmark, the top bar and the main region all
+  // come from AdminShell, so the page itself contributes only the content.
+  expect(await screen.findByRole('navigation', {name: 'Admin sections'})).toBeVisible();
+  expect(container.querySelector('.admin-shell')).not.toBeNull();
+  expect(container.querySelectorAll('main')).toHaveLength(1);
+
+  // The two things this issue removes, by the marks they left in the document: the legacy
+  // shell's header, crumb, main and toast container, and the role bar. (The import itself
+  // is a property of the diff, which the reviewer reads; its consequence is what a test
+  // can see -- a class of LegacyShell on the page means the header is still in the tree.)
+  for (const mark of ['.site-header', '.header-crumb', '.legacy-main', '#toast-container', '.role-bar']) {
+    expect(container.querySelector(mark)).toBeNull();
+  }
+});
+
 test('renders the admin console from the catalogue English', async () => {
   serve(lifecycle);
   renderConsole();
@@ -100,18 +119,20 @@ test('links to the settings page instead of editing the same settings itself', a
   serve(lifecycle);
   renderConsole();
 
-  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
+  // Named by its description as well as its title, because the shell's sidebar now carries
+  // a Settings link of its own -- two different destinations, so the card is named whole.
+  const settings = await screen.findByRole('link', {name: 'Settings Title, introduction and access'}, {timeout: 10_000});
   expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
 
   // Nothing on this page writes a setting any more. Queried by accessible name, so a
   // control that merely moved elsewhere on the page would still fail this.
-  for (const name of ['Title', 'Intro text (HTML, optional)', 'Outro text (HTML, optional)',
+  for (const name of ['Title', 'Introduction (HTML, optional)', 'Closing text (HTML, optional)',
     'Eligibility event ID', 'Eligibility label']) {
     expect(screen.queryByLabelText(name)).toBeNull();
   }
   expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();
-  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: /^Save( settings)?$/})).toBeNull();
   expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
 
   // What stays is what the settings page does not show, plus the tier as a fact.
@@ -206,4 +227,69 @@ test('a message banana cannot parse degrades to its key, not to a blank page', a
   expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
   // Reported once, though the countdown re-renders.
   expect(errors.mock.calls.filter(([message]) => String(message).includes('adminconv-countdown-lt1m'))).toHaveLength(1);
+});
+
+/** What a moderator-only viewer is served: every capability false (the server's
+ *  `test_scoped_moderator_lifecycle_capabilities_are_read_only`), on a consultation where
+ *  every phase control would otherwise have something to show -- a pending transition, a
+ *  schedulable wind-down, and an informed-voting round not yet initialised. */
+const moderatorLifecycle: Lifecycle = {
+  ...lifecycle,
+  operator: {roleLabel: 'Moderator'},
+  phase: {...lifecycle.phase, activeKeys: ['submission', 'informed_voting']},
+  schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false},
+  capabilities: {advancePhase: false, pause: false, publish: false, editSettings: false, useAdvancedPhases: false, initializePhase6: false, archive: false},
+};
+
+test('a moderator sees the phase control and statistics read-only, with nothing that changes a phase', async () => {
+  // Owner, 2026-10-09: moderators see the Overview, phase control and statistics included,
+  // but cannot change anything there. Read-only means text, not disabled controls.
+  serve(moderatorLifecycle);
+  const {container} = renderConsole();
+
+  expect(await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000})).toBeVisible();
+  expect(screen.getByText('You are in phase 2 of 3')).toBeVisible();
+  expect(screen.getByText('Regional communities should share infrastructure funding.', {exact: false})).toBeVisible();
+  expect(screen.getByText('Only an organizer or site admin can change phases.')).toBeVisible();
+
+  for (const name of [/Move on/, /^Pause$/, /^Resume$/, /^Save phases$/, /^Initialise Phase 6$/, /^Set$/, /^Edit$/, /^Freeze$/, /^Advanced$/]) {
+    expect(screen.queryByRole('button', {name})).toBeNull();
+  }
+  expect(screen.queryByRole('group', {name: 'Phase control mode'})).toBeNull();
+  // Nothing operable anywhere in the phase control: no button, no checkbox, no date input.
+  expect(container.querySelectorAll(
+    '#phaseControl :is(button, input, select, form), .mode-guided-part :is(button, input, select, form), .mode-advanced-part',
+  )).toHaveLength(0);
+});
+
+test('a moderator is told which phase comes next and when, only while a transition is scheduled', async () => {
+  // Owner, 2026-10-09: for a moderator no readiness list and no "next phase" head; one plain
+  // line when a transition is scheduled, in the participant notice's words.
+  serve(moderatorLifecycle);
+  const {container} = renderConsole();
+
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  const line = container.querySelector('.admin-scheduled-transition');
+  expect(line).not.toBeNull();
+  const [before] = testMessages['conv-scheduled-transition']!.split('<strong>');
+  expect(line!.textContent!.startsWith(before!)).toBe(true);
+  expect(line!.querySelector('strong')).toHaveTextContent(testMessages['phase-label-argument_mapping']!);
+  expect(line!.querySelector('time')).toHaveAttribute('datetime', '2026-11-01T12:00:00Z');
+  // Text only, and no readiness list.
+  expect(line!.querySelectorAll('button, input, a')).toHaveLength(0);
+  expect(screen.queryByText('Every statement has been moderated', {exact: false})).toBeNull();
+});
+
+test('a moderator sees no next-phase line when nothing is scheduled, or the schedule is frozen', async () => {
+  for (const schedule of [
+    {...moderatorLifecycle.schedule, scheduledAt: null, targetKey: null, targetLabel: null},
+    {...moderatorLifecycle.schedule, frozen: true},
+  ]) {
+    serve({...moderatorLifecycle, schedule});
+    const {container, unmount} = renderConsole();
+
+    await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+    expect(container.querySelector('.admin-scheduled-transition')).toBeNull();
+    unmount();
+  }
 });

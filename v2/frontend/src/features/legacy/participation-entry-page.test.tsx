@@ -78,6 +78,34 @@ async function submitJoin() {
   fireEvent.click(document.getElementById('submit-btn')!);
 }
 
+test('an unticked consent box sends no join, and a ticked one sends the tick (#341)', async () => {
+  const bodies: unknown[] = [];
+  serveJoinEntry();
+  server.use(http.post(PARTICIPATION_URL, async ({request}) => {
+    bodies.push(await request.json());
+    return HttpResponse.json({data: {
+      pseudonym: PSEUDONYM,
+      notifications: {email: false, talkPage: false},
+      eligibilityStatus: 'not_required',
+      links: {conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
+    }}, {status: 201});
+  }));
+  renderJoin();
+  const form = await joinForm();
+  // A `noValidate` here would let an unticked join through to the server.
+  expect(form).not.toHaveAttribute('novalidate');
+
+  fireEvent.click(document.getElementById('submit-btn')!);
+  // Give a request that should not exist the chance to arrive before asserting its absence.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(bodies).toHaveLength(0);
+
+  fireEvent.click(document.getElementById('consent-check')!);
+  fireEvent.click(document.getElementById('submit-btn')!);
+  await waitFor(() => expect(bodies).toHaveLength(1));
+  expect(bodies[0]).toMatchObject({consent: true, pseudonym: PSEUDONYM});
+});
+
 test('the join screen renders its copy from the catalogue', async () => {
   renderJoin();
   expect(await screen.findByText(testMessages['accept-choose-pseudonym']!)).toBeVisible();

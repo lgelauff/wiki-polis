@@ -28,7 +28,9 @@ from pathlib import Path
 _V2 = Path(__file__).resolve().parents[1]
 _SRC = _V2 / 'frontend' / 'src'
 _CALL = re.compile(r"""\b(?:msg|_)\(\s*(['"])([A-Za-z0-9][A-Za-z0-9._-]*)\1\s*[,)]""")
-_MAP_ENTRY = re.compile(r"""^\s*'?[A-Za-z0-9_-]+'?\s*:\s*'([a-z0-9][a-z0-9._-]*)'\s*,""", re.M)
+# The id may contain a space: ROLE_MESSAGES keys on 'Global admin', the string app.py sends
+# for a site administrator, because the console's own word for the role is not the server's.
+_MAP_ENTRY = re.compile(r"""^\s*'?[A-Za-z0-9_ -]+'?\s*:\s*'([a-z0-9][a-z0-9._-]*)'\s*,""", re.M)
 
 # Messages with no call site yet: their screens are not converted, so reachability cannot be
 # computed and the key's own namespace is the only available signal. `phase-` is deliberately

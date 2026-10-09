@@ -1,6 +1,7 @@
 import {useEffect} from 'react';
 
 import {useMessage} from '../../i18n/messages';
+import {useAnnounce} from '../admin/admin-announcer';
 
 export type LegacyToastMessage = {
   id: number;
@@ -8,14 +9,16 @@ export type LegacyToastMessage = {
   message: string;
 };
 
-const durations = {
-  error: 8_000,
-  warning: 6_000,
+/** How long a toast stays before it goes by itself. An error or a warning has no entry: it
+ *  stays until dismissed, because it floats in the far corner of the console, where a
+ *  screen-magnifier user is likely to miss it before a timer takes it away (pr-check #540,
+ *  owner decision). A newer toast still replaces it, since the slot holds one. */
+const durations: Partial<Record<LegacyToastMessage['category'], number>> = {
   success: 4_000,
   info: 5_000,
   import_result: 6_000,
   import_row_error: 6_000,
-} as const;
+};
 
 export function LegacyToast({
   toast,
@@ -28,16 +31,25 @@ export function LegacyToast({
   sticky?: boolean;
 }) {
   const msg = useMessage();
+  // Inside the admin console the shell's always-mounted region reads the toast out, once per
+  // toast id -- so a second identical message is read again, which a role on an element
+  // created together with its text does not reliably do. Elsewhere the toast keeps its role.
+  const announce = useAnnounce();
   useEffect(() => {
-    if (!toast || sticky) return undefined;
-    const timer = window.setTimeout(onDismiss, durations[toast.category]);
+    const duration = toast && !sticky ? durations[toast.category] : undefined;
+    if (duration === undefined) return undefined;
+    const timer = window.setTimeout(onDismiss, duration);
     return () => window.clearTimeout(timer);
   }, [onDismiss, sticky, toast]);
+  const urgent = toast ? toast.category === 'error' || toast.category === 'warning' : false;
+  const toastId = toast?.id;
+  const toastText = toast?.message;
+  useEffect(() => {
+    if (announce && toastId !== undefined && toastText) announce(toastText, urgent ? 'assertive' : 'polite');
+  }, [announce, toastId, toastText, urgent]);
 
   if (!toast) return null;
-  const role = toast.category === 'error' || toast.category === 'warning'
-    ? 'alert'
-    : 'status';
+  const role = announce ? undefined : urgent ? 'alert' : 'status';
   return (
     <div className={`toast toast--${toast.category}`} role={role}>
       <span className="toast__msg">{toast.message}</span>

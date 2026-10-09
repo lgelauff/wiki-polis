@@ -1899,7 +1899,8 @@ export interface components {
         };
         AdminParticipant: {
             participantId: number;
-            username: string;
+            /** @description The Wikimedia username; null when the viewer moderates but does not organize the consultation, who sees the pseudonym only. */
+            username: string | null;
             pseudonym: string;
             statementProgress: components["schemas"]["AdminStatementProgress"] | null;
             arguments: {
@@ -2254,6 +2255,8 @@ export interface components {
             notifyEmail: boolean;
             /** @default false */
             notifyTalkPage: boolean;
+            /** @description The join page's required consent tick, which also grants the CC0 licence on what the participant writes. Anything but true is refused with validation_failed on the consent field. */
+            consent: boolean;
         };
         ParticipationResponse: {
             data: components["schemas"]["Participation"];
@@ -4557,7 +4560,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4598,7 +4601,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminInvitationRemovalResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5064,7 +5067,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5601,7 +5604,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminPhase6InitializationResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;

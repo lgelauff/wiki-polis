@@ -15,9 +15,37 @@ test.each([
   ['/app/real', '/consultations'],
   ['/app/conversations/topic/arguments', '/c/topic#tab-arguments'],
   ['/app/admin/conversations/7/invitations', '/admin/conversations/7/invites'],
+  ['/app/admin/conversations/7/settings/basics', '/admin/conversations/7/settings/basics'],
+  ['/app/admin/conversations/7/moderation/queue', '/admin/conversations/7/moderation/queue'],
   ['/c/topic/report', '/c/topic/report'],
 ])('maps %s to canonical client route %s', (source, expected) => {
   expect(canonicalClientPath(source)).toBe(expected);
+});
+
+test.each([
+  '/admin/conversations/7/settings',
+  '/admin/conversations/7/settings/basics',
+  '/admin/conversations/7/settings/access',
+])('%s is a client route, so the Settings strip links stay in the SPA', (path) => {
+  // The strip's tabs are `<a href>` built from the conversation id; an unregistered path
+  // would make InternalLink render a plain anchor and cost a full page load.
+  expect(canonicalClientPath(path)).toBe(path);
+});
+
+test.each([
+  '/admin/conversations/7/moderation/queue',
+  '/admin/conversations/7/moderation/flags',
+  '/admin/conversations/7/moderation/featured',
+  '/admin/conversations/7/moderation/people',
+])('%s is a client route, so the Moderation strip links stay in the SPA', (path) => {
+  expect(canonicalClientPath(path)).toBe(path);
+});
+
+test.each([
+  '/admin/conversations/7/moderation',
+  '/admin/conversations/7/content',
+])('the bare section path %s is a client route, so it reaches the redirect to its first tab', (path) => {
+  expect(canonicalClientPath(path)).toBe(path);
 });
 
 test('prevents a document navigation and updates React Router location', () => {
