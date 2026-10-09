@@ -109,6 +109,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     phaseRoute: data.phaseRoutes[0]?.key ?? '',
   });
   const [username, setUsername] = useState('');
+  const [newOpen, setNewOpen] = useState(false);
   // Each form's refusal is said at the form; the toast is for the row action (remove).
   const [createError, setCreateError] = useState<string | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
@@ -207,8 +208,11 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         </Group>}
 
 
-        <div className="admin-form">
-          <h2>{msg('admin-new-conv-heading')}</h2>
+        {/* Folded by default (owner, 2026-10-09): creating a consultation is rare, the list is what a
+            site admin comes for. It stays open once opened, so an error after Create stays in view. */}
+        <details className="admin-form admin-fold" open={newOpen}
+          onToggle={(event) => setNewOpen(event.currentTarget.open)}>
+          <summary><h2>{msg('admin-new-conv-heading')}</h2></summary>
           <form onSubmit={submitConversation}>
             <label className="admin-field admin-field--medium">{msg('admin-label-slug')}<input type="text" className="admin-mono" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
             <label className="admin-field">{msg('admin-label-title')}<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
@@ -224,7 +228,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             </div>
             {createError && <p className="admin-error" role="alert">{createError}</p>}
           </form>
-        </div>
+        </details>
 
         <h2>{msg('admin-globals-heading')}</h2>
         {/* One row per site admin: a list, not a table, since there is one column. */}

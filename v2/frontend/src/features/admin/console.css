@@ -1125,3 +1125,13 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* A form folded behind its heading (New consultation on the site admin dashboard). */
+.admin-shell .admin-fold > summary {
+  cursor: pointer;
+}
+
+.admin-shell .admin-fold > summary > h2 {
+  display: inline;
+  margin: 0;
+}

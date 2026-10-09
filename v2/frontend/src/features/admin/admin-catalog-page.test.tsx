@@ -314,3 +314,17 @@ test('the dashboard sits in the console frame, with no consultation sections in 
   // The participant side of a site-level page is the list of consultations.
   expect(screen.getByRole('link', {name: 'Participant'})).toHaveAttribute('href', '/consultations');
 });
+
+test('New consultation is folded behind its heading until opened, and stays open', async () => {
+  serve(mixed);
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const heading = screen.getByRole('heading', {name: 'New consultation', level: 2});
+  const fold = heading.closest('details')!;
+  expect(fold).not.toHaveAttribute('open');
+  expect(within(fold).getByRole('button', {name: 'Create consultation'})).not.toBeVisible();
+  fireEvent.click(heading.closest('summary')!);
+  expect(fold).toHaveAttribute('open');
+  expect(within(fold).getByRole('button', {name: 'Create consultation'})).toBeVisible();
+});
