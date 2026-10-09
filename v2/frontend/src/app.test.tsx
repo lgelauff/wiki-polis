@@ -308,7 +308,10 @@ test('moderates statements and imports approved seeds through typed commands', a
 test('matches legacy featured-statement administration and commands', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/featured']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Featured statements — Community strategy'})).toBeVisible();
+  // #473: the old .../featured path redirects to Moderation > Featured, which is headed
+  // like every other page of the section.
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Featured'})).toBeNull();
   expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
   expect(screen.getByText('An approved seed statement.')).toBeVisible();
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
@@ -358,19 +361,20 @@ test('resolves a privacy-safe moderation item through the typed contract', async
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Moderation queue — Community strategy'})).toBeVisible();
+  // #473: the old /moderation path redirects to Moderation > Flags. The page no longer
+  // carries the flagger-identity paragraph (quiet screens: no explanatory sentences), and
+  // the row is the flagged text with the reason as its suffix, so no target label is
+  // printed; one "Mark as handled" closes it, with an optional note.
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Flags'})).toBeNull();
   expect(screen.getByText('A statement containing private information.')).toBeVisible();
-  expect(screen.getByText('Privacy violation')).toBeVisible();
-  expect(screen.getByText(/Flagger identities are intentionally not shown here/)).toBeVisible();
-  fireEvent.change(screen.getByPlaceholderText('Resolution note (optional)'), {
-    target: {value: 'Removed private detail'},
-  });
-  fireEvent.click(screen.getByRole('button', {name: 'resolve'}));
+  // The reason is a muted suffix on the flagged text, not a field of its own.
+  expect(screen.getByText(/Privacy violation/)).toHaveClass('admin-row__suffix');
+  fireEvent.click(screen.getByRole('button', {name: /^Mark as handled/}));
 
   expect(await screen.findByText('No open flags.')).toBeVisible();
-  expect(screen.queryByText('Removed private detail')).not.toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
-  expect(screen.getByText('Statement #12')).toBeVisible();
+  await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
+    .toHaveTextContent('Flag marked as handled.'));
 });
 
 /** Serves settings whose answer to who gets in is the invitation list: the Invitations tab
@@ -556,6 +560,51 @@ test.each([
   expect(screen.queryByRole('heading', {name: heading})).toBeNull();
   expect(screen.getByRole('navigation', {name: 'Settings'})
     .querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+});
+
+test.each([
+  ['/admin/conversations/7/flags', '/admin/conversations/7/moderation/flags'],
+  ['/admin/conversations/7/featured', '/admin/conversations/7/moderation/featured'],
+  // The /app/admin group's flags page was called moderation.
+  ['/app/admin/conversations/7/moderation', '/admin/conversations/7/moderation/flags'],
+  ['/app/admin/conversations/7/featured', '/admin/conversations/7/moderation/featured'],
+])('the old path %s redirects to the Moderation page %s', async (source, target) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[source]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText('client location')).toHaveTextContent(target));
+  expect(screen.getByLabelText('client location').textContent).toBe(target);
+});
+
+test.each([
+  ['/admin', 'queue', 'Queue'],
+  ['/admin', 'flags', 'Flags'],
+  ['/admin', 'featured', 'Featured'],
+  ['/admin', 'people', 'People'],
+  ['/app/admin', 'queue', 'Queue'],
+  ['/app/admin', 'flags', 'Flags'],
+  ['/app/admin', 'featured', 'Featured'],
+  ['/app/admin', 'people', 'People'],
+])('%s/conversations/7/moderation/%s is routed to its page', async (group, page, heading) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`${group}/conversations/7/moderation/${page}`]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  expect(screen.queryByRole('heading', {name: heading})).toBeNull();
+  expect(within(screen.getByRole('navigation', {name: 'Moderation'})).getByRole('link', {name: heading}))
+    .toHaveAttribute('aria-current', 'page');
 });
 
 test('renders a conversation record from the generated API contract', async () => {

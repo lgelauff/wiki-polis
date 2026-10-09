@@ -107,6 +107,28 @@ TAGS:
     - admin-label-slug
     - admin-label-title
     - admin-label-wm-username
+    - admin-moderation-approve-statement
+    - admin-moderation-flag-already-handled
+    - admin-moderation-flag-handle
+    - admin-moderation-flag-handled
+    - admin-moderation-flag-marked-handled
+    - admin-moderation-flag-note
+    - admin-moderation-flags
+    - admin-moderation-flags-handled-heading
+    - admin-moderation-hide-statement
+    - admin-moderation-people
+    - admin-moderation-person-active
+    - admin-moderation-person-already-allowed
+    - admin-moderation-queue
+    - admin-moderation-queue-empty
+    - admin-moderation-sort-aria
+    - admin-moderation-sort-based-on
+    - admin-moderation-sort-oldest
+    - admin-moderation-state-approved
+    - admin-moderation-state-hidden
+    - admin-moderation-state-unmoderated
+    - admin-moderation-statement-approved
+    - admin-moderation-statement-hidden
     - admin-nav-panel
     - admin-new-conv-heading
     - admin-overview-card-settings
@@ -340,9 +362,13 @@ TAGS:
     - flags-th-reason
     - flags-th-resolved
     - flags-th-target
+    - flash-already-banned
+    - flash-banned
+    - flash-load-statements-failed
     - flash-move-sync-failed
     - flash-moved-to
     - flash-phases-saved-sync-failed
+    - flash-unbanned
     - guidance-argument-check-claim
     - guidance-argument-check-direction
     - guidance-argument-check-one-point

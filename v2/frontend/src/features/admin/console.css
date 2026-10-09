@@ -266,7 +266,7 @@
   white-space: nowrap;
 }
 
-/* ── Sub-navigation strips (Settings, and later Moderation and Content) ───── */
+/* ── Sub-navigation strips (Settings, Moderation, Content) ────────────────── */
 
 /* One row of links that names the pages of a section. It wraps rather than scrolls: at
    320px four tabs are two rows, which is why the gap is on both axes and nothing is
@@ -385,6 +385,216 @@
 
 .admin-shell .settings-page > .admin-shell__coming {
   margin-block-start: .5rem;
+}
+
+/* ── Pages, rows and the controls that sit on them ────────────────────────── */
+
+/* One page: a heading, then content at the readable width the rest of the console uses. */
+.admin-shell .admin-page {
+  max-inline-size: 60rem;
+}
+
+.admin-shell .admin-page > h1 {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+.admin-shell .admin-page h2,
+.admin-shell .admin-page h3 {
+  margin-block: 1.5rem .5rem;
+  color: var(--shell-ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* The controls of one page sit on one line at the top of it, and wrap rather than scroll:
+   the state switch on the left, the sort on the right, both at the top of a phone screen. */
+.admin-shell .admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  margin-block: 1rem;
+}
+
+/* A position switch: boxes only on the controls, so these are the only boxed things. */
+.admin-shell .admin-switch {
+  display: inline-flex;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.admin-shell .admin-switch > button {
+  min-inline-size: 2.5rem;
+  min-block-size: 2rem;
+  padding: .25rem .625rem;
+  border: 0;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-shell .admin-switch > button[aria-pressed="true"] {
+  background: var(--shell-sunken);
+  color: var(--shell-ink);
+  font-weight: 600;
+}
+
+.admin-shell .admin-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: var(--shell-muted);
+  font-size: 13px;
+}
+
+.admin-shell .admin-sort select {
+  min-block-size: 2rem;
+  padding: .125rem .5rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* One row per statement or flag: the text takes what is left, the actions keep their size.
+   At 320px the row wraps, so the actions sit under the text rather than beside a
+   two-word line. */
+.admin-shell .admin-rows {
+  display: flex;
+  flex-direction: column;
+  gap: .125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-shell .admin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .25rem .75rem;
+  min-inline-size: 0;
+  padding: .5rem 0;
+  border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell .admin-row__text {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+  color: var(--shell-ink);
+}
+
+.admin-shell .admin-row__suffix,
+.admin-shell .admin-row__source {
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+/* Shrinks and wraps rather than holding its width: the block form's input and button must
+   fit a 320px row, under the text, without pushing the page sideways. */
+.admin-shell .admin-row__actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .375rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.admin-shell .admin-row__time {
+  color: var(--shell-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.admin-shell .admin-row__glyph {
+  min-inline-size: 2rem;
+  min-block-size: 2rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-shell .admin-row__glyph:disabled {
+  color: var(--shell-muted);
+  cursor: default;
+  opacity: .55;
+}
+
+.admin-shell .admin-row__text-button {
+  min-block-size: 2rem;
+  padding: .25rem .5rem;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.admin-shell .admin-row__block-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .375rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+/* 16px: a smaller input makes iOS Safari zoom the page when it takes focus. */
+.admin-shell .admin-row__block-form input {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+  min-block-size: 2rem;
+  max-inline-size: 14rem;
+  padding: .125rem .5rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  font-size: 16px;
+}
+
+/* A labelled field inside a row's form: the label is short muted text beside the input,
+   never a placeholder standing in for one. */
+.admin-shell .admin-row__field {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .375rem;
+  min-inline-size: 0;
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+/* A note someone left on a handled row, on a line of its own under the row's text. */
+.admin-shell .admin-row__note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+.admin-shell .admin-empty {
+  margin: 1rem 0;
+  color: var(--shell-body);
 }
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */

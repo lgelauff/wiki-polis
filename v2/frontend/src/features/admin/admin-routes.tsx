@@ -9,7 +9,9 @@ import {AdminCatalogPage} from './admin-catalog-page';
 import {AdminFeaturedPage} from './admin-featured-page';
 import {AdminInvitationsPage} from './admin-invitations-page';
 import {AdminLifecyclePage} from './admin-lifecycle-page';
-import {AdminModerationPage} from './admin-moderation-page';
+import {AdminModerationFlagsPage} from './admin-moderation-flags-page';
+import {AdminModerationPeoplePage} from './admin-moderation-people-page';
+import {AdminModerationQueuePage} from './admin-moderation-queue-page';
 import {AdminParticipantsPage} from './admin-participants-page';
 import {AdminRolesPage} from './admin-roles-page';
 import {AdminSettingsPage, AdminSettingsVouchersPage} from './admin-settings-page';
@@ -67,9 +69,11 @@ function Protected({children}: {children: ReactNode}) {
 
 type AdminRouteKind =
   | 'catalog'
-  | 'featured'
   | 'lifecycle'
-  | 'moderation'
+  | 'moderation-featured'
+  | 'moderation-flags'
+  | 'moderation-people'
+  | 'moderation-queue'
   | 'participants'
   | 'settings-access'
   | 'settings-basics'
@@ -96,12 +100,16 @@ function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
       return <><AdminHeader /><AdminTerminationPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
     case 'statements':
       return <AdminStatementsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'featured':
-      return <AdminFeaturedPage conversationId={conversationId} csrfToken={session.csrfToken} />;
     case 'participants':
       return <AdminParticipantsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'moderation':
-      return <AdminModerationPage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-queue':
+      return <AdminModerationQueuePage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-flags':
+      return <AdminModerationFlagsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-featured':
+      return <AdminFeaturedPage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-people':
+      return <AdminModerationPeoplePage conversationId={conversationId} csrfToken={session.csrfToken} />;
     case 'settings-invitations':
       return <AdminInvitationsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
     case 'settings-vouchers':
@@ -145,6 +153,8 @@ export function AdminSettingsIndexRoute() {
 }
 export const AdminTerminationRoute = () => <AdminRoute kind="termination" />;
 export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;
-export const AdminFeaturedRoute = () => <AdminRoute kind="featured" />;
 export const AdminParticipantsRoute = () => <AdminRoute kind="participants" />;
-export const AdminModerationRoute = () => <AdminRoute kind="moderation" />;
+export const AdminModerationQueueRoute = () => <AdminRoute kind="moderation-queue" />;
+export const AdminModerationFlagsRoute = () => <AdminRoute kind="moderation-flags" />;
+export const AdminModerationFeaturedRoute = () => <AdminRoute kind="moderation-featured" />;
+export const AdminModerationPeopleRoute = () => <AdminRoute kind="moderation-people" />;

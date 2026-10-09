@@ -35,9 +35,11 @@ const AdminSettingsRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({
 const AdminRedirectRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRedirectRoute})));
 const AdminTerminationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminTerminationRoute})));
 const AdminStatementsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminStatementsRoute})));
-const AdminFeaturedRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminFeaturedRoute})));
 const AdminParticipantsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminParticipantsRoute})));
-const AdminModerationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationRoute})));
+const AdminModerationQueueRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationQueueRoute})));
+const AdminModerationFlagsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationFlagsRoute})));
+const AdminModerationFeaturedRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationFeaturedRoute})));
+const AdminModerationPeopleRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationPeopleRoute})));
 
 /** Where the old invites and roles paths went (#478): both pages are tabs of Settings now.
  *  One place, so the two route groups cannot drift apart. */
@@ -45,6 +47,12 @@ const settingsInvitationsPath = (conversationId: string) =>
   `/admin/conversations/${conversationId}/settings/invitations`;
 const settingsRolesPath = (conversationId: string) =>
   `/admin/conversations/${conversationId}/settings/roles`;
+
+/** Where the old flags and featured paths went (#473): both are pages of Moderation now. */
+const moderationFlagsPath = (conversationId: string) =>
+  `/admin/conversations/${conversationId}/moderation/flags`;
+const moderationFeaturedPath = (conversationId: string) =>
+  `/admin/conversations/${conversationId}/moderation/featured`;
 
 function UnmatchedRoute() {
   // The server 404s any path outside its SPA route table, so this only fires for
@@ -80,9 +88,13 @@ function DeferredRoutes() {
       <Route path="/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
       <Route path="/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
-      <Route path="/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
+      <Route path="/admin/conversations/:conversationId/featured" element={<AdminRedirectRoute to={moderationFeaturedPath} />} />
       <Route path="/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
-      <Route path="/admin/conversations/:conversationId/flags" element={<AdminModerationRoute />} />
+      <Route path="/admin/conversations/:conversationId/flags" element={<AdminRedirectRoute to={moderationFlagsPath} />} />
+      <Route path="/admin/conversations/:conversationId/moderation/queue" element={<AdminModerationQueueRoute />} />
+      <Route path="/admin/conversations/:conversationId/moderation/flags" element={<AdminModerationFlagsRoute />} />
+      <Route path="/admin/conversations/:conversationId/moderation/featured" element={<AdminModerationFeaturedRoute />} />
+      <Route path="/admin/conversations/:conversationId/moderation/people" element={<AdminModerationPeopleRoute />} />
       <Route path="/admin/conversations/:conversationId/invites" element={<AdminRedirectRoute to={settingsInvitationsPath} />} />
       <Route path="/admin/conversations/:conversationId/roles" element={<AdminRedirectRoute to={settingsRolesPath} />} />
       <Route path="/app/parity/fork" element={<ForkPage />} />
@@ -109,9 +121,13 @@ function DeferredRoutes() {
       <Route path="/app/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
       <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminRedirectRoute to={moderationFeaturedPath} />} />
       <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminRedirectRoute to={moderationFlagsPath} />} />
+      <Route path="/app/admin/conversations/:conversationId/moderation/queue" element={<AdminModerationQueueRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/moderation/flags" element={<AdminModerationFlagsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/moderation/featured" element={<AdminModerationFeaturedRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/moderation/people" element={<AdminModerationPeopleRoute />} />
       <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminRedirectRoute to={settingsInvitationsPath} />} />
       <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRedirectRoute to={settingsRolesPath} />} />
       <Route path="*" element={<UnmatchedRoute />} />
