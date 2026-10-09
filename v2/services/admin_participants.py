@@ -27,11 +27,14 @@ class AdminParticipantRow:
     arguments_voted: int
     active_ban: ConversationBan | None
 
-    def to_api(self) -> dict:
+    def to_api(self, *, include_username: bool = True) -> dict:
         progress = self.statement_progress
         return {
             'participantId': self.participant.id,
-            'username': self.participant.mw_username,
+            # Null for a moderator-only viewer: moderators know people by the pseudonym
+            # they take part under, never by their Wikimedia account (owner decision,
+            # 2026-10-08). Organizers and site admins keep the username.
+            'username': self.participant.mw_username if include_username else None,
             'pseudonym': self.participation.pseudonym,
             'statementProgress': ({
                 'total': int(progress['total']),
@@ -59,14 +62,23 @@ class AdminParticipantRoster:
     rows: list[AdminParticipantRow]
     statement_progress_unavailable: bool
 
-    def to_api(self, *, self_link: str, conversation_link: str) -> dict:
+    def to_api(
+        self, *, self_link: str, conversation_link: str, include_usernames: bool = True,
+    ) -> dict:
+        # Read in username order; without usernames the order would still betray them, so
+        # it follows the pseudonym instead.
+        rows = self.rows if include_usernames else sorted(
+            self.rows, key=lambda row: row.participation.pseudonym or '',
+        )
         return {
             'conversation': {
                 'id': self.conversation.id,
                 'slug': self.conversation.slug,
                 'title': self.conversation.title,
             },
-            'participants': [row.to_api() for row in self.rows],
+            'participants': [
+                row.to_api(include_username=include_usernames) for row in rows
+            ],
             'dataAvailability': {
                 'statementProgress': not self.statement_progress_unavailable,
             },

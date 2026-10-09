@@ -444,3 +444,20 @@ test('a toast in the frame reads out through the shell region, not a role of its
   expect(toast).not.toHaveAttribute('role');
   expect(container.querySelector('[aria-live="assertive"]')).toHaveTextContent('Could not hide the statement.');
 });
+
+test('at site level the role a site admin opens the dashboard with says Site admin', async () => {
+  serveSession({capabilities: {administerSite: true}});
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin']}>
+        <MessageProvider>
+          <AdminShell title="Site admin dashboard" site="Site admin dashboard" children={null} />
+        </MessageProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const identity = (await screen.findByText('Example editor')).closest('.admin-shell__identity')!;
+  expect(identity).toHaveTextContent('Site admin');
+  expect(identity).not.toHaveTextContent('Global admin');
+});

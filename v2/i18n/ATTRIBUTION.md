@@ -13,7 +13,8 @@ GPL-3.0 work as long as its copyright and permission notice is kept, which is do
 
 **Copied** says which languages' text is copied: `en` from the source's `en.json`, and `nl`
 where `nl.json` holds the source's Dutch. "(lowercased)" means our text is the source's
-with its first letter lowercased, because the element is a small inline control.
+with its first letter lowercased, because the element is a small inline control; "(capitalised)"
+means the reverse, for a source written in lower case where our control is in sentence case.
 
 ## Copied on purpose
 
@@ -23,6 +24,7 @@ Chosen from MediaWiki's catalogue to replace wording of our own.
 |---|---|---|---|---|---|
 | `common-err-nologin` | `Please log in to be able to access this page or action.` | MediaWiki core | [`exception-nologin-text`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `errorpage-500-title` | `Something went wrong` | OOUI | [`ooui-dialog-process-error`](https://github.com/wikimedia/oojs-ui/blob/master/i18n/en.json) | MIT | en, nl |
+| `admin-btn-remove` | `Remove` | OOUI | [`ooui-item-remove`](https://github.com/wikimedia/oojs-ui/blob/master/i18n/en.json) | MIT | en |
 | `base-dismiss` | `Close` | MediaWiki core (Codex messages) | [`cdx-message-dismiss-button-label`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/codex/en.json) | GPL-2.0-or-later | en, nl |
 | `base-skip-to-content` | `Jump to content` | Vector skin | [`vector-jumptocontent`](https://github.com/wikimedia/mediawiki-skins-Vector/blob/master/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `common-loading` | `Loading…` | MobileFrontend | [`mobile-frontend-loading-message`](https://github.com/wikimedia/mediawiki-extensions-MobileFrontend/blob/master/i18n/en.json) | GPL-2.0-or-later | en, nl |
@@ -32,6 +34,8 @@ Chosen from MediaWiki's catalogue to replace wording of our own.
 | `adminconv-countdown-minutes` | `$1 min` | MediaWiki core | [`minutes-abbrev`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/datetime/en.json) | GPL-2.0-or-later | en |
 | `conv-nav-prev` | `Previous` | MediaWiki core | [`watchlistlabels-onboarding-prev`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-nav-next` | `Next` | MediaWiki core | [`watchlistlabels-onboarding-next`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
+| `participants-btn-ban` | `Block` | MediaWiki core | [`blocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
+| `participants-btn-unban` | `Unblock` | MediaWiki core | [`unblocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
 
 `adminconv-countdown-*` has no Dutch: the admin console is not translated into Dutch yet, and
 MediaWiki core has Dutch only for `hours-abbrev` ("$1 u"). `days-abbrev` and
@@ -49,23 +53,20 @@ for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegesta
 | `common-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `voucher-switch-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `adminconv-edit` | `Edit` | MediaWiki core | [`edit`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
-| `stmts-save` | `Save` | MediaWiki core | [`saveprefs`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/preferences/en.json) | GPL-2.0-or-later | en |
-| `featured-arg-delete` | `delete` | MediaWiki core | [`delete`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
-| `featured-btn-confirm` | `confirm` | MediaWiki core | [`confirm`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `admin-save` | `Save` | MediaWiki core | [`saveprefs`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/preferences/en.json) | GPL-2.0-or-later | en |
+| `admin-th-actions` | `Actions` | MediaWiki core | [`actions`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `featured-arg-delete` | `Delete` | MediaWiki core | [`delete`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `featured-btn-confirm` | `Confirm` | MediaWiki core | [`confirm`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-arg-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl |
-| `featured-arg-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
-| `stmts-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `featured-arg-hide` | `Hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-arg-hidden` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
-| `featured-arg-hidden` | `hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
-| `stmts-hidden-heading` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `featured-arg-hidden` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
-| `featured-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `featured-arg-unhide` | `Unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en |
 | `base-log-in` | `log in` | MediaWiki core | [`loginreqlink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `base-log-out` | `log out` | MediaWiki core | [`logout`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `conv-crumb-about` | `About` | MediaWiki core | [`about`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-reason-label` | `Reason` | MediaWiki core | [`block-reason`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
-| `flags-th-reason` | `Reason` | MediaWiki core | [`blocklist-reason`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
-| `flags-th-target` | `Target` | MediaWiki core | [`blocklist-target`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-flag-cat-other` | `Other` | MediaWiki core | [`htmlform-selectorother-other`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-details-label` | `Details` | MediaWiki core | [`upload-form-label-infoform-title`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-send` | `Send` | MediaWiki core | [`emailsend`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
@@ -105,7 +106,7 @@ the contributors to each project, as listed in its history and, for MediaWiki co
 
 ### OOUI (MIT)
 
-Applies to `errorpage-500-title`.
+Applies to `errorpage-500-title` and `admin-btn-remove`.
 
 ```
 Copyright 2011-2025 OOUI Team and other contributors.

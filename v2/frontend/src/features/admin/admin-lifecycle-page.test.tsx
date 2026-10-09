@@ -127,12 +127,12 @@ test('links to the settings page instead of editing the same settings itself', a
 
   // Nothing on this page writes a setting any more. Queried by accessible name, so a
   // control that merely moved elsewhere on the page would still fail this.
-  for (const name of ['Title', 'Intro text (HTML, optional)', 'Outro text (HTML, optional)',
+  for (const name of ['Title', 'Introduction (HTML, optional)', 'Closing text (HTML, optional)',
     'Eligibility event ID', 'Eligibility label']) {
     expect(screen.queryByLabelText(name)).toBeNull();
   }
   expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();
-  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: /^Save( settings)?$/})).toBeNull();
   expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
 
   // What stays is what the settings page does not show, plus the tier as a fact.
