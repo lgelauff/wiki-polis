@@ -1002,15 +1002,43 @@
   outline: none;
 }
 
+/* The notification slot floats over the bottom corner of the viewport, out of the flow: a
+   toast inserted above the heading pushed every row down by its own height, so the pointer
+   that had just pressed a row action landed on the next row's. Its text is read out through
+   the shell's announcer, not from here. So that a floating toast does not hide the element
+   that has focus (WCAG 2.4.11), the page keeps the toast's height clear at the bottom while
+   one is shown: keyboard focus scrolls a control above it, not under it. */
 .admin-shell__notices {
+  position: fixed;
+  inset-block-end: 1.5rem;
+  inset-inline-end: 1.5rem;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   gap: .5rem;
-  margin-block-end: var(--shell-gap);
+  max-inline-size: min(340px, calc(100vw - 2rem));
+  /* Only the toasts take the pointer, not the empty corner between them. */
+  pointer-events: none;
+}
+
+.admin-shell__notices > * {
+  pointer-events: auto;
 }
 
 .admin-shell__notices:empty {
   display: none;
+}
+
+:root:has(.admin-shell__notices:not(:empty)) {
+  scroll-padding-block-end: 7rem;
+}
+
+@media (max-width: 719px) {
+  .admin-shell__notices {
+    inset-block-end: 1rem;
+    inset-inline: 1rem;
+    max-inline-size: none;
+  }
 }
 
 .admin-shell__announcer {

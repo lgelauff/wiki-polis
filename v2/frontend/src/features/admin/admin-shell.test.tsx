@@ -381,7 +381,8 @@ test('the frame has one main, one polite live region and no other landmark', asy
   expect(container.querySelectorAll('[aria-live="assertive"]')).toHaveLength(1);
   expect(container.querySelector('[aria-live="polite"]')).toBeEmptyDOMElement();
   expect(container.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
-  // The notice slot is a non-fixed area at the top of <main>, not a floating overlay.
+  // The notice slot is first in <main> (reading order); console.css floats it out of the
+  // flow, which test_admin_console_css.py guards.
   const notices = container.querySelector('.admin-shell__notices')!;
   expect(notices).toBe(container.querySelector('main')!.firstElementChild);
 });
