@@ -282,3 +282,54 @@ def test_the_bulk_client_method_maps_rows_and_never_raises(monkeypatch):
 
     monkeypatch.setattr(client, '_pg_query', lambda *args: None)
     assert client.get_pending_statement_counts(['abc1234567']) is None
+
+
+def test_the_bulk_pending_sql_has_the_shape_the_statements_page_counts_by():
+    """The bulk query is mocked everywhere else, so a typo would only show as a missing
+    count: pin its shape. Pending is what the statements page calls pending: an active
+    statement (`_STATEMENTS_SQL` reads only `c.active = TRUE`) with mod 0 (`get_statements`).
+    The zinvites go in as one array parameter, and the counts come back one row per zinvite."""
+    import re
+    from polis_admin import PolisServerClient, _PENDING_STATEMENTS_BULK_SQL, _STATEMENTS_SQL
+    sql = ' '.join(_PENDING_STATEMENTS_BULK_SQL.split())
+    assert 'zi.zinvite = ANY(%s)' in sql
+    assert 'WHERE c.active = TRUE AND c.mod = 0' in sql
+    assert sql.endswith('GROUP BY zmap.zinvite')
+    assert re.search(r'SELECT zmap\.zinvite, COUNT\(c\.tid\)::int AS n_pending', sql)
+    assert sql.count('%s') == 1
+    assert 'WHERE c.active = TRUE' in ' '.join(_STATEMENTS_SQL.split())
+
+    client = PolisServerClient('', '', '', db_url='postgresql://unused')
+    seen = []
+
+    def fake_query(sql_text, params, label):
+        seen.append((sql_text, params, label))
+        return []
+    client._pg_query = fake_query
+
+    assert client.get_pending_statement_counts(
+        ['def7654321', "abc'; --", 'abc1234567', 'def7654321', '', None]) == {
+        'abc1234567': 0, 'def7654321': 0,
+    }
+    assert seen == [(_PENDING_STATEMENTS_BULK_SQL, (['abc1234567', 'def7654321'],),
+                     'get_pending_statement_counts')]
+
+
+@pytest.mark.parametrize('demo_is_global_admin', [False, True])
+def test_a_practice_session_is_unauthorized(client, demo_is_global_admin):
+    """A practice session is not a sign-in: 401, even if its demo participant holds a role
+    or has site admin set, which `_is_global_admin` would otherwise find again."""
+    guest = Participant(mw_user_id=-1_000_000_002, mw_username='Demo-guest-home', xid='e' * 64,
+                        is_demo=True, is_global_admin=demo_is_global_admin)
+    db.session.add(guest)
+    db.session.commit()
+    conv = _conversation('practice', access_policy='demo')
+    _role(guest, conv, 'organizer')
+    with client.session_transaction() as sess:
+        sess['xid'] = guest.xid
+        sess['demo_conversation_id'] = conv.id
+
+    response = client.get(HOME)
+
+    assert response.status_code == 401
+    assert response.get_json()['error']['code'] == 'unauthorized'

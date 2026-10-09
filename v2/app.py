@@ -3604,9 +3604,14 @@ def _admin_home_api_payload() -> dict:
     then gets the empty list with the link to the dashboard.
     """
     participant = _current_participant()
+    # A practice session is not a sign-in, whatever its demo participant holds: decide
+    # site admin first and only for a real participant, since `_is_global_admin(None)`
+    # would resolve the demo participant again.
     if participant is not None and participant.is_demo:
         participant = None
-    site_admin = _is_global_admin(participant)
+        site_admin = False
+    else:
+        site_admin = _is_global_admin(participant)
     if participant is None and not site_admin:
         abort(401)
     roles = (AdminRole.query.options(joinedload(AdminRole.conversation))

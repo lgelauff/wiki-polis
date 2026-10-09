@@ -1,10 +1,11 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen, within} from '@testing-library/react';
+import {render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter, useLocation} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {afterEach, expect, test, vi} from 'vitest';
 
 import type {components} from '../../api/schema';
+import {adminHomeQuery} from '../../api/queries';
 import {App} from '../../app';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -22,6 +23,19 @@ const LIFECYCLE_URL = new URL('/api/v1/admin/conversations/7', globalThis.locati
 const SESSION_URL = new URL('/api/v1/session', globalThis.location.origin).toString();
 
 const FORBIDDEN = {error: {code: 'forbidden', message: 'You do not have access to this resource.'}};
+const UNAUTHORIZED = {error: {code: 'unauthorized', message: 'Authentication required.'}};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/** The login is the server's, so the boundary leaves the app with `location.assign`; jsdom
+ *  cannot navigate, so the call itself is what is asserted. */
+function stubAssign() {
+  const assign = vi.fn();
+  vi.stubGlobal('location', {...globalThis.location, assign});
+  return assign;
+}
 
 function row(id: number, overrides: Partial<Row> = {}): Row {
   return {
@@ -122,7 +136,7 @@ test('a site admin with no role sees the empty state and the way to the dashboar
   const nav = screen.getByRole('navigation', {name: 'Admin sections'});
   expect(within(nav).getByRole('link', {name: 'Site admin dashboard'})).toHaveAttribute('href', '/site-admin');
   // The mark goes to Admin home, which is where this is: plain text here.
-  expect(within(nav).queryByRole('link', {name: 'Admin'})).toBeNull();
+  expect(within(nav).queryByRole('link', {name: 'Admin home'})).toBeNull();
 });
 
 test('/site-admin is the site admin dashboard', async () => {
@@ -132,7 +146,7 @@ test('/site-admin is the site admin dashboard', async () => {
   expect(await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1})).toBeVisible();
   const nav = screen.getByRole('navigation', {name: 'Admin sections'});
   expect(within(nav).getByRole('link', {name: 'Site admin dashboard'})).toHaveAttribute('aria-current', 'page');
-  expect(within(nav).getByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+  expect(within(nav).getByRole('link', {name: 'Admin home'})).toHaveAttribute('href', '/admin');
   expect(screen.getByTestId('where')).toHaveTextContent('/site-admin');
 });
 
@@ -172,8 +186,39 @@ test('statements awaiting moderation are a plain count after the flags, left out
   renderAt('/admin');
 
   const rows = within(await homeList()).getAllByRole('listitem');
-  expect(rows[0]!).toHaveTextContent(/^With bothOrganizer · Active · 2 open flags · 5 pending$/);
-  expect(rows[1]!).toHaveTextContent(/^Pending onlyOrganizer · Active · 1 pending$/);
+  expect(rows[0]!).toHaveTextContent(/^With bothOrganizer · Active · 2 open flags · 5 statements to moderate$/);
+  expect(rows[1]!).toHaveTextContent(/^Pending onlyOrganizer · Active · 1 statement to moderate$/);
   expect(rows[2]!).toHaveTextContent(/^Nothing pendingOrganizer · Active$/);
   expect(rows[3]!).toHaveTextContent(/^UnknownOrganizer · Closed$/);
+});
+
+test.each([
+  ['/admin', HOME_URL, '/login?next=%2Fadmin'],
+  // The query string rides along; a voucher code (`v`) never does.
+  ['/admin/conversations/7?x=1&v=SECRET', LIFECYCLE_URL, '/login?next=%2Fadmin%2Fconversations%2F7%3Fx%3D1'],
+])('signed out on %s: one navigation to the login, with the way back', async (path, api, login) => {
+  serveSession(false);
+  server.use(http.get(api, () => HttpResponse.json(UNAUTHORIZED, {status: 401})));
+  const assign = stubAssign();
+  renderAt(path);
+
+  await waitFor(() => expect(assign).toHaveBeenCalled());
+  expect(assign).toHaveBeenCalledTimes(1);
+  expect(assign).toHaveBeenCalledWith(login);
+  expect(screen.queryByRole('heading', {name: 'Not allowed'})).toBeNull();
+});
+
+test('a refusal (403) shows the access page and goes nowhere', async () => {
+  serveSession(false);
+  server.use(http.get(HOME_URL, () => HttpResponse.json(FORBIDDEN, {status: 403})));
+  const assign = stubAssign();
+  renderAt('/admin');
+
+  expect(await screen.findByRole('heading', {name: 'Not allowed', level: 1})).toBeVisible();
+  expect(assign).not.toHaveBeenCalled();
+  expect(screen.getByTestId('where')).toHaveTextContent(/^\/admin$/);
+});
+
+test('Admin home is fetched afresh on every visit, since changes elsewhere do not invalidate it', () => {
+  expect(adminHomeQuery().staleTime).toBe(0);
 });

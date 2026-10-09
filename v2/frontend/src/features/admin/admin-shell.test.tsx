@@ -305,7 +305,7 @@ test('the mark links to Admin home for a site administrator', async () => {
   serveSession({capabilities: {administerSite: true}});
   renderShell();
 
-  expect(await screen.findByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+  expect(await screen.findByRole('link', {name: 'Admin home'})).toHaveAttribute('href', '/admin');
 });
 
 test('an organizer\'s mark links to Admin home too, which lists their consultations', async () => {
@@ -313,7 +313,7 @@ test('an organizer\'s mark links to Admin home too, which lists their consultati
   renderShell();
 
   const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
-  expect(within(nav).getByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+  expect(within(nav).getByRole('link', {name: 'Admin home'})).toHaveAttribute('href', '/admin');
 });
 
 /** The frame at site level: Admin home (`home`) or the dashboard. */
@@ -334,7 +334,7 @@ test('on Admin home itself the mark is plain text: a link to where you are goes 
   renderSiteShell({home: true});
 
   const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
-  expect(within(nav).queryByRole('link', {name: 'Admin'})).toBeNull();
+  expect(within(nav).queryByRole('link', {name: 'Admin home'})).toBeNull();
   expect(within(nav).getByText('Admin')).toBeVisible();
 });
 
@@ -354,7 +354,7 @@ test('on the dashboard its sidebar link is the current page, and the mark goes h
 
   const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
   expect(within(nav).getByRole('link', {name: 'Site admin dashboard'})).toHaveAttribute('aria-current', 'page');
-  expect(within(nav).getByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+  expect(within(nav).getByRole('link', {name: 'Admin home'})).toHaveAttribute('href', '/admin');
 });
 
 test('someone who is not a site admin has no link to the dashboard', async () => {

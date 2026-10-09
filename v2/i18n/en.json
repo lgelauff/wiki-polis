@@ -609,7 +609,7 @@
     "admin-site-dashboard": "Site admin dashboard",
     "admin-home-heading": "Admin home",
     "admin-home-empty": "You have no role in any consultation yet.",
-    "admin-home-pending-count": "$1 pending",
+    "admin-home-pending-count": "$1 {{PLURAL:$1|statement|statements}} to moderate",
     "admin-status-archived": "Archived",
     "admin-site-group-other": "Other",
     "admin-slug-ph": "e.g. rfc-2024-adminship",

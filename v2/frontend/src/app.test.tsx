@@ -271,6 +271,12 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
 
   expect(await screen.findByRole('heading', {name: 'Delete conversation'})).toBeVisible();
   expect(screen.getByText('Valid votes').parentElement).toHaveTextContent('0');
+  // The breadcrumb's way back is the site admin dashboard, where the receipt's link goes too
+  // (links.admin, #538), and its separators are not read out.
+  const crumbs = screen.getByRole('navigation', {name: 'Breadcrumb'});
+  const crumbHref = within(crumbs).getByRole('link', {name: 'Site admin dashboard'}).getAttribute('href');
+  expect(crumbHref).toBe('/site-admin');
+  for (const separator of within(crumbs).getAllByText('/')) expect(separator).toHaveAttribute('aria-hidden', 'true');
   const deletion = screen.getByRole('button', {name: 'Permanently delete conversation'});
   expect(deletion).toBeDisabled();
   fireEvent.change(screen.getByLabelText(/Type Community strategy to confirm/), {
@@ -281,6 +287,7 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
 
   expect(await screen.findByRole('heading', {name: 'Conversation deleted'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/site-admin');
+  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', crumbHref!);
 });
 
 test('moderates statements and imports approved seeds through typed commands', async () => {
@@ -326,7 +333,7 @@ test('matches legacy featured-statement administration and commands', async () =
   // like every other page of the section.
   expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Featured'})).toBeNull();
-  expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
   expect(screen.getByText('An approved seed statement.')).toBeVisible();
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
   // The suggestions are the page's one table; the confirmed statements are rows.
@@ -518,7 +525,7 @@ test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
   // #478: Roles is a Settings tab; its own "Conversation roles" heading went with the old
   // layout, no heading repeats the tab name, and the roster is an h2 under the h1.
-  const assigned = await screen.findByRole('heading', {name: 'Assigned 1', level: 2});
+  const assigned = await screen.findByRole('heading', {name: 'Assigned (1)', level: 2});
   expect(screen.getByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Roles'})).toBeNull();
   // The roster's own row, not the username in the console's top bar.

@@ -274,7 +274,9 @@ export function AdminShell({announcer, children, data, gatingType, home, section
                 a role in a consultation, or site-wide access, is what got them here. Not on
                 Admin home itself: a link to where you are goes nowhere. */}
             {!home ? (
-              <InternalLink href="/admin" className="admin-shell__mark">
+              // Named for where it goes, since the mark is the one way back to Admin home.
+              <InternalLink href="/admin" className="admin-shell__mark"
+                aria-label={msg('admin-home-heading')} title={msg('admin-home-heading')}>
                 <ConsoleMark />
                 <span className="admin-shell__mark-word">{msg('base-admin-badge')}</span>
               </InternalLink>
