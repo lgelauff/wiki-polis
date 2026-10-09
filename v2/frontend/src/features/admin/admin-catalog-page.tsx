@@ -110,6 +110,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   });
   const [username, setUsername] = useState('');
   const [newOpen, setNewOpen] = useState(false);
+  const [adminsOpen, setAdminsOpen] = useState(false);
   // Each form's refusal is said at the form; the toast is for the row action (remove).
   const [createError, setCreateError] = useState<string | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
@@ -170,6 +171,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const archived = data.conversations.filter(
     (row) => row.accessPolicy !== 'demo' && row.status === 'archived',
   );
+  const adminCount = data.configuredAdmins.length + data.globalAdmins.length;
   const consultations = data.conversations.filter(
     (row) => row.accessPolicy !== 'demo' && row.status !== 'archived',
   );
@@ -230,18 +232,26 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           </form>
         </details>
 
-        <h2>{msg('admin-globals-heading')}</h2>
-        {/* One row per site admin: a list, not a table, since there is one column. */}
-        {data.globalAdmins.length ? <ul className="admin-rows">
-          {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
-            <div className="admin-row__text">{admin.username}</div>
-            <div className="admin-row__actions">
-              <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
-            </div>
-          </li>)}
-        </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
-        <div className="admin-form">
-          <h2>{msg('admin-grant-heading')}</h2>
+        {/* One "Site admins" section: who they are, and directly below them the field that
+            grants it (owner, 2026-10-09). Folded like New consultation, and it stays open once
+            opened, so a refusal at the field stays in view. */}
+        <details className="admin-form admin-fold" open={adminsOpen}
+          onToggle={(event) => setAdminsOpen(event.currentTarget.open)}>
+          <summary><h2>{msg('admin-globals-heading')}</h2>{' '}<span className="admin-count">({adminCount})</span></summary>
+          {/* One row per site admin: a list, not a table, since there is one column. Those
+              set in the server configuration cannot be removed here, so they say where they
+              come from instead of offering Remove. */}
+          {adminCount ? <ul className="admin-rows">
+            {data.configuredAdmins.map((name) => <li className="admin-row" key={`configured-${name}`}>
+              <div className="admin-row__text">{name}<span className="admin-row__suffix">{' · '}{msg('admin-site-admin-configured')}</span></div>
+            </li>)}
+            {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
+              <div className="admin-row__text">{admin.username}</div>
+              <div className="admin-row__actions">
+                <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
+              </div>
+            </li>)}
+          </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
           <form onSubmit={submitGrant}>
             <label className="admin-field admin-field--medium">{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" value={username}
               {...(grantError ? {'aria-invalid': true, 'aria-describedby': grantErrorId} : {})}
@@ -251,7 +261,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
               <button type="submit" className="admin-button admin-button--primary" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
             </div>
           </form>
-        </div>
+        </details>
 
         {/* What is not built yet, last on the page (see `AdminComing`). */}
         <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />

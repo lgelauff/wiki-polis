@@ -1087,6 +1087,8 @@ export interface components {
                     manage: string;
                 };
             }[];
+            /** @description Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins. */
+            configuredAdmins: string[];
             globalAdmins: {
                 participantId: number;
                 username: string;

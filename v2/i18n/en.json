@@ -632,7 +632,7 @@
     "admin-globals-heading": "Site admins",
     "admin-th-participant": "Participant",
     "admin-globals-empty": "No site admins yet.",
-    "admin-grant-heading": "Grant site admin",
+    "admin-site-admin-configured": "set in the server configuration",
     "admin-label-wm-username": "Wikimedia username",
     "admin-btn-grant": "Grant",
     "invites-add-heading": "Add invitations",

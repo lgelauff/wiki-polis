@@ -18,9 +18,17 @@ def conversation_status(conversation) -> str:
 
 def build_admin_catalog(
     *, conversations, global_admins, phase_routes: dict,
-    managed_creation: bool, self_link: str, conversation_link,
+    managed_creation: bool, self_link: str, conversation_link, configured_admins=(),
 ) -> dict:
+    """The site admin dashboard's data.
+
+    There are two kinds of site admin. ``configured_admins`` are the usernames set in the
+    server configuration (the ``admin-users`` secret); the app cannot remove them, so they
+    are listed apart, without a participant id. ``global_admins`` are the participants
+    granted site admin in the app. A username in both is listed once, as configured.
+    """
     status = conversation_status
+    configured = list(dict.fromkeys(name for name in configured_admins if name))
 
     return {
         'conversations': [{
@@ -35,10 +43,11 @@ def build_admin_catalog(
                 'manage': conversation_link(row.id),
             },
         } for row in conversations],
+        'configuredAdmins': configured,
         'globalAdmins': [{
             'participantId': row.id,
             'username': row.mw_username,
-        } for row in global_admins],
+        } for row in global_admins if row.mw_username not in configured],
         'phaseRoutes': [{
             'key': key,
             'label': route['label'],

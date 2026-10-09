@@ -50,6 +50,7 @@ export function adminCatalogFixture(
 ): components['schemas']['AdminCatalog'] {
   return {
     conversations: [{id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', createdAt: '2026-08-01T10:00:00Z', links: {participant: '/c/community-strategy', manage: '/admin/conversations/7'}}],
+    configuredAdmins: ['Config admin'],
     globalAdmins: [
       {participantId: 1, username: 'adminuser'},
       ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor'}] : []),

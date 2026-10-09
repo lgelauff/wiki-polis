@@ -3588,6 +3588,7 @@ def _admin_catalog_api_payload() -> dict:
         global_admins=Participant.query.filter_by(is_global_admin=True).order_by(
             Participant.mw_username,
         ).all(),
+        configured_admins=ADMIN_USERS,
         phase_routes=PHASE_ROUTES,
         managed_creation=_managed_polis_creation(),
         self_link=url_for('api_v1.get_admin_catalog'),
