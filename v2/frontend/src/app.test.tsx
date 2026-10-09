@@ -1,7 +1,7 @@
 import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
-import {Link, MemoryRouter} from 'react-router-dom';
+import {Link, MemoryRouter, useLocation} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
@@ -373,7 +373,24 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   expect(screen.getByText('Statement #12')).toBeVisible();
 });
 
+/** Serves settings whose answer to who gets in is the invitation list: the Invitations tab
+ *  offers its add form only then. */
+function serveInvitationListSettings() {
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'invite_only', gated: true, gatingType: 'invite_only', announce: false, information: false, resultsShared: false, showUsernames: false, accessRequestText: null, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
+      recommendations: {tier: 'medium', tiers: [
+        {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
+      ]},
+      eligibility: {configured: false, eventId: '', label: null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
+      capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+    }}),
+  ));
+}
+
 test('adds and removes invitations through convergent admin commands', async () => {
+  serveInvitationListSettings();
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
@@ -382,7 +399,14 @@ test('adds and removes invitations through convergent admin commands', async () 
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
+  // #478: .../invitations is an old path that redirects to the Invitations tab, which is
+  // headed by the section like every other Settings tab, and no heading repeats the tab.
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
+  expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
+  // With the invitation list in effect the form works, and there is no reason line.
+  expect(screen.getByLabelText('Wikimedia usernames (one per line)')).toBeEnabled();
+  expect(screen.queryByText(/^Not available:/)).toBeNull();
   // The access policy reads in words; the stored value never reaches the page.
   expect(screen.getByText('Only people who have been given access')).toBeVisible();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
@@ -396,7 +420,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
   expect(await screen.findByText('New editor')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('Invites: 1 added; 1 duplicate input.');
+  // The toast inside the console reads out through the shell's polite region.
+  expect(screen.getByText('Invites: 1 added; 1 duplicate input.', {selector: '.toast__msg'})).toBeVisible();
+  await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
+    .toHaveTextContent('Invites: 1 added; 1 duplicate input.'));
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
   expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
@@ -409,18 +436,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
 });
 
-test('warns that invites are inert in words, not in stored values', async () => {
-  // The default roster fixture is invite_only, so the warning branch never renders there.
-  // This is the only prose this scope rewrites, and it names one access-policy label.
-  server.use(http.get(
-    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
-    () => HttpResponse.json({data: {
-      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public'},
-      invitations: [],
-      capabilities: {manageInvitations: true},
-      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
-    }}),
-  ));
+test('greys out adding invites while access is not the invitation list, and says why', async () => {
+  // With any other answer to who gets in, an added invite would admit nobody: the form is
+  // shown disabled, with one line naming the access policy in effect, linked from both of
+  // its controls. The stored invitations stay listed, each with its remove button.
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
@@ -429,18 +448,21 @@ test('warns that invites are inert in words, not in stored values', async () => 
     </QueryClientProvider>,
   );
 
-  const note = await screen.findByText(/Invites only take effect/);
-  expect(note).toHaveTextContent(
-    'Access is set to Anyone with a Wikimedia account. '
-    + 'Invites only take effect when access is limited to an invitation list.',
-  );
-  // Neither stored value reaches the note, including the one hardcoded in the sentence.
-  // Scoped to the note: the page footer legitimately says "public domain".
-  expect(note.textContent).not.toContain('invite_only');
-  expect(note.textContent).not.toMatch(/\bpublic\b/);
+  expect(await screen.findByText('Existing editor')).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
+  const reason = screen.getByText('Not available: access is set to “Anyone with a Wikimedia account”.');
+  const textarea = screen.getByLabelText('Wikimedia usernames (one per line)');
+  const add = screen.getByRole('button', {name: 'Add'});
+  expect(textarea).toBeDisabled();
+  expect(add).toBeDisabled();
+  expect(textarea).toHaveAttribute('aria-describedby', reason.id);
+  expect(add).toHaveAttribute('aria-describedby', reason.id);
+  expect(screen.queryByText(/Invites only take effect/)).toBeNull();
+  expect(screen.getByRole('button', {name: 'Remove invitation for Existing editor'})).toBeEnabled();
 });
 
 test('keeps the typed invitation list and shows a toast after a save error', async () => {
+  serveInvitationListSettings();
   server.use(http.put(
     new URL(
       '/api/v1/admin/conversations/7/invitations',
@@ -462,21 +484,78 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
   fireEvent.change(input, {target: {value: 'New editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
+  expect(await screen.findByText("Couldn't save invites — please review the list and retry.",
+    {selector: '.toast__msg'})).toBeVisible();
+  // Read out as an alert, through the console's assertive region.
+  await waitFor(() => expect(document.querySelector('[aria-live="assertive"]')).toHaveTextContent(
     "Couldn't save invites — please review the list and retry.",
-  );
+  ));
   expect(input).toHaveValue('New editor');
 });
 
 test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Conversation roles'})).toBeVisible();
-  expect(screen.getByRole('listitem')).toHaveTextContent('Example editor');
+  // #478: Roles is a Settings tab; its own "Conversation roles" heading went with the old
+  // layout, no heading repeats the tab name, and the roster is an h2 under the h1.
+  const assigned = await screen.findByRole('heading', {name: 'Assigned', level: 2});
+  expect(screen.getByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Roles'})).toBeNull();
+  // The roster's own row, not the username in the console's top bar.
+  const roster = assigned.closest('section')!;
+  expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor');
   fireEvent.change(screen.getByLabelText('Participant'), {target: {value: '23'}});
   fireEvent.click(screen.getByRole('checkbox', {name: 'organizer'}));
   fireEvent.click(screen.getByRole('button', {name: 'Save role set'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Added: organizer');
   expect(screen.getByText('moderator + organizer')).toBeVisible();
+});
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="client location">{location.pathname}</output>;
+}
+
+test.each([
+  ['/admin/conversations/7/invites', '/admin/conversations/7/settings/invitations'],
+  ['/admin/conversations/7/roles', '/admin/conversations/7/settings/roles'],
+  // The /app/admin group redirects into the canonical /admin group.
+  ['/app/admin/conversations/7/invitations', '/admin/conversations/7/settings/invitations'],
+  ['/app/admin/conversations/7/roles', '/admin/conversations/7/settings/roles'],
+])('the old path %s redirects to the Settings tab %s', async (source, target) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[source]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText('client location')).toHaveTextContent(target));
+  expect(screen.getByLabelText('client location').textContent).toBe(target);
+});
+
+test.each([
+  ['invitations', 'Invitations'],
+  ['vouchers', 'Vouchers'],
+  ['roles', 'Roles'],
+])('the Settings tab …/settings/%s is routed to its page', async (tab, heading) => {
+  // Guards the routes themselves: a later change that drops one would fall through to the
+  // not-found route instead.
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`/admin/conversations/7/settings/${tab}`]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  // The strip's current tab names the page; no heading repeats it.
+  expect(screen.queryByRole('heading', {name: heading})).toBeNull();
+  expect(screen.getByRole('navigation', {name: 'Settings'})
+    .querySelectorAll('[aria-current="page"]')).toHaveLength(1);
 });
 
 test('renders a conversation record from the generated API contract', async () => {

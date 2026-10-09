@@ -27,3 +27,12 @@ test('the bare settings path keeps its query string and fragment on the way to B
     '/app/admin/conversations/7/settings/basics?uselang=en#settings-guidance',
   );
 });
+
+test('an old admin path keeps its query string and fragment on the way to its Settings tab', async () => {
+  renderAt('/admin/conversations/7/invites?uselang=en#top');
+
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    '/admin/conversations/7/settings/invitations?uselang=en#top',
+  );
+});

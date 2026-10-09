@@ -1,9 +1,14 @@
 import {useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
-import {adminRoleRosterQuery, putAdminRoles} from '../../api/queries';
+import {
+  adminLifecycleQuery,
+  adminRoleRosterQuery,
+  adminSettingsQuery,
+  putAdminRoles,
+} from '../../api/queries';
+import {AdminSettingsFrame} from './admin-settings-page';
 
 type Role = 'moderator' | 'organizer';
 type Roster = components['schemas']['AdminRoleRoster'];
@@ -13,12 +18,19 @@ export function AdminRolesPage({conversationId, csrfToken}: {
 }) {
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminRoleRosterQuery(conversationId));
+  // The console frame needs the lifecycle DTO and the settings query for the tab names.
+  const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [participantId, setParticipantId] = useState<number | null>(null);
   const assignment = data.assignments.find((row) => row.participantId === participantId);
   const [chosen, setChosen] = useState<Role[]>([]);
   const mutation = useMutation({
     mutationFn: () => putAdminRoles(conversationId, participantId!, {roles: chosen}, csrfToken),
     onSuccess: (receipt) => {
+      // The operator's own role is in the frame (from the lifecycle DTO), and what Settings
+      // lets them edit follows from it: both are read again.
+      void queryClient.invalidateQueries({queryKey: adminLifecycleQuery(conversationId).queryKey});
+      void queryClient.invalidateQueries({queryKey: adminSettingsQuery(conversationId).queryKey});
       queryClient.setQueryData<Roster>(adminRoleRosterQuery(conversationId).queryKey, (roster) => {
         if (!roster) return roster;
         const rest = roster.assignments.filter((row) => row.participantId !== receipt.participantId);
@@ -35,13 +47,16 @@ export function AdminRolesPage({conversationId, csrfToken}: {
     },
   });
 
+  // A result describes the person and roles it was saved for: another choice clears it.
   function selectParticipant(value: string) {
+    mutation.reset();
     const id = value ? Number(value) : null;
     setParticipantId(id);
     const current = data.assignments.find((row) => row.participantId === id);
     setChosen((current?.roles ?? []) as Role[]);
   }
   function toggle(role: Role) {
+    mutation.reset();
     setChosen((roles) => roles.includes(role)
       ? roles.filter((value) => value !== role)
       : [...roles, role]);
@@ -52,15 +67,14 @@ export function AdminRolesPage({conversationId, csrfToken}: {
   }
 
   return (
-    <main className="roles-shell" id="main">
-      <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/admin">Admin panel</Link><span>/</span>
-        <Link to={data.links.conversation}>{data.conversation.title}</Link><span>/</span><span>Roles</span>
-      </nav>
-      <header className="roles-heading">
-        <p className="eyebrow">Scoped access</p><h1>Conversation roles</h1>
-        <p>See who can moderate or organize {data.conversation.title}.</p>
-      </header>
+    <AdminSettingsFrame
+      conversationId={conversationId}
+      gatingType={settings.conversation.gatingType}
+      lifecycle={lifecycle}
+      tab="roles"
+    >
+      <div>
+      <p>See who can moderate or organize {data.conversation.title}.</p>
       <section className="roles-roster" aria-labelledby="role-roster-heading">
         <header><h2 id="role-roster-heading">Assigned</h2><span>{data.assignments.length}</span></header>
         {data.assignments.length ? <ul>{data.assignments.map((row) => (
@@ -86,12 +100,16 @@ export function AdminRolesPage({conversationId, csrfToken}: {
               </label>)}
             </fieldset>
             <button type="submit" disabled={participantId === null || mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save role set'}</button>
-            {mutation.isSuccess && <p role="status">Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}
+            {/* Always mounted, keyed per save: a repeat of the same result is read again. */}
+            <div role="status">
+              {mutation.isSuccess && <p key={mutation.submittedAt}>Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}
+            </div>
             {mutation.isError && <p className="command-error" role="alert">{mutation.error.message}</p>}
           </form>
         </section>
       )}
       {!data.capabilities.manageRoles && <p className="roles-readonly">Only a global admin can change role assignments.</p>}
-    </main>
+      </div>
+    </AdminSettingsFrame>
   );
 }

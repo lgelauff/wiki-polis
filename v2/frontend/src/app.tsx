@@ -29,13 +29,22 @@ const AdminLifecycleRoute = lazy(() => loadAdminRoutes().then((module) => ({defa
 const AdminSettingsIndexRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsIndexRoute})));
 const AdminSettingsBasicsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsBasicsRoute})));
 const AdminSettingsAccessRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsAccessRoute})));
+const AdminSettingsInvitationsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsInvitationsRoute})));
+const AdminSettingsVouchersRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsVouchersRoute})));
+const AdminSettingsRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsRolesRoute})));
+const AdminRedirectRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRedirectRoute})));
 const AdminTerminationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminTerminationRoute})));
 const AdminStatementsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminStatementsRoute})));
 const AdminFeaturedRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminFeaturedRoute})));
 const AdminParticipantsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminParticipantsRoute})));
 const AdminModerationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationRoute})));
-const AdminInvitationsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminInvitationsRoute})));
-const AdminRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRolesRoute})));
+
+/** Where the old invites and roles paths went (#478): both pages are tabs of Settings now.
+ *  One place, so the two route groups cannot drift apart. */
+const settingsInvitationsPath = (conversationId: string) =>
+  `/admin/conversations/${conversationId}/settings/invitations`;
+const settingsRolesPath = (conversationId: string) =>
+  `/admin/conversations/${conversationId}/settings/roles`;
 
 function UnmatchedRoute() {
   // The server 404s any path outside its SPA route table, so this only fires for
@@ -66,13 +75,16 @@ function DeferredRoutes() {
       <Route path="/admin/conversations/:conversationId/settings" element={<AdminSettingsIndexRoute />} />
       <Route path="/admin/conversations/:conversationId/settings/basics" element={<AdminSettingsBasicsRoute />} />
       <Route path="/admin/conversations/:conversationId/settings/access" element={<AdminSettingsAccessRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings/invitations" element={<AdminSettingsInvitationsRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
       <Route path="/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
       <Route path="/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
       <Route path="/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
       <Route path="/admin/conversations/:conversationId/flags" element={<AdminModerationRoute />} />
-      <Route path="/admin/conversations/:conversationId/invites" element={<AdminInvitationsRoute />} />
-      <Route path="/admin/conversations/:conversationId/roles" element={<AdminRolesRoute />} />
+      <Route path="/admin/conversations/:conversationId/invites" element={<AdminRedirectRoute to={settingsInvitationsPath} />} />
+      <Route path="/admin/conversations/:conversationId/roles" element={<AdminRedirectRoute to={settingsRolesPath} />} />
       <Route path="/app/parity/fork" element={<ForkPage />} />
       <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
       <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
@@ -92,13 +104,16 @@ function DeferredRoutes() {
       <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsIndexRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings/basics" element={<AdminSettingsBasicsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings/access" element={<AdminSettingsAccessRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings/invitations" element={<AdminSettingsInvitationsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
       <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
       <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitationsRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRolesRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminRedirectRoute to={settingsInvitationsPath} />} />
+      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRedirectRoute to={settingsRolesPath} />} />
       <Route path="*" element={<UnmatchedRoute />} />
     </Routes>
   );

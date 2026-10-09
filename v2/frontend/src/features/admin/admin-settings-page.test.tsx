@@ -6,7 +6,11 @@ import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
-import {AdminSettingsPage, type SettingsTab} from './admin-settings-page';
+import {AdminInvitationsPage} from './admin-invitations-page';
+import {
+  AdminSettingsPage,
+  AdminSettingsVouchersPage,
+} from './admin-settings-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -78,13 +82,29 @@ function recordPuts(status = 200, body?: ErrorBody) {
   return sent;
 }
 
-function renderPage(tab: SettingsTab = 'access') {
+function renderPage(tab: 'basics' | 'access' = 'access') {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={[`/admin/conversations/7/settings/${tab}`]}>
         <Suspense fallback={null}>
           <MessageProvider locale="en">
             <AdminSettingsPage conversationId={7} csrfToken="test-csrf-token" tab={tab} />
+          </MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+/** The Invitations tab is today's invitations page inside the Settings frame, so it is
+ *  rendered through its own route rather than through `AdminSettingsPage`. */
+function renderInvitationsPage() {
+  return render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin/conversations/7/settings/invitations']}>
+        <Suspense fallback={null}>
+          <MessageProvider locale="en">
+            <AdminInvitationsPage conversationId={7} csrfToken="test-csrf-token" />
           </MessageProvider>
         </Suspense>
       </MemoryRouter>
@@ -158,10 +178,8 @@ test('the tab strip lists the four tabs in order and marks exactly one', async (
     .toEqual([
       '/admin/conversations/7/settings/basics',
       '/admin/conversations/7/settings/access',
-      // The fourth and third tabs still point at today's pages; #473 moves them under
-      // the strip in the next step.
-      '/admin/conversations/7/invites',
-      '/admin/conversations/7/roles',
+      '/admin/conversations/7/settings/invitations',
+      '/admin/conversations/7/settings/roles',
     ]);
   const current = within(tabs()).getAllByRole('link')
     .filter((link) => link.getAttribute('aria-current') === 'page');
@@ -185,6 +203,13 @@ test.each([
   expect(within(tabs()).getByRole('link', {name: label})).toBeVisible();
   const other = label === 'Vouchers' ? 'Invitations' : 'Vouchers';
   expect(within(tabs()).queryByRole('link', {name: other})).toBeNull();
+  // Whichever the answer is, the strip points at the tab of this consultation's own kind.
+  expect(within(tabs()).getByRole('link', {name: label})).toHaveAttribute(
+    'href',
+    gatingType === 'voucher'
+      ? '/admin/conversations/7/settings/vouchers'
+      : '/admin/conversations/7/settings/invitations',
+  );
 });
 
 test('the access tab marks itself in the strip', async () => {
@@ -946,4 +971,88 @@ test('saving Access sends the Basics fields back as they were loaded', async () 
     accessPolicy: 'public',
     recommendationTier: 'medium',
   });
+});
+
+test('a voucher consultation can be sent to Invitations, which still says what it is', async () => {
+  // `…/settings/invitations` stays routable for every gating type (#478 item 4), so a link
+  // from an e-mail or an old bookmark does not land on a page that says it is the wrong
+  // thing for this consultation.
+  serve({...settings, conversation: {
+    ...settings.conversation, gated: true, gatingType: 'voucher', accessPolicy: 'invite_only',
+  }});
+  renderInvitationsPage();
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
+  // The strip still names the tab this consultation uses.
+  expect(within(tabs()).getByRole('link', {name: 'Vouchers'}))
+    .toHaveAttribute('href', '/admin/conversations/7/settings/vouchers');
+});
+
+test('the Vouchers tab is the strip and one line about what is not built yet', async () => {
+  serve({...settings, conversation: {
+    ...settings.conversation, gated: true, gatingType: 'voucher', accessPolicy: 'invite_only',
+  }});
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin/conversations/7/settings/vouchers']}>
+        <Suspense fallback={null}>
+          <MessageProvider locale="en">
+            <AdminSettingsVouchersPage conversationId={7} />
+          </MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.queryByRole('heading', {name: 'Vouchers'})).toBeNull();
+  expect(within(tabs()).getByRole('link', {name: 'Vouchers'}))
+    .toHaveAttribute('aria-current', 'page');
+  // Every voucher action is parked (#368): the page says so once instead of offering a
+  // control that saves nothing.
+  const lines = within(screen.getByRole('main')).getAllByText(/^Also coming:/);
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toHaveTextContent(
+    'Also coming: generating, importing, checking and withdrawing voucher codes here'
+    + ' — not available yet (#368)',
+  );
+  expect(lines[0]).toHaveAttribute('lang', 'en');
+  expect(lines[0]).toHaveClass('admin-shell__coming');
+  expect(lines[0]?.closest('a, button')).toBeNull();
+  // No dead controls standing in for the missing feature.
+  expect(screen.queryByRole('button', {name: /Generate|Import|Check|Withdraw/})).toBeNull();
+  expect(screen.queryByRole('table')).toBeNull();
+});
+
+test.each([
+  ['voucher', 'invitations', 'Vouchers'],
+  ['invite_only', 'vouchers', 'Invitations'],
+] as const)('a %s consultation on the %s tab still marks one tab as current', async (
+  gatingType, page, label,
+) => {
+  // The third tab is named by this consultation's kind, while the URL may be the other
+  // kind's (an old link, a changed answer). The strip still says "you are here" once.
+  serve({...settings, conversation: {
+    ...settings.conversation, gated: true, gatingType, accessPolicy: 'invite_only',
+  }});
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`/admin/conversations/7/settings/${page}`]}>
+        <Suspense fallback={null}>
+          <MessageProvider locale="en">
+            {page === 'invitations'
+              ? <AdminInvitationsPage conversationId={7} csrfToken="test-csrf-token" />
+              : <AdminSettingsVouchersPage conversationId={7} />}
+          </MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  const current = within(tabs()).getAllByRole('link')
+    .filter((link) => link.getAttribute('aria-current') === 'page');
+  expect(current).toHaveLength(1);
+  expect(current[0]).toHaveTextContent(label);
 });
