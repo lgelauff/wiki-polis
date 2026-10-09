@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode} from 'react';
-import {useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient, useSuspenseQuery, type QueryClient} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -284,19 +284,26 @@ export function AdminSettingsVouchersPage({conversationId}: {conversationId: num
  *
  * It reads the stored mode from the statements workspace (`moderationPolicy.mode`), which
  * is why this tab runs that query. `strict` is the page's unsaved answer, or null while it
- * is the stored one. */
-function ApprovalSection({conversationId, strict, onChange}: {
+ * is the stored one.
+ *
+ * Only a viewer who may edit the settings (an organizer or a site admin, the settings
+ * endpoint's `capabilities.edit`) may change the policy; the server refuses anyone else.
+ * A moderator sees the stored answer as text. */
+function ApprovalSection({conversationId, canEdit, strict, onChange}: {
   conversationId: number;
+  canEdit: boolean;
   strict: boolean | null;
   onChange: (strict: boolean) => void;
 }) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(adminStatementWorkspaceQuery(conversationId));
   const stored = data.moderationPolicy.mode === 'moderate';
+  const storedText = data.moderationPolicy.available
+    ? (stored ? msg('admin-settings-value-yes') : msg('admin-settings-value-no')) : '';
   return (
     <section aria-labelledby="settings-approval">
       <h2 id="settings-approval">{msg('stmts-modsettings-heading')}</h2>
-      {data.moderationPolicy.available ? <label className="checkbox-label">
+      {canEdit && data.moderationPolicy.available ? <label className="checkbox-label">
         <input
           type="checkbox"
           name="strict_moderation"
@@ -305,7 +312,7 @@ function ApprovalSection({conversationId, strict, onChange}: {
           onChange={(event) => onChange(event.target.checked)}
         />
         {msg('stmts-strict-label')}
-      </label> : <SettingValue label={msg('stmts-strict-label')} value="" />}
+      </label> : <SettingValue label={msg('stmts-strict-label')} value={storedText} />}
     </section>
   );
 }
@@ -380,21 +387,15 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // again after a save, when the checkbox shows what is stored.
   const strictModeration = draft.strictModeration ?? null;
   const workspaceOptions = adminStatementWorkspaceQuery(conversationId);
-  // Basics only: whether the moderation policy can be set from here. Everyone who can open
-  // Settings may moderate this consultation (the server requires it to read the page), so
-  // the question is only whether the stored mode is known: when it is not, a checkbox would
-  // guess. (`capabilities.moderate` in the workspace says whether the statements could be
-  // read from the voting service, which is a different thing.) The Approval section
-  // suspends until the workspace is loaded, so by the time the footer renders it is here.
-  const {data: workspace} = useQuery({...workspaceOptions, enabled: tab === 'basics'});
-  const canModerate = tab === 'basics' && Boolean(workspace?.moderationPolicy.available);
+  // Who may change anything here, strict moderation included: an organizer or a site admin
+  // (the server's `_can_organize`). A moderator sees every answer as text.
+  const canEdit = data.capabilities.edit;
   const [confirming, setConfirming] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
   const saveRef = useRef<HTMLButtonElement>(null);
   const wasConfirming = useRef(false);
   const summaryRef = useRef<HTMLDivElement>(null);
   const ids = useId();
-  const canEdit = data.capabilities.edit;
   // Only a site admin moves a consultation into or out of the Practice Environment (#472);
   // everyone else sees whether it is in it, as a fact, never as a choice.
   const canSwitchDemo = data.capabilities.switchDemo;
@@ -452,7 +453,6 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // request when a settings field changed (or when nothing did, so the Save still answers
   // "already up to date"), then the policy request when the checkbox differs from what is
   // stored. A refused settings request stops the Save before the policy request is sent.
-  // A role that may not edit the settings sends only the policy request.
   const mutation = useMutation({
     mutationFn: async (): Promise<{changed: boolean}> => {
       const current = queryClient.getQueryData<Workspace>(workspaceOptions.queryKey);
@@ -583,9 +583,9 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // The Practice switch is shown only to a site admin, and not while Explore locks access.
   const canSwitchPractice = !gated && canSwitchDemo && !admissionLocked;
   const practiceSection = practice || canSwitchPractice;
-  // One Save per tab, shown only when something on the tab can be saved: the settings for
-  // a role that may edit them, and on Basics the strict-moderation answer for a moderator.
-  const canSave = canEdit || canModerate;
+  // One Save per tab, shown only to a role that may edit the settings (strict moderation
+  // included): a moderator sees every answer as text and has nothing to save.
+  const canSave = canEdit;
   // The server clears the eligibility pair whenever the invitation list is the answer
   // (`services/admin_settings.py`): the list is the whole admission check then. A field the
   // save would empty is not shown.
@@ -662,7 +662,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <option value="public">{msg('admin-common-policy-open')}</option><option value="demo">{msg('admin-common-policy-practice')}</option>
               </select></label>}
             </section>}
-            <ApprovalSection conversationId={conversationId}
+            <ApprovalSection conversationId={conversationId} canEdit={canEdit}
               strict={strictModeration} onChange={(strict) => edit({strictModeration: strict})} />
           </> : <section aria-label={msg('admin-access-heading')}>
             {/* A practice item has no admission choice: the server stores one fixed answer

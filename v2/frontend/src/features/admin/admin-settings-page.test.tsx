@@ -552,16 +552,23 @@ test('on Access a role that may not edit sees the values as text and no Save', a
   expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
 });
 
-test('on Basics a moderator sees the settings as text and saves only the strict-moderation answer', async () => {
-  // Moderators may set the moderation policy but not the settings: the settings are text,
-  // so the one Save cannot take a typed title and quietly drop it.
+test.each([
+  ['auto_approve', 'No'],
+  ['moderate', 'Yes'],
+])('on Basics a moderator sees every setting as text, strict moderation (%s) included, and no Save', async (mode, shown) => {
+  // Strict moderation is organizer-only (owner, 2026-10-09; the server refuses a moderator's
+  // policy PUT with 403). A moderator sees the stored answer as text, like every other
+  // setting on the tab, and with nothing to save there is no Save at all.
   const policy = recordPolicyPuts();
+  server.use(http.get(STATEMENTS_URL, () => HttpResponse.json({data: workspace(mode)})));
   serve({...settings, capabilities: {edit: false, switchDemo: false}});
   const settingsPuts = recordPuts();
   renderPage('basics');
 
-  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
-    {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation settings', level: 2}, {timeout: 10_000});
+  const approval = await screen.findByText(/^Strict moderation/, {selector: '.access-answer-legend'});
+  expect(approval.nextElementSibling).toHaveTextContent(new RegExp(`^${shown}$`));
+  expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByRole('note')).toBeNull();
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.queryByRole('radio')).toBeNull();
@@ -570,12 +577,8 @@ test('on Basics a moderator sees the settings as text and saves only the strict-
   expect(screen.getByText('Shape the future.', {selector: '.intro-text p'})).toBeVisible();
   expect(screen.queryByText('<p>Shape the future.</p>')).toBeNull();
   expect(screen.getByText('Medium topic')).toBeVisible();
-  fireEvent.click(approval);
-  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-
-  await waitFor(() => expect(policy).toHaveLength(1));
-  expect(policy[0]).toEqual({mode: 'moderate'});
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved.'));
+  expect(screen.queryByRole('button', {name: /Save/})).toBeNull();
+  expect(policy).toHaveLength(0);
   expect(settingsPuts).toHaveLength(0);
 });
 

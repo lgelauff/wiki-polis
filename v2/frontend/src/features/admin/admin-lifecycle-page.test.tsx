@@ -228,3 +228,36 @@ test('a message banana cannot parse degrades to its key, not to a blank page', a
   // Reported once, though the countdown re-renders.
   expect(errors.mock.calls.filter(([message]) => String(message).includes('adminconv-countdown-lt1m'))).toHaveLength(1);
 });
+
+/** What a moderator-only viewer is served: every capability false (the server's
+ *  `test_scoped_moderator_lifecycle_capabilities_are_read_only`), on a consultation where
+ *  every phase control would otherwise have something to show -- a pending transition, a
+ *  schedulable wind-down, and an informed-voting round not yet initialised. */
+const moderatorLifecycle: Lifecycle = {
+  ...lifecycle,
+  operator: {roleLabel: 'Moderator'},
+  phase: {...lifecycle.phase, activeKeys: ['submission', 'informed_voting']},
+  schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false},
+  capabilities: {advancePhase: false, pause: false, publish: false, editSettings: false, useAdvancedPhases: false, initializePhase6: false, archive: false},
+};
+
+test('a moderator sees the phase control and statistics read-only, with nothing that changes a phase', async () => {
+  // Owner, 2026-10-09: moderators see the Overview, phase control and statistics included,
+  // but cannot change anything there. Read-only means text, not disabled controls.
+  serve(moderatorLifecycle);
+  const {container} = renderConsole();
+
+  expect(await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000})).toBeVisible();
+  expect(screen.getByText('You are in phase 2 of 3')).toBeVisible();
+  expect(screen.getByText('Regional communities should share infrastructure funding.', {exact: false})).toBeVisible();
+  expect(screen.getByText('Only an organizer or site admin can change phases.')).toBeVisible();
+
+  for (const name of [/Move on/, /^Pause$/, /^Resume$/, /^Save phases$/, /^Initialise Phase 6$/, /^Set$/, /^Edit$/, /^Freeze$/, /^Advanced$/]) {
+    expect(screen.queryByRole('button', {name})).toBeNull();
+  }
+  expect(screen.queryByRole('group', {name: 'Phase control mode'})).toBeNull();
+  // Nothing operable anywhere in the phase control: no button, no checkbox, no date input.
+  expect(container.querySelectorAll(
+    '#phaseControl :is(button, input, select, form), .mode-guided-part :is(button, input, select, form), .mode-advanced-part',
+  )).toHaveLength(0);
+});

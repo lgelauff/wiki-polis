@@ -561,6 +561,8 @@
     "admin-settings-description": "Description",
     "admin-settings-saved": "Settings saved.",
     "admin-settings-unchanged": "Settings already up to date.",
+    "admin-settings-value-yes": "Yes",
+    "admin-settings-value-no": "No",
     "admin-settings-policy-failed": "Could not save the moderation setting. Try again later.",
     "admin-settings-policy-unknown": "Polis may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.",
     "admin-invitations-unavailable": "Not available: access is set to “$1”.",

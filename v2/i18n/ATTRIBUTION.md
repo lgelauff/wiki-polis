@@ -36,6 +36,8 @@ Chosen from MediaWiki's catalogue to replace wording of our own.
 | `conv-nav-next` | `Next` | MediaWiki core | [`watchlistlabels-onboarding-next`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `participants-btn-ban` | `Block` | MediaWiki core | [`blocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
 | `participants-btn-unban` | `Unblock` | MediaWiki core | [`unblocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
+| `admin-settings-value-yes` | `Yes` | MediaWiki core | [`htmlform-yes`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `admin-settings-value-no` | `No` | MediaWiki core | [`htmlform-no`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 
 `adminconv-countdown-*` has no Dutch: the admin console is not translated into Dutch yet, and
 MediaWiki core has Dutch only for `hours-abbrev` ("$1 u"). `days-abbrev` and
