@@ -4552,7 +4552,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4593,7 +4593,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminInvitationRemovalResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5059,7 +5059,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5596,7 +5596,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminPhase6InitializationResponse"];
                 };
             };
-            /** @description Conversation moderation permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
