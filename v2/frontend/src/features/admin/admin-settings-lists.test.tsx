@@ -196,6 +196,67 @@ test('an invite-only list shows no "not in effect" note to a moderator', async (
   expect(document.querySelector('.admin-note')).toBeNull();
 });
 
+const accessCodes = {gated: true, gatingType: 'voucher', accessPolicy: 'invite_only'} as const;
+
+test('on an access-code consultation the invitation list is greyed, not removed, and Remove still works', async () => {
+  // Owner, 2026-10-09: the Invitations tab is always shown; while invitations are not in
+  // effect its content is greyed. Stored invitations may still need cleaning up, so an
+  // organizer keeps Remove, as part of the muted list.
+  serveInvitations([invitation(51, 'First editor'), invitation(52, 'Second editor')], true, accessCodes);
+  let removed = 0;
+  server.use(http.delete(url('/api/v1/admin/conversations/7/invitations/:inviteId'), () => {
+    removed += 1;
+    serveInvitations([invitation(52, 'Second editor')], true, accessCodes);
+    return HttpResponse.json({data: {
+      invitationId: 51, removed: true, invitations: [invitation(52, 'Second editor')],
+      links: {invitations: INVITATIONS_URL},
+    }});
+  }));
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  const remove = await screen.findByRole('button', {name: /First editor/}, {timeout: 10_000});
+  const note = screen.getByText(testMessages['admin-invitations-unavailable']!
+    .replace('$1', testMessages['admin-access-admission-voucher']!));
+  expect(note).toBeVisible();
+  // The note, the add form and the list sit in one muted block; the list is described by
+  // the note, so a screen reader hears why it is grey.
+  const muted = note.closest('.admin-muted')!;
+  expect(muted).not.toBeNull();
+  const list = screen.getByRole('region', {name: testMessages['admin-invitations-list-heading']!});
+  expect(muted).toContainElement(list);
+  expect(list).toHaveAttribute('aria-describedby', note.id);
+  expect(within(list).getByText('First editor')).toBeVisible();
+  // Adding is disabled; removing is not.
+  expect(screen.getByRole('textbox')).toBeDisabled();
+  expect(within(screen.getByRole('textbox').closest('form')!).getByRole('button')).toBeDisabled();
+  expect(remove).toBeEnabled();
+  fireEvent.click(remove);
+  await waitFor(() => expect(screen.queryByText('First editor')).toBeNull());
+  expect(removed).toBe(1);
+});
+
+test('on an access-code consultation a moderator reads the greyed list, with no Remove', async () => {
+  serveInvitations([invitation(51, 'First editor')], false, accessCodes);
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  const name = await screen.findByText('First editor', {}, {timeout: 10_000});
+  expect(name.closest('.admin-muted')).not.toBeNull();
+  expect(document.querySelector('.admin-rows button')).toBeNull();
+  expect(screen.queryByRole('textbox')).toBeNull();
+});
+
+test('a live invitation list is not greyed', async () => {
+  serveInvitations([invitation(51, 'First editor')]);
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  await screen.findByText('First editor', {}, {timeout: 10_000});
+  expect(document.querySelector('.admin-muted')).toBeNull();
+  expect(screen.getByRole('textbox')).toBeEnabled();
+});
+
 test('a Roles result goes when another person or role is chosen', async () => {
   server.use(http.get(SETTINGS_URL, () => HttpResponse.json({data: settings})));
   renderPage(<AdminRolesPage conversationId={7} csrfToken="t" />,

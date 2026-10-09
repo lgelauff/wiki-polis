@@ -565,7 +565,7 @@ test.each([
 
 test.each([
   ['invitations', 'Invitations'],
-  ['vouchers', 'Vouchers'],
+  ['vouchers', 'Access codes'],
   ['roles', 'Roles'],
 ])('the Settings tab …/settings/%s is routed to its page', async (tab, heading) => {
   // Guards the routes themselves: a later change that drops one would fall through to the
