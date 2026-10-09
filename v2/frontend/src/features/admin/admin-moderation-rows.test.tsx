@@ -1,12 +1,12 @@
 import {Suspense} from 'react';
 import {QueryClientProvider, type QueryClient} from '@tanstack/react-query';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
 
 import type {components} from '../../api/schema';
-import {AdminModerationFlagsPage} from './admin-moderation-flags-page';
+import {AdminModerationFlagsPage, FLAG_SETTLE_MS} from './admin-moderation-flags-page';
 import {AdminModerationPeoplePage} from './admin-moderation-people-page';
 import {AdminModerationQueuePage} from './admin-moderation-queue-page';
 import {AdminFeaturedPage} from './admin-featured-page';
@@ -172,6 +172,47 @@ test('handling a flag reads the frame again, whose sidebar counts the open flags
   await waitFor(() => expect(invalidate).toHaveBeenCalledWith(
     expect.objectContaining({queryKey: ['admin-lifecycle', 7]}),
   ));
+});
+
+test('a handled flag stays in place as "Handled ✓" before it moves, so the next button does not slide under the pointer', async () => {
+  // Owner, 2026-10-09: removing the row at once moved the next flag's "Mark as handled" into
+  // the clicked one's place, and a double click handled two flags.
+  serveFlags([flag(41, 'The first flagged text.'), flag(42, 'The second flagged text.')]);
+  renderPage(<AdminModerationFlagsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/moderation/flags');
+  const handle = m('admin-moderation-flag-handle');
+  const first = await screen.findByRole('button', {name: `${handle} — The first flagged text.`}, {timeout: 10_000});
+  const second = screen.getByRole('button', {name: `${handle} — The second flagged text.`});
+  const openRows = () => [...document.querySelectorAll('[data-row-id]')].map((row) => row.getAttribute('data-row-id'));
+
+  vi.useFakeTimers({shouldAdvanceTime: true});
+  try {
+    first.focus();
+    fireEvent.click(first);
+    const settledRow = document.querySelector('[data-row-id="41"]') as HTMLElement;
+    await waitFor(() => expect(within(settledRow).getByText(m('admin-moderation-flags-handled-heading'), {exact: false})).toBeVisible());
+    await waitFor(() => expect(polite()).toHaveTextContent(m('admin-moderation-flag-marked-handled')));
+    // Right after the click: the clicked row is where it was, without controls, and the next
+    // row's button is still in its own row, not in the clicked row's place.
+    expect(openRows()).toEqual(['41', '42']);
+    expect(within(settledRow).queryByRole('button')).toBeNull();
+    expect(settledRow).toHaveTextContent(/Handled ✓$/);
+    expect(second.closest('[data-row-id]')).toHaveAttribute('data-row-id', '42');
+    expect(screen.queryByRole('heading', {name: m('admin-moderation-flags-handled-heading'), level: 2})).toBeNull();
+    // Focus is not dropped: it is on the line that replaced the controls.
+    expect(document.activeElement).toBe(within(settledRow).getByText(m('admin-moderation-flags-handled-heading'), {exact: false}));
+
+    act(() => { vi.advanceTimersByTime(FLAG_SETTLE_MS); });
+
+    // After the delay: the row is in the Handled list, and focus is on the next flag's button.
+    await waitFor(() => expect(openRows()).toEqual(['42']));
+    const handledList = screen.getByRole('heading', {name: m('admin-moderation-flags-handled-heading'), level: 2})
+      .nextElementSibling as HTMLElement;
+    expect(handledList).toHaveTextContent('The first flagged text.');
+    await waitFor(() => expect(screen.getByRole('button', {name: `${handle} — The second flagged text.`})).toHaveFocus());
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('People shows each person by pseudonym, never by username, and names each row\'s controls', async () => {

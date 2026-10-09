@@ -353,7 +353,8 @@ test('flags are one row each, with the reason as a suffix and one way to close o
   fireEvent.click(within(row).getByRole('button', {name: /^Mark as handled/}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({flagId: 41, body: {resolved: true, note: null}});
-  await waitFor(() => expect(screen.getByText('No open flags.')).toHaveFocus());
+  // The row stays put, as "Handled ✓", for FLAG_SETTLE_MS before it moves.
+  await waitFor(() => expect(screen.getByText('No open flags.')).toHaveFocus(), {timeout: 5_000});
   expect(screen.queryByRole('button', {name: /^Mark as handled/})).toBeNull();
   expect(announced('polite')).toHaveTextContent('Flag marked as handled.');
   // The resolved flag moves to the list below, without the way to the content.
@@ -390,7 +391,7 @@ test('the note typed on a flag is sent with it and shown in the handled list', a
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({resolved: true, note: 'Hid the statement on the queue.'});
-  const resolved = (await screen.findByRole('heading', {name: 'Handled', level: 2}))
+  const resolved = (await screen.findByRole('heading', {name: 'Handled', level: 2}, {timeout: 5_000}))
     .nextElementSibling as HTMLElement;
   expect(within(resolved).getByText('Hid the statement on the queue.')).toBeVisible();
 });

@@ -389,7 +389,7 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   expect(screen.getByText(/Privacy violation/)).toHaveClass('admin-row__suffix');
   fireEvent.click(screen.getByRole('button', {name: /^Mark as handled/}));
 
-  expect(await screen.findByText('No open flags.')).toBeVisible();
+  expect(await screen.findByText('No open flags.', {}, {timeout: 5_000})).toBeVisible();
   await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
     .toHaveTextContent('Flag marked as handled.'));
 });
