@@ -44,12 +44,13 @@ const invitation = (id: number, username: string) => (
   {id, username, createdAt: '2026-08-01T10:00:00Z', signedIn: false}
 );
 
-function serveInvitations(invitations: ReturnType<typeof invitation>[]) {
-  server.use(http.get(SETTINGS_URL, () => HttpResponse.json({data: settings})));
+function serveInvitations(invitations: ReturnType<typeof invitation>[], manageInvitations = true) {
+  server.use(http.get(SETTINGS_URL, () => HttpResponse.json({data: manageInvitations ? settings
+    : {...settings, capabilities: {edit: false, switchDemo: false}}})));
   server.use(http.get(INVITATIONS_URL, () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
     invitations,
-    capabilities: {manageInvitations: true},
+    capabilities: {manageInvitations},
     links: {self: INVITATIONS_URL, conversation: '/admin/conversations/7'},
   }})));
 }
@@ -130,6 +131,22 @@ test('removing the last invitation leaves focus on the empty-list line', async (
   fireEvent.click(await screen.findByRole('button', {name: /First editor/}, {timeout: 10_000}));
   await waitFor(() => expect(document.activeElement?.textContent).toMatch(/^No invit/));
   expect(politeRegion()).toHaveTextContent('Invitation for First editor removed.');
+});
+
+test('a moderator sees the invitation list with usernames, read-only: no add form, no Remove', async () => {
+  // Owner, 2026-10-09: organizers stay in charge of invitations (the server refuses a
+  // moderator's add and remove). Read-only means absent, not greyed out.
+  serveInvitations([invitation(51, 'First editor'), invitation(52, 'Second editor')], false);
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  expect(await screen.findByText('First editor', {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.getByText('Second editor')).toBeVisible();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  // (The frame's own log-out form is not the page's; the add form is the .admin-form section.)
+  expect(document.querySelector('textarea, .admin-form')).toBeNull();
+  expect(screen.queryByRole('button', {name: /First editor|Second editor/})).toBeNull();
+  expect(document.querySelector('.admin-rows button')).toBeNull();
 });
 
 test('a Roles result goes when another person or role is chosen', async () => {

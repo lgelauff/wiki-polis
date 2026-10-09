@@ -117,6 +117,9 @@ export function AdminInvitationsPage({
   // naming the access policy in effect as the reason (#478). The stored list stays either
   // way, with its remove buttons.
   const invitationList = settings.conversation.gatingType === 'invite_only';
+  // Organizers (and site admins) manage the list; a moderator reads it: no add form and no
+  // Remove at all, not greyed out (owner, 2026-10-09).
+  const canManage = data.capabilities.manageInvitations;
   const unavailableId = useId();
   const headingId = useId();
   return (
@@ -129,7 +132,7 @@ export function AdminInvitationsPage({
       announcer={announcer}
     >
       <div>
-        <section className="admin-form" aria-labelledby={headingId}>
+        {canManage && <section className="admin-form" aria-labelledby={headingId}>
           <h2 id={headingId}>{msg('invites-add-heading')}</h2>
           {!invitationList && <p className="admin-note" id={unavailableId}>
             {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
@@ -156,7 +159,7 @@ export function AdminInvitationsPage({
             </div>
             {result?.error && <p className="admin-error" role="alert">{result.message}</p>}
           </form>
-        </section>
+        </section>}
 
         {/* One row per invitation: the name and whether that account has signed in to the
             site, the day it was added, and Remove. Not a table: no column is compared. */}
@@ -174,7 +177,7 @@ export function AdminInvitationsPage({
                   </span>
                 </div>
                 <div className="admin-row__counts"><AdminTime value={invitation.createdAt} /></div>
-                <div className="admin-row__actions">
+                {canManage && <div className="admin-row__actions">
                   {/* Not red: a removed invitation can be added again. */}
                   <button
                     type="button"
@@ -186,7 +189,7 @@ export function AdminInvitationsPage({
                   >
                     {msg('admin-btn-remove')}
                   </button>
-                </div>
+                </div>}
               </li>
             ))}
           </ul>
