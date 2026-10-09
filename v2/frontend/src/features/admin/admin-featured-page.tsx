@@ -187,6 +187,9 @@ function CandidateRow({candidate, csrfToken, pending, onConfirm}: {
       <td>{candidate.votes.disagree}</td>
       <td>{candidate.votes.pass}</td>
       <td>{candidate.votes.total}</td>
+      <td>{candidate.votes.agreementPercent === null
+        ? '—'
+        : `${candidate.votes.agreementPercent.toFixed(1)}%`}</td>
       <td>
         <InlineForm onSubmit={onConfirm}>
           <input type="hidden" name="csrf_token" value={csrfToken} />
@@ -310,6 +313,11 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         ) : <p className="muted" style={{fontSize: 14, marginBottom: '1.5rem'}}>No featured statements yet.</p>}
 
         <h3 className="section-heading">System suggestions</h3>
+        {data.dataAvailability.candidates && data.candidates.length > 0 && (
+          <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
+            Agreement is the percentage of agree votes among agree and disagree votes; pass votes are excluded.
+          </p>
+        )}
         {!data.dataAvailability.candidates ? (
           <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
             Not available — <code>POLIS_DATABASE_URL</code> is not configured.
@@ -322,7 +330,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </p>
         ) : (
           <table className="admin-table" style={{marginBottom: '1.5rem'}}>
-            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th>Agree</th><th>Disagree</th><th>Pass</th><th>Votes</th><th /></tr></thead>
+            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th>Agree</th><th>Disagree</th><th>Pass</th><th>Votes</th><th>Agreement (%)</th><th /></tr></thead>
             <tbody>
               {data.candidates.map((candidate) => (
                 <CandidateRow
