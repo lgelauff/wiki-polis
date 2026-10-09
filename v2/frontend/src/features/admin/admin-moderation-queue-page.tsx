@@ -1,5 +1,5 @@
 import {useCallback, useState} from 'react';
-import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -7,14 +7,14 @@ import {
   adminLifecycleQuery,
   adminSettingsQuery,
   adminStatementWorkspaceQuery,
-  putAdminStatementModeration,
 } from '../../api/queries';
-import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {sortByBasedOn} from './admin-based-on';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {useAnnouncer} from './admin-announcer';
+import {StatementActions} from './admin-statement-actions';
+import {StatementProvenance} from './admin-provenance';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {useRowFocus} from './admin-row-focus';
@@ -41,6 +41,13 @@ const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
   approved: 'approved',
   unmoderated: 'pending',
   hidden: 'hidden',
+};
+
+/** What is said when a statement has moved to a list. */
+const MOVED: Record<Status, string> = {
+  approved: 'admin-moderation-statement-approved',
+  hidden: 'admin-moderation-statement-hidden',
+  pending: 'admin-moderation-statement-unmoderated',
 };
 
 const EMPTY: Record<Position, string> = {
@@ -80,13 +87,6 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
   onError: (message: string) => void;
 }) {
   const msg = useMessage();
-  const mutation = useMutation({
-    mutationFn: (status: Status) => putAdminStatementModeration(
-      conversationId, statement.id, {status}, csrfToken,
-    ),
-    onSuccess: (receipt) => move(statement, receipt.status),
-    onError: (error: Error) => onError(errorMessage(error, msg)),
-  });
   const source = statement.provenance;
   return (
     <li className="admin-row" data-row-id={statement.id}>
@@ -94,32 +94,13 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
         {source && (
-          <InternalLink href={`/admin/conversations/${conversationId}/content/statements`}
-            className="admin-row__source">{`↳ #${source.derivedFromId}`}</InternalLink>
+          <StatementProvenance provenance={source}
+            href={`/admin/conversations/${conversationId}/content/statements#statement-${source.derivedFromId}`} />
         )}
       </div>
-      <div className="admin-row__actions">
-        <button
-          type="button"
-          className="admin-row__glyph"
-          title={msg('admin-moderation-approve-statement', statement.id)}
-          aria-label={msg('admin-moderation-approve-statement', statement.id)}
-          disabled={mutation.isPending || statement.moderation === 'approved'}
-          onClick={() => mutation.mutate('approved')}
-        >
-          <span aria-hidden="true">✓</span>
-        </button>
-        <button
-          type="button"
-          className="admin-row__glyph"
-          title={msg('admin-moderation-hide-statement', statement.id)}
-          aria-label={msg('admin-moderation-hide-statement', statement.id)}
-          disabled={mutation.isPending || statement.moderation === 'hidden'}
-          onClick={() => mutation.mutate('hidden')}
-        >
-          <span aria-hidden="true">✕</span>
-        </button>
-      </div>
+      <StatementActions conversationId={conversationId} statement={statement}
+        csrfToken={csrfToken} onMoved={move}
+        onError={(error) => onError(errorMessage(error, msg))} />
     </li>
   );
 }
@@ -151,8 +132,7 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
     if (status !== LIST[position]) rowRemoved(statement.id);
     // The row leaves the list (or its glyph greys out); this says what happened, and is
     // said again when the next statement gets the same answer.
-    if (status === 'approved') announcer.announce(msg('admin-moderation-statement-approved', statement.id));
-    if (status === 'hidden') announcer.announce(msg('admin-moderation-statement-hidden', statement.id));
+    announcer.announce(msg(MOVED[status], statement.id));
     // The receipt names the new state, so the row moves between the lists rather than
     // refetching: the queue keeps its scroll position and its sort while a moderator works.
     queryClient.setQueryData<Workspace>(options.queryKey, (workspace) => {

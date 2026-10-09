@@ -1,137 +1,28 @@
-import {useCallback, useState, type FormEvent} from 'react';
-import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {useCallback, useState} from 'react';
+import {useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {
   adminLifecycleQuery,
   adminParticipantRosterQuery,
   adminSettingsQuery,
-  putAdminParticipantAccess,
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
+import {AdminTime} from './admin-time';
+import {PersonAccessControl} from './admin-person-access';
 import {AdminComing} from './admin-coming';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Participant = components['schemas']['AdminParticipant'];
-type Roster = components['schemas']['AdminParticipantRoster'];
-
-function formatLegacyDate(value: string): string {
-  return new Date(value).toISOString().slice(0, 10);
-}
-
-function formatLegacyDateTime(value: string | null): string | null {
-  if (!value) return null;
-  return new Date(value).toISOString().slice(0, 16).replace('T', ' ');
-}
 
 /** The person as this page names them: the Wikimedia username for an organizer or a site
  *  admin, the pseudonym for a moderator-only viewer, to whom the roster sends no username
  *  (owner decision, 2026-10-08). */
 function personName(participant: Participant): string {
   return participant.username ?? participant.pseudonym;
-}
-
-function ParticipantAccessControl({
-  conversationId,
-  participant,
-  csrfToken,
-  setToast,
-}: {
-  conversationId: number;
-  participant: Participant;
-  csrfToken: string;
-  setToast: (toast: LegacyToastMessage) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [summary, setSummary] = useState('');
-  const desiredBanned = !participant.access.banned;
-  // Every row has this field and this button: the person's name after the visible words
-  // tells one row's from the next one's.
-  const who = personName(participant);
-  const mutation = useMutation({
-    mutationFn: () => putAdminParticipantAccess(
-      conversationId,
-      participant.participantId,
-      {banned: desiredBanned, summary: summary || null},
-      csrfToken,
-    ),
-    onSuccess: (receipt) => {
-      queryClient.setQueryData<Roster>(
-        adminParticipantRosterQuery(conversationId).queryKey,
-        (current) => current ? {
-          ...current,
-          participants: current.participants.map((row) => (
-            row.participantId === receipt.participantId ? {
-              ...row,
-              access: {
-                banned: receipt.banned,
-                changedAt: receipt.changedAt,
-                summary: receipt.banned ? receipt.summary : null,
-              },
-            } : row
-          )),
-        } : current,
-      );
-      setSummary('');
-      const changedMessage = receipt.banned
-        ? 'Participant banned from this conversation.'
-        : 'Participant unbanned from this conversation.';
-      const unchangedMessage = receipt.banned
-        ? 'Participant is already banned from this conversation.'
-        : 'Participant is already allowed in this conversation.';
-      setToast({
-        id: Date.now(),
-        category: receipt.changed ? 'success' : 'warning',
-        message: receipt.changed ? changedMessage : unchangedMessage,
-      });
-    },
-  });
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    mutation.mutate();
-  }
-
-  if (participant.access.banned) {
-    return (
-      <>
-        {/* "Banned since …" is said once, beside the name. */}
-        {participant.access.summary && (
-          <div className="muted" style={{fontSize: 13, marginBottom: '.5rem'}}>{participant.access.summary}</div>
-        )}
-        <form onSubmit={submit}>
-          <input
-            type="text"
-            name="summary"
-            value={summary}
-            onChange={(event) => setSummary(event.target.value)}
-            placeholder="Unban note (optional)"
-            aria-label={`Unban note (optional) — ${who}`}
-            style={{width: '100%', marginBottom: '.35rem'}}
-          />
-          <button type="submit" className="btn-small btn-approve">unban{' '}<span className="sr-only">{`— ${who}`}</span></button>
-        </form>
-      </>
-    );
-  }
-
-  return (
-    <form onSubmit={submit}>
-      <input
-        type="text"
-        name="summary"
-        value={summary}
-        onChange={(event) => setSummary(event.target.value)}
-        placeholder="Reason (optional)"
-        aria-label={`Reason (optional) — ${who}`}
-        style={{width: '100%', marginBottom: '.35rem'}}
-      />
-      <button type="submit" className="btn-small btn-danger">ban{' '}<span className="sr-only">{`— ${who}`}</span></button>
-    </form>
-  );
 }
 
 export function AdminParticipantsPage({
@@ -162,8 +53,6 @@ export function AdminParticipantsPage({
         <AdminTabStrip label={msg('admin-content-tabs-aria')}
           tabs={contentTabs(conversationId, msg)} current="participants" />
 
-        <p className="admin-note">{msg('participants-intro')}</p>
-
         {!data.dataAvailability.statementProgress && (
           <p className="admin-note">{msg('participants-progress-unavailable')}</p>
         )}
@@ -172,7 +61,6 @@ export function AdminParticipantsPage({
           <ul className="admin-rows">
             {data.participants.map((participant) => {
               const progress = participant.statementProgress;
-              const lastEngagement = formatLegacyDateTime(participant.lastEngagementAt);
               return (
                 <li className="admin-row" key={participant.participantId}>
                   <div className="admin-row__text">
@@ -180,8 +68,12 @@ export function AdminParticipantsPage({
                     {participant.access.banned && (
                       <span className="admin-row__suffix">
                         {' · '}{msg('participants-banned')}
-                        {participant.access.changedAt
-                          && ` ${msg('participants-banned-since')} ${formatLegacyDate(participant.access.changedAt)}`}
+                        {participant.access.changedAt && <>
+                          {` ${msg('participants-banned-since')} `}
+                          <AdminTime value={participant.access.changedAt} />
+                        </>}
+                        {/* The reason, once, beside the name: as on Moderation › People. */}
+                        {participant.access.summary && ` · ${participant.access.summary}`}
                       </span>
                     )}
                   </div>
@@ -206,15 +98,18 @@ export function AdminParticipantsPage({
                     </div>
                     <div>
                       <dt>{msg('participants-th-last-engagement')}</dt>
-                      <dd>{lastEngagement ?? msg('participants-no-actions')}</dd>
+                      <dd>{participant.lastEngagementAt
+                        ? <AdminTime value={participant.lastEngagementAt} moment />
+                        : msg('participants-no-actions')}</dd>
                     </div>
                   </dl>
                   <div className="admin-row__actions">
-                    <ParticipantAccessControl
+                    <PersonAccessControl
                       conversationId={conversationId}
                       participant={participant}
+                      name={personName(participant)}
                       csrfToken={csrfToken}
-                      setToast={setToast}
+                      onFeedback={setToast}
                     />
                   </div>
                 </li>

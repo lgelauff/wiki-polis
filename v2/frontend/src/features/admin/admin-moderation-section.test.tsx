@@ -13,6 +13,7 @@ import {AdminFeaturedPage} from './admin-featured-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
+import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
 
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
@@ -155,8 +156,11 @@ test('a derived statement names its source, and "Based on" puts it under it', as
     '/admin/conversations/7/moderation/queue');
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
-  const link = screen.getByRole('link', {name: '↳ #11'});
-  expect(link).toHaveAttribute('href', '/admin/conversations/7/content/statements');
+  // The shared provenance marker: "↳ #11" on screen, named in words, and a link to that
+  // statement's own row on Content › Statements.
+  const link = screen.getByRole('link', {name: 'derived from statement 11'});
+  expect(link).toHaveTextContent('↳ #11');
+  expect(link).toHaveAttribute('href', '/admin/conversations/7/content/statements#statement-11');
   expect(link.closest('.admin-row__text')).toHaveTextContent('A corrected version');
 
   fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});
@@ -471,17 +475,17 @@ test('people are one row each, with their state and the control that changes it'
   const row = page().getByRole('listitem');
   expect(row).toHaveTextContent('quiet-otter');
   expect(row).toHaveTextContent('Active');
-  expect(row).toHaveTextContent('2026-08-13');
+  expect(row).toHaveTextContent('13 Aug 2026');
   expect(row).not.toHaveTextContent('since');
   expect(within(row).getByRole('textbox', {name: 'Reason (optional) — quiet-otter'})).toBeVisible();
 
-  fireEvent.click(within(row).getByRole('button', {name: 'ban — quiet-otter'}));
+  fireEvent.click(within(row).getByRole('button', {name: 'Block — quiet-otter'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({participantId: 23, body: {banned: true, summary: null}});
   // The row says the new state in place, and the toast says it to a screen reader.
-  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Banned since 2026-08-14'));
-  expect(screen.getByRole('button', {name: 'unban — quiet-otter'})).toBeVisible();
-  expect(announced('polite')).toHaveTextContent('Participant banned from this conversation.');
+  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Blocked since 14 Aug 2026'));
+  expect(screen.getByRole('button', {name: 'Unblock — quiet-otter'})).toBeVisible();
+  expect(announced('polite')).toHaveTextContent('Participant blocked in this consultation.');
 });
 
 test('a person shows since when and why only while blocked, and an unchanged unblock says so', async () => {
@@ -520,11 +524,11 @@ test('a person shows since when and why only while blocked, and an unchanged unb
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const [blocked, allowed] = page().getAllByRole('listitem');
-  expect(blocked).toHaveTextContent('Banned since 2026-08-10 · Repeated spam.');
+  expect(blocked).toHaveTextContent('Blocked since 10 Aug 2026 · Repeated spam.');
   expect(allowed).toHaveTextContent('Active');
   expect(allowed).not.toHaveTextContent('since');
 
-  fireEvent.click(within(blocked!).getByRole('button', {name: /^unban/}));
+  fireEvent.click(within(blocked!).getByRole('button', {name: /^Unblock/}));
   await waitFor(() => expect(announced('assertive'))
     .toHaveTextContent('Participant is already allowed in this consultation.'));
 });
@@ -536,8 +540,69 @@ test('Featured is today’s page under the strip, arguments and all', async () =
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   expect(within(strip()).getByRole('link', {name: 'Featured'}))
     .toHaveAttribute('aria-current', 'page');
-  expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
   // Argument moderation is served by this endpoint, so it stays here (#473).
-  expect(screen.getByText('Arguments')).toBeVisible();
-  expect(screen.getByRole('button', {name: 'hide'})).toBeVisible();
+  expect(screen.getByRole('list', {name: 'Arguments'})).toBeVisible();
+  expect(screen.getByRole('button', {name: /^Hide/})).toBeVisible();
+});
+
+test('Featured without the statistics database leaves out its suggestions, and explains nothing', async () => {
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      selected: [], candidates: [],
+      dataAvailability: {candidates: false}, phase: {argumentMappingActive: false, informedVotingLive: false},
+      guidance: {recommendedCount: 15, note: ''}, capabilities: {manage: true},
+      links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/admin/conversations/7'},
+    }}),
+  ));
+  renderModeration(<AdminFeaturedPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/featured');
+
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
+  expect(screen.queryByRole('heading', {name: 'System suggestions'})).toBeNull();
+  expect(screen.queryByText(/POLIS_DATABASE_URL|Not available/)).toBeNull();
+  // What works stays: the confirmed list (empty) and adding by statement number.
+  expect(screen.getByText('No featured statements yet.')).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Add by statement number'})).toBeVisible();
+  expect(screen.getByRole('spinbutton', {name: 'Statement number'})).toBeVisible();
+  expect(screen.queryByText(/\bTID\b/)).toBeNull();
+  // No help card or intro about featured statements.
+  expect(screen.queryByText(/How to choose featured statements|Featured statements appear/)).toBeNull();
+});
+
+test('Featured\'s actions are sentence-case text buttons, red only where nothing can undo them', async () => {
+  renderModeration(<AdminFeaturedPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/featured');
+
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
+  // Deleting an argument and its ratings is the one irreversible action here.
+  expect(screen.getByRole('button', {name: /^Delete/})).toHaveClass('admin-row__text-button--danger');
+  for (const name of [/^Hide/, /^Remove/, /^Confirm/]) {
+    const button = screen.getByRole('button', {name});
+    expect(button).toHaveClass('admin-row__text-button');
+    expect(button).not.toHaveClass('admin-row__text-button--danger');
+  }
+  expect(screen.queryByRole('button', {name: /^(hide|unhide|remove|confirm|delete)$/})).toBeNull();
+  expect(document.querySelector('.btn-small, .btn-danger')).toBeNull();
+});
+test('under a key-id catalogue Featured is all keys, but for its data', async () => {
+  renderAsQqx();
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin/conversations/7/moderation/featured']}>
+        <Suspense fallback={null}>
+          <MessageProvider><AdminFeaturedPage conversationId={7} csrfToken={csrf} /></MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: '(admin-shell-moderation)', level: 1}, {timeout: 10_000});
+  expect(untranslatedCopy([document.querySelector('.admin-page')], [
+    // The fixture's own words and the formatted date: data, never keyed.
+    'An approved seed statement.', 'A useful supporting argument.', 'quiet-otter',
+    'A candidate preserving another viewpoint.', '13 Aug 2026', 'UTC',
+  ])).toEqual([]);
 });

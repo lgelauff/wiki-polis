@@ -345,17 +345,15 @@ class PolicySaveError extends Error {
 }
 
 /** The status-line text for a refused moderation-policy request. */
-function policyErrorMessage(failure: unknown): string {
-  if (failure instanceof ApiContractError && failure.code === 'verification_unavailable') {
-    return 'Could not verify the current moderation state. Try again later.';
-  }
+function policyErrorMessage(msg: Message, failure: unknown): string {
   if (failure instanceof ApiContractError && failure.code === 'upstream_unavailable') {
-    return 'Could not update moderation settings. Check server logs for details.';
+    return msg('flash-modsettings-failed');
   }
+  // The one refusal a retry could make worse: Polis may already hold the new mode.
   if (failure instanceof ApiContractError && failure.code === 'command_outcome_unknown') {
-    return 'The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.';
+    return msg('admin-settings-policy-unknown');
   }
-  return 'Could not save the moderation policy. Try again later.';
+  return msg('admin-settings-policy-failed');
 }
 
 export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
@@ -536,10 +534,10 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   const locked = lockedField(settingsError);
   const serverMessage = settingsError instanceof ApiContractError
     ? settingsError.message : null;
-  const generalError = policyFailure ? policyErrorMessage(policyFailure.failure)
+  const generalError = policyFailure ? policyErrorMessage(msg, policyFailure.failure)
     : settingsError instanceof ApiContractError
       ? (fieldMessages.length || locked ? null : serverMessage)
-      : settingsError ? 'Settings could not be saved.' : null;
+      : settingsError ? msg('adminconv-command-failed') : null;
 
   // The question takes focus when it opens; when it closes, by Cancel or by Continue, the
   // buttons that held focus are gone, so focus goes back to the Save button.
@@ -622,31 +620,30 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           </div>}
           {tab === 'basics' ? <>
             <section aria-labelledby="settings-description">
-              <h2 id="settings-description">Description</h2>
+              <h2 id="settings-description">{msg('admin-settings-description')}</h2>
               {canEdit ? <>
                 <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => edit({title: event.target.value})} /></label>
                 <FieldError field="title" />
-                <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => edit({introHtml: event.target.value})} /></label>
-                <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => edit({outroHtml: event.target.value})} /></label>
-                <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
+                <label>{msg('admin-label-intro')}<textarea value={introHtml} rows={7} onChange={(event) => edit({introHtml: event.target.value})} /></label>
+                <label>{msg('admin-label-outro')}<textarea value={outroHtml} rows={5} onChange={(event) => edit({outroHtml: event.target.value})} /></label>
               </> : <>
                 <SettingValue label={msg('admin-label-title')} value={data.conversation.title} />
-                <SettingHtml label="Introduction HTML" html={data.conversation.introHtml} className="intro-text" />
-                <SettingHtml label="Closing HTML" html={data.conversation.outroHtml} className="outro-text" />
+                <SettingHtml label={msg('admin-label-intro')} html={data.conversation.introHtml} className="intro-text" />
+                <SettingHtml label={msg('admin-label-outro')} html={data.conversation.outroHtml} className="outro-text" />
               </>}
               {/* Admin-written texts meant for publication are CC0, like participants'
                   contributions; the deed link is built as on the join screen. */}
               <p className="settings-hint" dangerouslySetInnerHTML={richHtml(msg('admin-settings-basics-licence', '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             </section>
             <section aria-labelledby="settings-guidance">
-              <h2 id="settings-guidance">Guidance scope</h2>
-              {canEdit ? <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
+              <h2 id="settings-guidance">{msg('adminconv-label-tier')}</h2>
+              {canEdit ? <fieldset aria-labelledby="settings-guidance">{data.recommendations.tiers.map((option) => (
                 <label className="settings-tier" key={option.key}>
                   <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => edit({tier: option.key})} />
                   <strong>{option.label}</strong>
                   <span>{Object.values(option.quantities).join(' · ')}</span>
                 </label>
-              ))}</fieldset> : <SettingValue label="Complexity tier" value={selectedTier?.label ?? tier} />}
+              ))}</fieldset> : <p className="access-answer-value settings-value">{selectedTier?.label ?? tier}</p>}
             </section>
             {/* The Practice Environment section: the fixed answer a practice item has, and the
                 switch that moves one in or out of it. Nothing at all when neither applies, so
@@ -661,8 +658,8 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
                 <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
               </div>}
-              {canSwitchPractice && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => edit({accessPolicy: event.target.value as Policy})}>
-                <option value="public">Not gated</option><option value="demo">Practice</option>
+              {canSwitchPractice && <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => edit({accessPolicy: event.target.value as Policy})}>
+                <option value="public">{msg('admin-common-policy-open')}</option><option value="demo">{msg('admin-common-policy-practice')}</option>
               </select></label>}
             </section>}
             <ApprovalSection conversationId={conversationId}
@@ -715,15 +712,15 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           {canSave && <footer>
             {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
               <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
-              <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
-              <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
-            </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
+              <button type="submit" className="admin-button admin-button--primary" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
+              <button type="button" className="admin-button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
+            </div> : <button type="submit" className="admin-button admin-button--primary" disabled={mutation.isPending} ref={saveRef}>
               {mutation.isPending ? msg('admin-saving') : msg('admin-save')}
             </button>}
             {/* Always mounted, so the region exists before its first message; keyed on the
                 attempt, so a second identical "Settings saved." is a new line, read again. */}
             <div className="settings-status" role="status">
-              {saved !== null && <p key={mutation.submittedAt}>{saved ? 'Settings saved.' : 'Settings already up to date.'}</p>}
+              {saved !== null && <p key={mutation.submittedAt}>{saved ? msg('admin-settings-saved') : msg('admin-settings-unchanged')}</p>}
             </div>
             {generalError && <p role="alert">{generalError}</p>}
           </footer>}

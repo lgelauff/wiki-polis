@@ -1,4 +1,4 @@
-import {useCallback, useState, type FormEvent, type ReactNode} from 'react';
+import {useCallback, useId, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -12,8 +12,10 @@ import {
   putAdminFeaturedArgument,
   putAdminFeaturedStatement,
 } from '../../api/queries';
-import {useMessage} from '../../i18n/messages';
+import {useMessage, type Message} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
+import {AdminTime} from './admin-time';
+import {StatementProvenance} from './admin-provenance';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -21,64 +23,25 @@ import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 type Workspace = components['schemas']['AdminFeaturedWorkspace'];
 type Selected = components['schemas']['AdminFeaturedSelection'];
 type Candidate = components['schemas']['AdminFeaturedCandidate'];
-type Provenance = Selected['provenance'];
 
-const selectLiveMessage = 'Informed vote is already live. This statement will be seeded into that round immediately. Continue?';
-const removeLiveMessage = 'Informed vote is already live. Removing this statement hides it from that round immediately (existing votes are preserved). Continue?';
-const deleteArgumentMessage = 'Delete this argument and all its votes? This cannot be undone.';
-
-function errorMessage(error: Error, fallback: string): string {
-  if (error instanceof ApiContractError
-      && error.code === 'last_featured_statement_protected') {
-    return 'Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.';
-  }
-  return error instanceof ApiContractError ? error.message : fallback;
+/** A refusal in the page's words: the server's message is for developers (plan_i18n.md
+ *  rule 4). Removing the last featured statement while argument mapping runs has its own. */
+function errorMessage(msg: Message, error: Error): string {
+  return error instanceof ApiContractError && error.code === 'last_featured_statement_protected'
+    ? msg('flash-last-featured-remove') : msg('adminconv-command-failed');
 }
 
-function feedbackStyle() {
-  return {
-    background: '#fef2f2',
-    borderColor: '#fca5a5',
-    color: '#991b1b',
-    border: '1px solid',
-    padding: '.75rem 1rem',
-    borderRadius: 6,
-    fontSize: 13,
-    marginBottom: '1.5rem',
-  };
+/** The start of a text, to tell one row's buttons from the next one's: every row has the
+ *  same Remove, Hide and Delete, so their accessible names carry this after the visible
+ *  word (which stays first, as the name a voice-control user says). */
+function excerpt(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? `${flat.slice(0, 59)}…` : flat;
 }
 
-function ProvenanceBadge({provenance}: {provenance: Provenance}) {
-  if (!provenance) return null;
-  const title = `Derived from statement #${provenance.derivedFromId}. Similarity 1.00 = identical.${provenance.scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`;
-  return (
-    <span className="prov-badge" title={title}>
-      <span className="sr-only">derived from statement {provenance.derivedFromId}, </span>
-      ↳ #{provenance.derivedFromId}
-      {provenance.scores.map((score) => (
-        <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
-      ))}
-    </span>
-  );
-}
-
-function InlineForm({children, className, onSubmit}: {
-  children: ReactNode;
-  className?: string;
-  onSubmit: () => void;
-}) {
-  return (
-    <form
-      className={className}
-      style={{display: 'inline', flexShrink: 0}}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      {children}
-    </form>
-  );
+/** What follows a row control's visible word in its accessible name. */
+function RowName({children}: {children: string}) {
+  return <>{' '}<span className="sr-only">{`— ${children}`}</span></>;
 }
 
 function SelectedRow({
@@ -96,104 +59,105 @@ function SelectedRow({
   refresh: () => void;
   showError: (message: string) => void;
 }) {
+  const msg = useMessage();
   const remove = useMutation({
     mutationFn: () => deleteAdminFeaturedSelection(
       conversationId, selection.featuredId, csrfToken,
     ),
     onSuccess: refresh,
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The featured statement could not be removed.',
-    )),
+    onError: (error: Error) => showError(errorMessage(msg, error)),
   });
   const visibility = useMutation({
     mutationFn: ({id, hidden}: {id: number; hidden: boolean}) => (
       putAdminFeaturedArgument(conversationId, id, {hidden}, csrfToken)
     ),
     onSuccess: refresh,
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The argument moderation state could not be updated.',
-    )),
+    onError: (error: Error) => showError(errorMessage(msg, error)),
   });
   const deletion = useMutation({
     mutationFn: (id: number) => deleteAdminFeaturedArgument(
       conversationId, id, csrfToken,
     ),
     onSuccess: refresh,
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The argument could not be deleted.',
-    )),
+    onError: (error: Error) => showError(errorMessage(msg, error)),
   });
   return (
-    <tr>
-      <td style={{whiteSpace: 'nowrap', verticalAlign: 'top'}}>{selection.statementId}</td>
-      <td style={{fontSize: 13, verticalAlign: 'top'}}>
-        <div style={{marginBottom: '.5rem'}}>{selection.text ?? '—'}</div>
-        {selection.provenance && (
-          <div style={{marginBottom: '.5rem'}}>
-            <ProvenanceBadge provenance={selection.provenance} />
-          </div>
-        )}
-        <div style={{borderTop: '1px solid var(--hairline)', paddingTop: '.4rem', marginTop: '.1rem'}}>
-          <span style={{fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em'}}>Arguments</span>
-          {selection.arguments.length ? selection.arguments.map((argument) => (
-            <div key={argument.id} style={{display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, marginTop: 4, fontSize: 12}}>
-              <span style={{color: 'var(--muted)', minWidth: '2rem', flexShrink: 0}}>{argument.side}</span>
-              {argument.hidden && <span style={{background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b', borderRadius: 999, padding: '1px 6px', fontSize: 11}}>hidden</span>}
-              <span style={{flex: 1, minWidth: 120, color: 'var(--body)'}}>{argument.body}</span>
-              <span style={{color: 'var(--muted)', whiteSpace: 'nowrap'}}>{argument.proposerPseudonym ?? '—'}</span>
-              <span style={{color: 'var(--muted)', whiteSpace: 'nowrap'}}>{argument.createdAt?.slice(0, 10) ?? ''}</span>
-              <InlineForm onSubmit={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
-                <input type="hidden" name="csrf_token" value={csrfToken} />
-                <input type="hidden" name="hidden" value={argument.hidden ? '0' : '1'} />
-                <button type="submit" className="btn-small" disabled={visibility.isPending}>{argument.hidden ? 'unhide' : 'hide'}</button>
-              </InlineForm>
-              <InlineForm onSubmit={() => {
-                if (globalThis.confirm(deleteArgumentMessage)) deletion.mutate(argument.id);
-              }}>
-                <input type="hidden" name="csrf_token" value={csrfToken} />
-                <button type="submit" className="btn-small btn-danger" disabled={deletion.isPending}>delete</button>
-              </InlineForm>
-            </div>
-          )) : <p style={{fontSize: 12, color: 'var(--body)', margin: '4px 0 0'}}>no arguments yet</p>}
-        </div>
-      </td>
-      <td style={{verticalAlign: 'top'}}>
-        <InlineForm onSubmit={() => {
-          if (!informedVotingLive || globalThis.confirm(removeLiveMessage)) remove.mutate();
-        }}>
-          <input type="hidden" name="csrf_token" value={csrfToken} />
-          <button type="submit" className="btn-small btn-danger" disabled={remove.isPending}>remove</button>
-        </InlineForm>
-      </td>
-    </tr>
+    <li className="admin-row">
+      <div className="admin-row__text">
+        <span className="admin-row__id">#{selection.statementId}</span>{' '}
+        {selection.text ?? '—'}
+        {selection.provenance && <StatementProvenance provenance={selection.provenance} />}
+      </div>
+      <div className="admin-row__actions">
+        {/* Not red: a removed statement can be featured again. */}
+        <button type="button" className="admin-row__text-button" disabled={remove.isPending}
+          onClick={() => {
+            if (!informedVotingLive || globalThis.confirm(msg('featured-remove-live-confirm'))) remove.mutate();
+          }}>
+          {msg('admin-btn-remove')}<RowName>{`#${selection.statementId}`}</RowName>
+        </button>
+      </div>
+      {/* Its arguments, one small row each: side, text, who and when, its state in words,
+          and what can be done to it. */}
+      {selection.arguments.length ? (
+        <ul className="admin-row__sub" aria-label={msg('featured-arguments-label')}>
+          {selection.arguments.map((argument) => (
+            <li key={argument.id}>
+              <span className="admin-row__suffix">
+                {argument.side === 'pro' ? msg('conv-arg-col-for') : msg('conv-arg-col-against')}
+              </span>
+              <span>{argument.body}</span>
+              <span className="admin-row__suffix">
+                {argument.proposerPseudonym ?? '—'}
+                {argument.createdAt && <>{' · '}<AdminTime value={argument.createdAt} /></>}
+                {argument.hidden && <>{' · '}{msg('featured-arg-hidden')}</>}
+              </span>
+              <span className="admin-row__actions">
+                <button type="button" className="admin-row__text-button" disabled={visibility.isPending}
+                  onClick={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
+                  {argument.hidden ? msg('featured-arg-unhide') : msg('featured-arg-hide')}
+                  <RowName>{excerpt(argument.body)}</RowName>
+                </button>
+                {/* Red and confirmed: deleting an argument and its ratings cannot be undone. */}
+                <button type="button" className="admin-row__text-button admin-row__text-button--danger"
+                  disabled={deletion.isPending}
+                  onClick={() => {
+                    if (globalThis.confirm(msg('featured-arg-delete-confirm'))) deletion.mutate(argument.id);
+                  }}>
+                  {msg('featured-arg-delete')}<RowName>{excerpt(argument.body)}</RowName>
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="admin-row__note admin-row__suffix">{msg('featured-no-args')}</p>}
+    </li>
   );
 }
 
-function CandidateRow({candidate, csrfToken, pending, onConfirm}: {
+function CandidateRow({candidate, pending, onConfirm}: {
   candidate: Candidate;
-  csrfToken: string;
   pending: boolean;
   onConfirm: () => void;
 }) {
+  const msg = useMessage();
   return (
     <tr>
-      <td>{candidate.statementId}</td>
-      <td style={{fontSize: 13}}>
-        {candidate.text}
-        {candidate.provenance && <div style={{marginTop: '.35rem'}}><ProvenanceBadge provenance={candidate.provenance} /></div>}
-      </td>
-      <td>{candidate.seed ? '✓' : ''}</td>
-      <td>{candidate.votes.agree}</td>
-      <td>{candidate.votes.disagree}</td>
-      <td>{candidate.votes.pass}</td>
-      <td>{candidate.votes.total}</td>
+      <td className="admin-num">{candidate.statementId}</td>
       <td>
-        <InlineForm onSubmit={onConfirm}>
-          <input type="hidden" name="csrf_token" value={csrfToken} />
-          <input type="hidden" name="tid" value={candidate.statementId} />
-          <input type="hidden" name="system_suggested" value="1" />
-          <button type="submit" className="btn-small" disabled={pending}>confirm</button>
-        </InlineForm>
+        {candidate.text}
+        {candidate.provenance && <StatementProvenance provenance={candidate.provenance} />}
+      </td>
+      {/* A seed statement is marked with a check that names itself. */}
+      <td>{candidate.seed && <span title={msg('featured-th-seed')} aria-label={msg('featured-th-seed')} role="img">✓</span>}</td>
+      <td className="admin-num">{candidate.votes.agree}</td>
+      <td className="admin-num">{candidate.votes.disagree}</td>
+      <td className="admin-num">{candidate.votes.pass}</td>
+      <td className="admin-num">{candidate.votes.total}</td>
+      <td>
+        <button type="button" className="admin-row__text-button" disabled={pending} onClick={onConfirm}>
+          {msg('featured-btn-confirm')}<RowName>{`#${candidate.statementId}`}</RowName>
+        </button>
       </td>
     </tr>
   );
@@ -210,16 +174,15 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [manualId, setManualId] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
+  // The add-by-number form's refusal, said at its field; the row actions' refusals are toasts.
+  const [manualError, setManualError] = useState<string | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const manualErrorId = useId();
   function refresh() {
-    setFeedback(null);
     void queryClient.invalidateQueries({queryKey: options.queryKey});
   }
   function showError(message: string) {
-    globalThis.scrollTo(0, 0);
-    setFeedback(message);
     setToast({id: Date.now(), category: 'error', message});
   }
   const selection = useMutation({
@@ -228,14 +191,17 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
     ),
     onSuccess: () => {
       setManualId('');
+      setManualError(null);
       refresh();
     },
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The statement could not be selected.',
-    )),
+    onError: (error: Error, {source}) => {
+      const message = errorMessage(msg, error);
+      if (source === 'manual') setManualError(message);
+      else showError(message);
+    },
   });
   function select(id: number, source: 'system' | 'manual') {
-    if (!data.phase.informedVotingLive || globalThis.confirm(selectLiveMessage)) {
+    if (!data.phase.informedVotingLive || globalThis.confirm(msg('featured-select-live-confirm'))) {
       selection.mutate({id, source});
     }
   }
@@ -259,38 +225,9 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         <AdminTabStrip label={msg('admin-shell-moderation')}
           tabs={moderationTabs(conversationId, msg)} current="featured" />
 
-        <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-          Featured statements appear in the argument mapping tab. Participants submit a pro and con
-          {' '}argument for each, then vote on the most important arguments submitted by others.
-        </p>
-
-        <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How to choose featured statements</h2>
-          <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
-            Featured statements are the representative set that carries the rest of the consultation:
-            {' '}they become the prompts for argument mapping and are seeded into informed voting.
-            {' '}Aim for a balanced set across the main viewpoints, not only the most popular statements.
-          </p>
-          <ul style={{fontSize: 13, paddingLeft: '1.25rem', marginBottom: '.6rem'}}>
-            <li>Use roughly 15 statements as a working target, then adjust for topic complexity.</li>
-            <li>Prefer statements with enough votes to indicate signal, while preserving minority viewpoints.</li>
-            <li>Once argument mapping begins, treat the selected set as locked; changing it later can confuse participants and downstream Phase 6 seeding.</li>
-          </ul>
-          <p className="muted" style={{fontSize: 13, marginBottom: 0}}>
-            System suggestions are ranked candidates from the Polis data. Manual TID adds are for
-            {' '}known statements that should be included even if they are not surfaced by the suggestion query.
-            {' '}Arguments are visible by default; hide individual arguments here when they need moderation,
-            {' '}and unhide them after review.
-          </p>
-        </div>
-
-        {feedback && <div style={feedbackStyle()}>{feedback}</div>}
-
-        <h2 className="section-heading">Confirmed ({data.selected.length})</h2>
+        <h2>{msg('featured-confirmed-heading')}{' '}<span className="admin-count">{data.selected.length}</span></h2>
         {data.selected.length ? (
-          <table className="admin-table" style={{marginBottom: '1.5rem'}}>
-            <thead><tr><th>TID</th><th>Statement</th><th /></tr></thead>
-            <tbody>
+          <ul className="admin-rows">
               {data.selected.map((row) => (
                 <SelectedRow
                   key={row.featuredId}
@@ -302,51 +239,51 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
                   showError={showError}
                 />
               ))}
-            </tbody>
-          </table>
-        ) : <p className="muted" style={{fontSize: 14, marginBottom: '1.5rem'}}>No featured statements yet.</p>}
+          </ul>
+        ) : <p className="admin-empty">{msg('featured-empty')}</p>}
 
-        <h2 className="section-heading">System suggestions</h2>
-        {!data.dataAvailability.candidates ? (
-          <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-            Not available — <code>POLIS_DATABASE_URL</code> is not configured.
-            {' '}Use the manual form below to add statements by TID.
-          </p>
-        ) : data.candidates.length === 0 ? (
-          <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-            No unconfirmed candidates. All available statements are already featured,
-            {' '}or there are no statements yet.
-          </p>
+        {/* Without the statistics database there are no suggestions: the section is left
+            out rather than shown with a note about configuration. Adding by number still works. */}
+        {data.dataAvailability.candidates && <h2>{msg('featured-suggestions-heading')}</h2>}
+        {!data.dataAvailability.candidates ? null : data.candidates.length === 0 ? (
+          <p className="admin-empty">{msg('featured-suggestions-empty')}</p>
         ) : (
-          <table className="admin-table" style={{marginBottom: '1.5rem'}}>
-            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th>Agree</th><th>Disagree</th><th>Pass</th><th>Votes</th><th /></tr></thead>
+          // A table: the response counts are compared down the columns.
+          <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead><tr>
+              <th>{msg('featured-th-number')}</th><th>{msg('featured-th-text')}</th><th>{msg('featured-th-seed')}</th>
+              <th className="admin-num">{msg('featured-th-agree')}</th><th className="admin-num">{msg('featured-th-disagree')}</th>
+              <th className="admin-num">{msg('conv-vote-pass')}</th><th className="admin-num">{msg('featured-th-votes')}</th>
+              <th>{msg('admin-th-actions')}</th>
+            </tr></thead>
             <tbody>
               {data.candidates.map((candidate) => (
                 <CandidateRow
                   key={candidate.statementId}
                   candidate={candidate}
-                  csrfToken={csrfToken}
                   pending={selection.isPending}
                   onConfirm={() => select(candidate.statementId, 'system')}
                 />
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
-        <h2 className="section-heading">Add by TID</h2>
-        <div className="edit-form">
-          <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>
-            Enter the Polis statement ID (TID) to feature it directly.
-          </p>
+        <h2>{msg('featured-addnumber-heading')}</h2>
+        <div className="admin-form">
           <form onSubmit={submitManual}>
             <input type="hidden" name="csrf_token" value={csrfToken} />
-            <div className="edit-row-fields">
-              <label>Statement TID
-                <input type="number" name="tid" min="0" required style={{width: 100}} value={manualId} onChange={(event) => setManualId(event.target.value)} />
-              </label>
+            <label className="admin-field admin-field--short">{msg('featured-label-number')}
+              <input type="number" name="tid" min="0" required className="admin-mono" value={manualId}
+                {...(manualError ? {'aria-invalid': true, 'aria-describedby': manualErrorId} : {})}
+                onChange={(event) => setManualId(event.target.value)} />
+            </label>
+            {manualError && <p className="admin-error" id={manualErrorId} role="alert">{manualError}</p>}
+            <div className="admin-form__actions">
+              <button type="submit" className="admin-button admin-button--primary" disabled={selection.isPending}>{msg('featured-addnumber-heading')}</button>
             </div>
-            <button type="submit" disabled={selection.isPending}>Add</button>
           </form>
         </div>
       </div>

@@ -63,7 +63,7 @@ test('the page is the site admin dashboard, with the columns it decides on', asy
   serve(mixed);
   renderPage();
 
-  expect(await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2}))
+  expect(await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1}))
     .toBeVisible();
   expect(document.title).toContain('Site admin dashboard');
   expect(screen.getByRole('navigation', {name: 'Admin breadcrumb'}))
@@ -78,7 +78,7 @@ test('the page is the site admin dashboard, with the columns it decides on', asy
   const table = conversationsTable();
   // Title · Access · Status · links. The slug is not a column: it is in the link.
   expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent))
-    .toEqual(['Title', 'Access', 'Status', '']);
+    .toEqual(['Title', 'Access', 'Status', 'Actions']);
   expect(within(table).queryByRole('columnheader', {name: 'Slug'})).toBeNull();
 
   // Three main rows: the archived one is not among them, and neither is the practice one.
@@ -91,29 +91,34 @@ test('each status says the server’s word, archived included', async () => {
   serve(mixed);
   renderPage();
 
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
   const table = conversationsTable();
-  expect(within(screen.getByText('Practice Environment (1)').closest('details')!)
-    .getByRole('row', {name: /Consultation 5/})).toHaveTextContent('active');
-  expect(within(screen.getByText('Other (1)').closest('details')!)
-    .getByRole('row', {name: /Consultation 4/})).toHaveTextContent('archived');
+  expect(within(screen.getByText('Practice Environment', {selector: 'summary'}).closest('details')!)
+    .getByRole('row', {name: /Consultation 5/})).toHaveTextContent('Active');
+  expect(within(screen.getByText('Other', {selector: 'summary'}).closest('details')!)
+    .getByRole('row', {name: /Consultation 4/})).toHaveTextContent('Archived');
   // The closed consultation is closed, and not called archived.
   const closed = within(table).getByRole('row', {name: /Consultation 3/});
-  expect(closed).toHaveTextContent('closed');
-  expect(closed).not.toHaveTextContent('archived');
-  // Badge classes stay as they were: active green, paused, everything else quiet.
-  expect(within(table).getByText('active')).toHaveClass('badge-active-inline');
-  expect(within(table).getByText('paused')).toHaveClass('badge-paused-inline');
-  expect(within(table).getByText('closed')).toHaveClass('badge-inactive');
+  expect(closed).toHaveTextContent('Closed');
+  expect(closed).not.toHaveTextContent('Archived');
+  // Statuses are plain words in their cell: no badge, no box, no colour of their own.
+  for (const word of ['Active', 'Paused', 'Closed']) {
+    const cell = within(table).getByRole('cell', {name: word});
+    expect(cell.children).toHaveLength(0);
+    expect(cell.className).toBe('');
+  }
+  // A group's count is a bare number beside its name, not in brackets.
+  expect(screen.getByText('Practice Environment', {selector: 'summary'}).querySelector('.admin-count'))
+    .toHaveTextContent(/^1$/);
 });
 
 test('the practice item and the archived one sit in collapsed groups, not in the table', async () => {
   serve(mixed);
   renderPage();
 
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
-  const practice = screen.getByText('Practice Environment (1)').closest('details')!;
-  const other = screen.getByText('Other (1)').closest('details')!;
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const practice = screen.getByText('Practice Environment', {selector: 'summary'}).closest('details')!;
+  const other = screen.getByText('Other', {selector: 'summary'}).closest('details')!;
   expect(practice).not.toHaveAttribute('open');
   expect(other).not.toHaveAttribute('open');
   // A practice item is never listed as a consultation.
@@ -123,13 +128,13 @@ test('the practice item and the archived one sit in collapsed groups, not in the
   expect(within(practice).getByText('Consultation 5')).toBeInTheDocument();
   expect(within(other).getByText('Consultation 4')).toBeInTheDocument();
   expect(within(practice).getByText('Consultation 5')).not.toBeVisible();
-  fireEvent.click(within(practice).getByText('Practice Environment (1)'));
+  fireEvent.click(within(practice).getByText('Practice Environment', {selector: 'summary'}));
   expect(within(practice).getByText('Consultation 5')).toBeVisible();
   // Each group's table names its columns the way the main table does, so a cell in it has
   // a column name too.
   for (const group of [practice, other]) {
     expect(within(group).getAllByRole('columnheader').map((cell) => cell.textContent))
-      .toEqual(['Title', 'Access', 'Status', '']);
+      .toEqual(['Title', 'Access', 'Status', 'Actions']);
   }
 });
 
@@ -138,16 +143,16 @@ test('a practice item that is also archived goes under the Practice Environment'
   serve([row(5, {accessPolicy: 'demo', status: 'archived'})]);
   renderPage();
 
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
-  expect(screen.getByText('Practice Environment (1)')).toBeVisible();
-  expect(screen.queryByText(/^Other \(/)).toBeNull();
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  expect(screen.getByText('Practice Environment', {selector: 'summary'})).toBeVisible();
+  expect(screen.queryByText('Other', {selector: 'summary'})).toBeNull();
 });
 
 test('with neither a practice item nor an archived one there is no group at all', async () => {
   serve([row(1), row(2, {status: 'paused'})]);
   renderPage();
 
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
   expect(document.querySelectorAll('details')).toHaveLength(0);
 });
 
@@ -160,13 +165,13 @@ test('a title opens the participant view and "manage" the console, on one reques
     return HttpResponse.json({data: adminCatalogFixture()});
   }));
   renderPage();
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
 
   expect(screen.getByRole('link', {name: 'Community strategy'}))
     .toHaveAttribute('href', '/c/community-strategy');
-  expect(screen.getByRole('link', {name: 'manage'}))
+  expect(screen.getByRole('link', {name: 'Manage'}))
     .toHaveAttribute('href', '/admin/conversations/7');
-  expect(screen.getByRole('link', {name: 'settings'}))
+  expect(screen.getByRole('link', {name: 'Settings'}))
     .toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(catalogRequests).toBe(1);
 });
@@ -182,7 +187,7 @@ test('granting site admin posts the username and says so when nobody has signed 
     },
   ));
   renderPage();
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
 
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
@@ -217,11 +222,11 @@ test('retiring a site admin puts granted:false', async () => {
     },
   ));
   renderPage();
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
 
   // The button carries whose role it removes after its visible word, so two rows' Removes
   // are told apart by name.
-  fireEvent.click(screen.getByRole('button', {name: 'remove — adminuser'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Remove — adminuser'}));
   await waitFor(() => expect(sent).toEqual([{participantId: 1, body: {granted: false}}]));
 });
 
@@ -242,9 +247,10 @@ test('a 403 on the catalogue shows the boundary, not the page', async () => {
 test('the three "Also coming" lines are muted English and nothing else', async () => {
   serve([row(1)]);
   renderPage();
-  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
 
-  const lines = screen.getAllByText(/^Also coming:/);
+  // The page's own lines; the console frame carries one of its own in the sidebar.
+  const lines = within(document.querySelector<HTMLElement>('.admin-page')!).getAllByText(/^Also coming:/);
   expect(lines).toHaveLength(3);
   expect(lines.map((line) => line.textContent)).toEqual([
     'Also coming: Admin home, one table of the consultations you have a role in'
@@ -271,11 +277,11 @@ test('under a key-id catalogue the page is all keys and the three coming lines',
   renderAsQqx();
   serve([row(1)]);
   const {container} = renderPage('provider');
-  await screen.findByRole('heading', {name: '(admin-site-dashboard)', level: 2});
+  await screen.findByRole('heading', {name: '(admin-site-dashboard)', level: 1});
 
-  // Scoped to the page's own content: the legacy frame carries the site header and the
-  // footer licence line, which are not this page's copy.
-  const page = container.querySelector('.container')!;
+  // Scoped to the page's own content: the console frame carries its own top bar, sidebar
+  // and footer licence line, which are not this page's copy.
+  const page = container.querySelector('.admin-page')!;
   expect(untranslatedCopy([page], [
     // The fixture's own words: participant data is never keyed.
     'Consultation 1', 'consultation-1', 'adminuser', '— adminuser', 'Full consultation',
@@ -285,4 +291,30 @@ test('under a key-id catalogue the page is all keys and the three coming lines',
     + ' a consultation — not available yet (#473)',
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
   ])).toEqual([]);
+});
+test('the dashboard sits in the console frame, with no consultation sections in it', async () => {
+  serve([row(1)]);
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1})).toBeVisible();
+  // The console's frame and page, not the participant site's header and container.
+  const main = screen.getByRole('main');
+  expect(main).toHaveClass('admin-shell__main');
+  expect(main.querySelector(':scope > .admin-page > h1')).toHaveTextContent('Site admin dashboard');
+  expect(document.querySelector('.site-header, .container')).toBeNull();
+  // One crumb: the page itself.
+  expect(within(screen.getByRole('navigation', {name: 'Admin breadcrumb'})).getAllByRole('listitem')
+    .map((item) => item.textContent)).toEqual(['Site admin dashboard']);
+  // A site-level page is about no consultation, so the sidebar lists none of its sections.
+  const side = screen.getByRole('navigation', {name: 'Admin sections'});
+  for (const name of ['Overview', 'Settings', 'Moderation', 'Content']) {
+    expect(within(side).queryByRole('link', {name})).toBeNull();
+  }
+  expect(within(side).queryByRole('button', {name: 'Sections'})).toBeNull();
+  // The participant side of a site-level page is the list of consultations.
+  expect(screen.getByRole('link', {name: 'Participant'})).toHaveAttribute('href', '/consultations');
 });

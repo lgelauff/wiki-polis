@@ -18,14 +18,22 @@
   --shell-line: #d5e0d8;
   --shell-sunken: #eef3ef;
   --shell-surface: #ffffff;
+  --shell-danger: #a3282b;
   --shell-gap: 1rem;
+  /* The three widths a field may have: a number or an id, a name, a sentence. */
+  --field-short: 8rem;
+  --field-medium: 22rem;
+  --field-wide: 40rem;
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   /* One column that may shrink below its content's width: without it a long title in
      the breadcrumb widens the whole frame and the page scrolls sideways at 320px. */
   grid-template-columns: minmax(0, 1fr);
-  min-block-size: 100%;
+  /* The whole viewport at least, so the footer sits at the bottom of a short page rather
+     than under its last line, halfway up the screen. */
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
   color: var(--shell-body);
   background: var(--shell-sunken);
   font-size: 14px;
@@ -305,6 +313,16 @@
   border-block-end: 1px solid var(--shell-line);
 }
 
+/* The tab strip already leaves room under itself: the first section starts right there,
+   and a section's first line takes no margin above the section's own padding. */
+.admin-shell .settings-form > section:first-of-type {
+  padding-block-start: 0;
+}
+
+.admin-shell .settings-form > section > :first-child {
+  margin-block-start: 0;
+}
+
 .admin-shell .settings-form h2 {
   margin: 0 0 .5rem;
   color: var(--shell-ink);
@@ -338,6 +356,11 @@
   padding: 0;
 }
 
+/* A value shown as text sits at the rhythm of the fields it replaces. */
+.admin-shell .settings-form .access-answer {
+  margin-block: 0 .75rem;
+}
+
 /* An organizer text shown rendered to a viewer who may not change it. */
 .admin-shell .settings-value-html {
   color: var(--shell-body);
@@ -362,25 +385,11 @@
   text-transform: none;
 }
 
-.admin-shell .settings-page :is(.eyebrow, .roles-roster li span) {
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-/* A control that cannot be used right now reads as such: greyed, and no pointer that
-   promises a click (the Invitations form while the invitation list is not in effect). */
-.admin-shell .settings-page .edit-form :is(textarea, button):disabled {
-  border-color: var(--shell-line);
+/* A field that cannot be used right now (the Invitations form while the invitation list
+   is not in effect) is greyed as well as faded; the fading is the console's one disabled
+   style, under Buttons. */
+.admin-shell .settings-page :is(textarea, input):disabled {
   background: var(--shell-sunken);
-  color: var(--shell-muted);
-  cursor: not-allowed;
-  opacity: .6;
-}
-
-/* No text on a Settings tab below 12px. */
-.admin-shell .settings-page :is(.eyebrow, .roles-roster header span, .roles-roster li span,
-  .roles-editor form > p, .roles-readonly) {
-  font-size: 12px;
 }
 
 .admin-shell .settings-page > .admin-shell__coming {
@@ -455,44 +464,66 @@
   font-size: 13px;
 }
 
-.admin-shell .admin-sort select {
-  min-block-size: 2rem;
-  padding: .125rem .5rem;
-  border: 1px solid var(--shell-line);
-  border-radius: 4px;
-  background: var(--shell-surface);
-  color: var(--shell-body);
-  font: inherit;
-  font-size: 13px;
-}
 
-/* One row per statement or flag: the text takes what is left, the actions keep their size.
-   At 320px the row wraps, so the actions sit under the text rather than beside a
-   two-word line. */
+/* One list, one grid: every row of a list shares the list's three columns (text, facts,
+   actions) through subgrid, so counts, facts and buttons line up from row to row whatever
+   each row's text is. The text is always the first column and the actions the last, even
+   in a row with no facts. Below 720px the row stacks: text, then facts, then actions. */
 .admin-shell .admin-rows {
-  display: flex;
-  flex-direction: column;
-  gap: .125rem;
+  display: grid;
+  /* The text keeps at least 12rem, so a long facts column cannot squeeze a name into a
+     one-word column. */
+  grid-template-columns: minmax(min(12rem, 100%), 1fr) auto auto;
+  column-gap: 1rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .admin-shell .admin-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: baseline;
-  justify-content: space-between;
-  gap: .25rem .75rem;
+  row-gap: .25rem;
   min-inline-size: 0;
   padding: .5rem 0;
   border-block-end: 1px solid var(--shell-line);
 }
 
-.admin-shell .admin-row__text {
-  flex: 1 1 16rem;
+.admin-shell .admin-row > * {
   min-inline-size: 0;
+}
+
+.admin-shell .admin-row__text {
+  grid-column: 1;
   color: var(--shell-ink);
+}
+
+.admin-shell .admin-row > :is(.admin-row__counts, .admin-row__facts) {
+  grid-column: 2;
+}
+
+.admin-shell .admin-row > .admin-row__actions {
+  grid-column: 3;
+  justify-content: flex-end;
+}
+
+/* Anything else in a row (a note, a sub-list) takes the whole width under the text. */
+.admin-shell .admin-row > :is(.admin-row__note, .admin-row__sub) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 719px) {
+  .admin-shell .admin-rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-shell .admin-row > :is(.admin-row__text, .admin-row__counts, .admin-row__facts,
+    .admin-row__actions) {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
 }
 
 .admin-shell .admin-row__suffix,
@@ -501,11 +532,10 @@
   font-size: 12px;
 }
 
-/* Shrinks and wraps rather than holding its width: the block form's input and button must
-   fit a 320px row, under the text, without pushing the page sideways. */
+/* Wraps rather than holding its width: the block form's input and button must fit a
+   320px row, under the text, without pushing the page sideways. */
 .admin-shell .admin-row__actions {
   display: flex;
-  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: .375rem;
@@ -530,12 +560,6 @@
   cursor: pointer;
 }
 
-.admin-shell .admin-row__glyph:disabled {
-  color: var(--shell-muted);
-  cursor: default;
-  opacity: .55;
-}
-
 .admin-shell .admin-row__text-button {
   min-block-size: 2rem;
   padding: .25rem .5rem;
@@ -548,6 +572,19 @@
   cursor: pointer;
 }
 
+/* Red only where the action cannot be undone (deleting an argument and its ratings). */
+.admin-shell .admin-row__text-button--danger {
+  color: var(--shell-danger);
+}
+
+/* A link in a row's actions reads like the row's text buttons: it is one of them. */
+.admin-shell .admin-row__link {
+  display: inline-block;
+  padding: .25rem .5rem;
+  color: var(--accent);
+  font-size: 13px;
+}
+
 .admin-shell .admin-row__block-form {
   display: flex;
   flex-wrap: wrap;
@@ -557,19 +594,11 @@
   max-inline-size: 100%;
 }
 
-/* 16px: a smaller input makes iOS Safari zoom the page when it takes focus. */
+/* The field's look is the console's one input rule (below); here only its size in a row. */
 .admin-shell .admin-row__block-form input {
   flex: 1 1 10rem;
   min-inline-size: 0;
-  min-block-size: 2rem;
   max-inline-size: 14rem;
-  padding: .125rem .5rem;
-  border: 1px solid var(--shell-line);
-  border-radius: 4px;
-  background: var(--shell-surface);
-  color: var(--shell-body);
-  font: inherit;
-  font-size: 16px;
 }
 
 /* A labelled field inside a row's form: the label is short muted text beside the input,
@@ -586,7 +615,6 @@
 
 /* A note someone left on a handled row, on a line of its own under the row's text. */
 .admin-shell .admin-row__note {
-  flex-basis: 100%;
   margin: 0;
   color: var(--shell-body);
   font-size: 13px;
@@ -608,7 +636,6 @@
 /* A row's counts and facts sit between the text and the actions, and wrap under the text
    at phone width rather than squeezing it. */
 .admin-shell .admin-row__counts {
-  flex: none;
   color: var(--shell-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -619,7 +646,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: .25rem .875rem;
-  flex: 1 1 18rem;
+  max-inline-size: 30rem;
   margin: 0;
 }
 
@@ -644,24 +671,318 @@
   color: var(--accent);
 }
 
-.admin-shell .admin-sort input[type="search"] {
+
+/* Links on a console page take the console's green, not the participant site's blue. The
+   tab strip and the muted "↳ #N" links keep their own colours. */
+.admin-shell .admin-page a:not(.admin-tabs__tab, .admin-row__source) {
+  color: var(--accent);
+}
+
+/* ── Fields, labels and errors ─────────────────────────────────────────────── */
+
+/* One input rule for every page of the console, whatever stylesheet the page's markup
+   came from: the console's line colour, 4px corners, the interface's own sans at 14px.
+   Monospace only where the value is an identifier (`.admin-mono`: slugs, ids, codes).
+   The selector is deliberately specific enough to win over the site stylesheet's form
+   rules, which are written for the participant pages. */
+.admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+  box-sizing: border-box;
   min-block-size: 2rem;
-  padding: .125rem .5rem;
+  margin: 0;
+  padding: .375rem .5rem;
   border: 1px solid var(--shell-line);
   border-radius: 4px;
   background: var(--shell-surface);
-  color: var(--shell-body);
+  color: var(--shell-ink);
   font: inherit;
+  font-size: 14px;
+  /* Not the label's semibold, which `font: inherit` would otherwise carry into the field. */
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.admin-shell .admin-page textarea {
+  resize: vertical;
+}
+
+/* 16px on a touch screen: below that iOS zooms the page when a field takes focus. */
+@media (pointer: coarse) {
+  .admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+    font-size: 16px;
+  }
+}
+
+.admin-shell .admin-page .admin-mono {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.admin-shell .admin-page [aria-invalid="true"] {
+  border-color: var(--shell-danger);
+}
+
+/* A field: its label above it, 13px semibold, "(optional)" part of the label. */
+.admin-shell .admin-page .admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-inline-size: var(--field-wide);
+  margin: 0 0 .75rem;
+  color: var(--shell-ink);
   font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-shell .admin-page .admin-field > :is(input, select, textarea) {
+  inline-size: 100%;
+  font-weight: 400;
+}
+
+/* A short field: the input is short, its label keeps the room to stay on one line. */
+.admin-shell .admin-page .admin-field--short {
+  max-inline-size: var(--field-medium);
+}
+
+.admin-shell .admin-page .admin-field--short > input {
+  max-inline-size: var(--field-short);
+}
+
+.admin-shell .admin-page .admin-field--medium {
+  max-inline-size: var(--field-medium);
+}
+
+/* A form's buttons, and the one line under them that says how it went. */
+.admin-shell .admin-page .admin-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin-block: .25rem 0;
+}
+
+.admin-shell .admin-page .admin-form__count {
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An error is a sentence at the field or under the form's button, never only a colour:
+   the words say what went wrong, the colour only helps find them. */
+.admin-shell .admin-page :is(.admin-error, .access-field-error) {
+  margin: .25rem 0 0;
+  color: var(--shell-danger);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.admin-shell .admin-page .admin-status {
+  margin: .25rem 0 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+/* The Settings form's own summary of refused fields: the same words and colour, no box. */
+.admin-shell .settings-form .access-summary {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.admin-shell .settings-form .access-summary ul {
+  color: var(--shell-danger);
+}
+
+.admin-shell .settings-form > footer p {
+  color: var(--shell-body);
+}
+
+.admin-shell .settings-form > footer p[role="alert"] {
+  color: var(--shell-danger);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+
+/* Two button styles: a quiet one, and the primary one (the console's green) for the one
+   command a form exists for. Row actions are glyph buttons or text buttons (above).
+   Sentence case everywhere; red only for what cannot be undone. The selectors carry
+   `.admin-page` to win over the site stylesheet's button rules. */
+.admin-shell .admin-page .admin-button {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  padding: .25rem .875rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.admin-shell .admin-page .admin-button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* One disabled look for every control of the console: faded, and no pointer that
+   promises a click. */
+.admin-shell :is(button, input, select, textarea, .admin-button):disabled,
+.admin-shell .admin-page [aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+/* A list under a row's text (the arguments of a featured statement): its own small rows. */
+.admin-shell .admin-row__sub {
+  margin: .25rem 0 0;
+  padding: 0 0 0 1rem;
+  list-style: none;
+}
+
+.admin-shell .admin-row__sub > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem .75rem;
+  padding: .25rem 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+.admin-shell .admin-row__sub .admin-row__actions {
+  margin-inline-start: auto;
+}
+
+/* ── Tables, counts, statuses and dates ───────────────────────────────────── */
+
+/* A table only where its columns are compared (the featured suggestions' responses, the
+   consultations). Headers are sentence case, in the console's colours; the actions column
+   is named. */
+.admin-shell .admin-page .admin-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-shell .admin-page .admin-table :is(th, td) {
+  padding: .5rem .75rem .5rem 0;
+  border-block-end: 1px solid var(--shell-line);
+  color: var(--shell-ink);
+  text-align: start;
+  vertical-align: baseline;
+}
+
+.admin-shell .admin-page .admin-table th {
+  background: none;
+  color: var(--shell-muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.admin-shell .admin-page .admin-table .admin-num {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* A count is a bare number beside what it counts: muted, tabular, never in brackets. */
+.admin-shell .admin-count {
+  color: var(--shell-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell .admin-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A group of rows under the table, closed by default. */
+.admin-shell .admin-group {
+  margin-block: 1rem;
+}
+
+.admin-shell .admin-group > summary {
+  color: var(--shell-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* A statement's number in front of its text, as an identifier: muted, tabular. */
+.admin-shell .admin-row__id {
+  color: var(--shell-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A form on a page: no box around it (boxes are for the controls), only room above. */
+.admin-shell .admin-page .admin-form {
+  margin-block: 1rem 1.5rem;
+}
+
+/* A group of checkboxes: its legend is a label like any other, the boxes in one line. */
+.admin-shell .admin-page .admin-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem 1.25rem;
+  margin: 0 0 .75rem;
+  padding: 0;
+  border: 0;
+}
+
+.admin-shell .admin-page .admin-choices > legend {
+  margin-block-end: .25rem;
+  padding: 0;
+  color: var(--shell-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-shell .admin-page .admin-choices > label {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+}
+
+/* The settings form's remaining site-stylesheet colours, in the console's tokens. */
+.admin-shell .settings-form :is(.settings-tier span, .settings-hint, .settings-eligibility p) {
+  color: var(--shell-muted);
+  font-family: inherit;
+}
+
+.admin-shell .settings-form .settings-tier {
+  border-color: var(--shell-line);
+}
+
+.admin-shell .settings-form .access-choice input,
+.admin-shell .admin-page input:is([type="checkbox"], [type="radio"]) {
+  accent-color: var(--accent);
+}
+
+.admin-shell .settings-form .access-confirm {
+  padding: .5rem 0;
+  border: 0;
+  background: none;
+}
+
+.admin-shell .settings-form .settings-eligibility {
+  border-inline-start-color: var(--shell-line);
+  background: none;
+}
+
+.admin-shell .settings-form .settings-eligibility span {
+  color: var(--shell-body);
+  font-family: inherit;
 }
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */
 
-/* Also used outside the console frame (the site admin dashboard), where the shell's
-   tokens are not declared, hence the fallback colour. */
 .admin-shell__coming {
   margin: 0;
-  color: var(--shell-muted, #5a655e);
+  color: var(--shell-muted);
   font-size: 12px;
   font-style: italic;
 }
@@ -670,6 +991,8 @@
 
 .admin-shell__main {
   display: block;
+  /* White down to the footer on a short page, not a white block over a grey one. */
+  align-self: stretch;
   min-inline-size: 0;
   padding: 1.25rem;
   background: var(--shell-surface);

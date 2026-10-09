@@ -8,7 +8,7 @@ import {useLoginHref} from '../../login-href';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
-type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
+type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'plain';
 
 function OrbitMark() {
   return (
@@ -147,14 +147,13 @@ export function LegacyShell({
 
   return (
     <>
-      <header className={`site-header ${headerMode === 'admin' ? 'site-header--admin' : 'site-header--participant'}`}>
+      <header className="site-header site-header--participant">
         <div className="header-inner">
           <div className="header-left">
             <InternalLink href="/" className="header-logo">
               <OrbitMark />
               <span className="header-title">Proto</span>
             </InternalLink>
-            {headerMode === 'admin' && <span className="header-mode-badge">{msg('base-admin-badge')}</span>}
             {headerCrumb}
             {!headerCrumb && crumb && (
               <span className="header-crumb">
@@ -165,7 +164,7 @@ export function LegacyShell({
           </div>
 
           <div className="header-controls">
-            {headerMode !== 'plain' && headerMode !== 'admin' && (
+            {headerMode !== 'plain' && (
               headerMode === 'conversation-demo' ? (
                 <span className="mode-lock mode-lock--demo">
                   <span className="mode-lock-dot" aria-hidden="true" />{msg('conv-demo-label')}

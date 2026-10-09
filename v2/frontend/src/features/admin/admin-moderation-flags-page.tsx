@@ -13,6 +13,7 @@ import {useDateFormat} from '../../i18n/dates';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
+import {AdminTime} from './admin-time';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {useRowFocus} from './admin-row-focus';
@@ -72,7 +73,6 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
   onFeedback: (category: LegacyToastMessage['category'], message: string) => void;
 }) {
   const msg = useMessage();
-  const {date} = useDateFormat();
   const queryClient = useQueryClient();
   // Set on the click itself: `isPending` reaches the buttons a render later, and a second
   // click in between would send a second request.
@@ -118,7 +118,7 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
     <li className="admin-row" data-row-id={flag.id}>
       <FlagText flag={flag} open />
       <div className="admin-row__actions">
-        {flag.flaggedAt && <span className="admin-row__time">{date(flag.flaggedAt)}</span>}
+        {flag.flaggedAt && <span className="admin-row__time"><AdminTime value={flag.flaggedAt} /></span>}
         <form className="admin-row__block-form" onSubmit={resolve}>
           <label className="admin-row__field">
             <span>{msg('admin-moderation-flag-note')}</span>

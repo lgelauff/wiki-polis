@@ -11,6 +11,7 @@ import {AdminStatementsPage} from './admin-statements-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
+import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
 
 type Statement = components['schemas']['AdminStatement'];
 type Workspace = components['schemas']['AdminStatementWorkspace'];
@@ -26,13 +27,14 @@ function statement(id: number, overrides: Partial<Statement> = {}): Statement {
   };
 }
 
-function serveWorkspace(statements: Workspace['statements'], available = true) {
+function serveWorkspace(statements: Workspace['statements'], available = true, seedingAllowed = true) {
   const payload: Workspace = {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     statements,
     moderationPolicy: {mode: 'moderate', newStatements: 'pending', available: true},
     dataAvailability: {statements: available},
-    seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+    seeding: {allowed: seedingAllowed, lockReason: seedingAllowed ? null : 'Statement submission is closed.',
+      maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
     capabilities: {moderate: true, seed: true},
     links: {self: STATEMENTS_URL, lifecycle: '/admin/conversations/7'},
   };
@@ -181,7 +183,7 @@ test('the search box filters the loaded text and says when nothing is left', asy
   expect(page().queryByText(/Bicycle parking/)).toBeNull();
 
   fireEvent.change(screen.getByLabelText('Search statements'), {target: {value: 'nothing here'}});
-  expect(page().getByText('No statement matches the search.')).toBeVisible();
+  expect(page().getByText('No statements match the search.')).toBeVisible();
   expect(page().queryByText('No statements yet.')).toBeNull();
 });
 
@@ -191,10 +193,10 @@ test('the empty list says whether there are no statements at all or none in this
     '/admin/conversations/7/content/statements');
 
   await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
-  expect(page().getByText('No approved statements.')).toBeVisible();
+  expect(page().getByText('No approved statements yet.')).toBeVisible();
   expect(page().queryByText('No statements yet.')).toBeNull();
   fireEvent.click(screen.getByRole('button', {name: 'Show hidden'}));
-  expect(page().getByText('No hidden statements.')).toBeVisible();
+  expect(page().getByText('No hidden statements yet.')).toBeVisible();
 });
 
 test('a consultation without statements says so once', async () => {
@@ -213,14 +215,14 @@ test('statements that could not be loaded are an error, not an empty consultatio
     '/admin/conversations/7/content/statements');
 
   await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
-  // The inline error stays on the page, and the toast stays as the old page had it.
-  // (The shell's assertive region reads the toast out as well; it is not a third line.)
-  const errors = page().getAllByText('Could not load statements. Check server logs.')
-    .filter((node) => !node.closest('[aria-live]'));
-  expect(errors).toHaveLength(2);
-  expect(errors.filter((node) => node.closest('.admin-shell__notices'))).toHaveLength(1);
-  for (const text of ['No statements yet.', 'No approved statements.',
-    'No statement matches the search.']) {
+  // Said once, where the list would be, as on the Queue: no toast repeating it (#473 C6).
+  const errors = page().getAllByText('Could not load statements. Check server logs.');
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toHaveAttribute('role', 'alert');
+  expect(errors[0]!.closest('.admin-shell__notices')).toBeNull();
+  expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
+  for (const text of ['No statements yet.', 'No approved statements yet.',
+    'No statements match the search.']) {
     expect(page().queryByText(text)).toBeNull();
   }
 });
@@ -305,6 +307,69 @@ test('seeding and importing are still on this page', async () => {
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
 });
 
+test('a seed statement\'s result and refusal are said under its form, never as a toast', async () => {
+  serveWorkspace({pending: [], approved: [], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  const text = await screen.findByLabelText('Statement text (max 280 characters)', {}, {timeout: 10_000});
+  fireEvent.change(text, {target: {value: 'A new seed.'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Add seed statement'}));
+  // Each form has its own always-mounted status region; the seed form's says it.
+  const status = within(text.closest('form')!).getByRole('status');
+  await waitFor(() => expect(status).toHaveTextContent('Seed statement added.'));
+  expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
+
+  // A refusal keeps what was typed and says why at the same place.
+  server.use(http.post(STATEMENTS_URL, () => HttpResponse.json({
+    error: {code: 'derived_statement_not_found', message: 'Not found.'},
+  }, {status: 404})));
+  fireEvent.change(text, {target: {value: 'A corrected seed.'}});
+  fireEvent.change(screen.getByLabelText(/Corrects statement/), {target: {value: '99'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Add seed statement'}));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Statement #99 was not found in this consultation');
+  expect(alert.closest('form')).toBe(text.closest('form'));
+  expect(text).toHaveValue('A corrected seed.');
+  expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
+});
+
+test('a statement row moderates with the Queue\'s glyphs, and can go back to unmoderated', async () => {
+  serveWorkspace({pending: [], approved: [statement(5)], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
+  const row = list().getByRole('listitem');
+  const approve = within(row).getByRole('button', {name: 'Approve statement 5'});
+  const hide = within(row).getByRole('button', {name: 'Hide statement 5'});
+  const back = within(row).getByRole('button', {name: 'Move statement 5 back to unmoderated'});
+  // The same icon-only buttons as Moderation › Queue, named by their words.
+  for (const button of [approve, hide, back]) {
+    expect(button).toHaveClass('admin-row__glyph');
+    expect(button).toHaveAttribute('title', button.getAttribute('aria-label'));
+  }
+  expect(approve.querySelector('[aria-hidden="true"]')).toHaveTextContent('✓');
+  expect(approve).toBeDisabled();
+  expect(hide).toBeEnabled();
+  expect(within(row).queryByRole('button', {name: /^(approve|hide|pending)$/})).toBeNull();
+});
+
+test('while seeding is closed its forms are not shown, and nothing explains why', async () => {
+  serveWorkspace({pending: [], approved: [statement(5)], hidden: []}, true, false);
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
+  // A control works now or is not there: no locked form, no "Seed statements locked".
+  expect(screen.queryByRole('button', {name: 'Add seed statement'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Import statements'})).toBeNull();
+  expect(screen.queryByText(/locked|Statement submission is closed/)).toBeNull();
+  // Nor a help card about how the page works.
+  expect(screen.queryByText(/How statement management works/)).toBeNull();
+  expect(list().getByRole('listitem')).toHaveTextContent('Statement number 5.');
+});
+
 test('the statement page names the one thing it cannot show yet', async () => {
   serveWorkspace({pending: [], approved: [], hidden: []});
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
@@ -333,15 +398,22 @@ test('participants are one row each, with today’s figures and the access contr
   expect(row).toHaveTextContent('8 / 12');
   expect(row).toHaveTextContent('Statements remaining');
   expect(row).toHaveTextContent('Arguments submitted');
-  expect(row).toHaveTextContent('2026-08-13');
-  // The access control is the same one the participants page has always had.
-  expect(within(row).getByPlaceholderText('Reason (optional)')).toBeVisible();
-  expect(within(row).getByRole('button', {name: 'ban — Example editor'})).toBeVisible();
+  // One date rendering for the console: a <time> in the reader's language.
+  expect(row).toHaveTextContent('13 Aug 2026');
+  expect(row.querySelector('time')).toHaveAttribute('title', expect.stringMatching(/ UTC$/));
+  // The access control is Moderation › People's: a labelled field and a text button in
+  // the row's block form, not a boxed red button under a bare input (#473 D2). Both carry
+  // the person's name after the visible words, to tell this row's from the next one's.
+  expect(within(row).getByRole('textbox', {name: 'Reason (optional) — Example editor'})).toBeVisible();
+  const block = within(row).getByRole('button', {name: 'Block — Example editor'});
+  expect(block).toHaveClass('admin-row__text-button');
+  expect(block.closest('form')).toHaveClass('admin-row__block-form');
+  expect(block).not.toHaveClass('btn-danger');
 
-  // Once banned, the row says "Banned since …" once, beside the name.
-  fireEvent.click(within(row).getByRole('button', {name: 'ban — Example editor'}));
-  await within(row).findByRole('button', {name: 'unban — Example editor'});
-  expect(row).toHaveTextContent('Example editor · Banned since 2026-08-13');
+  // Once banned, the row says "Blocked since …" once, beside the name.
+  fireEvent.click(within(row).getByRole('button', {name: 'Block — Example editor'}));
+  await within(row).findByRole('button', {name: 'Unblock — Example editor'});
+  expect(row).toHaveTextContent('Example editor · Blocked since 13 Aug 2026');
   expect(row.textContent?.match(/since/g)).toHaveLength(1);
 });
 
@@ -357,4 +429,23 @@ test('participants says once what the roster cannot answer yet', async () => {
     + ' and the day they joined — not available yet (#473)',
   );
   expect(lines[0]).toHaveAttribute('lang', 'en');
+});
+test('under a key-id catalogue Statements is all keys, but for its data and coming line', async () => {
+  renderAsQqx();
+  serveWorkspace({pending: [], approved: [statement(5)], hidden: []});
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin/conversations/7/content/statements']}>
+        <Suspense fallback={null}>
+          <MessageProvider><AdminStatementsPage conversationId={7} csrfToken={csrf} /></MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: '(admin-shell-content)', level: 1}, {timeout: 10_000});
+  expect(untranslatedCopy([document.querySelector('.admin-page')], [
+    'Statement number 5.',
+    'Also coming: the arguments of this consultation as a list of their own — not available yet (#473)',
+  ])).toEqual([]);
 });
