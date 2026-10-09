@@ -13,6 +13,7 @@ import {nodeSlot, withNodes} from '../../i18n/message-nodes';
 import {richHtml} from '../../i18n/rich-html';
 import {RevealTimeline} from './reveal-timeline';
 import {LoginPrompt} from './login-prompt';
+import {LogoutChoice} from './logout-choice';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -26,6 +27,9 @@ function daysBetween(start: string, end: string) {
 export function IdentityRevealLegacyPage() {
   const slug = requiredSlug(useParams().slug);
   const {data: session} = useSuspenseQuery(sessionQuery());
+  // A single-consultation (voucher) account is never offered a login here: the Wikimedia
+  // login would replace it, so it is asked to log out first (#514).
+  if (session.state === 'voucher') return <LogoutChoice />;
   if (session.state !== 'authenticated') return <LoginPrompt />;
   return <AuthenticatedIdentityReveal slug={slug} csrfToken={session.csrfToken} />;
 }

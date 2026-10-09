@@ -9,7 +9,7 @@ import {LoginPrompt} from '../legacy/login-prompt';
 import {FinalReportLegacyPage} from '../legacy/final-report-page';
 
 export class ResultsAccessBoundary extends Component<
-  {children: ReactNode; slug: string},
+  {children: ReactNode},
   {error: unknown | null}
 > {
   state: {error: unknown | null} = {error: null};
@@ -36,7 +36,7 @@ export function ResultsPage({slug}: {slug: string}) {
 
 export function ResultsRoute() {
   const {slug = ''} = useParams();
-  return <ResultsAccessBoundary slug={slug}>
+  return <ResultsAccessBoundary>
     <ResultsPage slug={slug} />
   </ResultsAccessBoundary>;
 }

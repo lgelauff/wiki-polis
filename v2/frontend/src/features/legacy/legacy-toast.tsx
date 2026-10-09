@@ -20,16 +20,19 @@ const durations = {
 export function LegacyToast({
   toast,
   onDismiss,
+  sticky = false,
 }: {
   toast: LegacyToastMessage | null;
   onDismiss: () => void;
+  /** No timer: the toast stays until × or the page goes away. */
+  sticky?: boolean;
 }) {
   const msg = useMessage();
   useEffect(() => {
-    if (!toast) return undefined;
+    if (!toast || sticky) return undefined;
     const timer = window.setTimeout(onDismiss, durations[toast.category]);
     return () => window.clearTimeout(timer);
-  }, [onDismiss, toast]);
+  }, [onDismiss, sticky, toast]);
 
   if (!toast) return null;
   const role = toast.category === 'error' || toast.category === 'warning'

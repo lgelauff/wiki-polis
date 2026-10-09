@@ -443,6 +443,6 @@ test('a voucher account can join, without Wikimedia notification options', async
   expect(screen.queryByRole('heading', {name: testMessages['accept-notify-heading']!})).toBeNull();
   expect(screen.queryByRole('link', {name: /Check your email settings/})).toBeNull();
   // The header names the account kind where a username would be, and still offers log out.
-  expect(screen.getByText(testMessages['base-voucher-account']!)).toBeVisible();
+  expect(screen.getByText(testMessages['base-single-consultation-account']!)).toBeVisible();
   expect(screen.getByRole('button', {name: testMessages['base-log-out']!})).toBeVisible();
 });

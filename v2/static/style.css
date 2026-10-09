@@ -270,6 +270,12 @@ header {
   color: var(--ink);
 }
 
+/* The kind of account a single-consultation (voucher) session is: a status, so plain text. */
+.header-account-kind {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .header-user-chip-dot {
   width: 6px;
   height: 6px;
@@ -1745,6 +1751,21 @@ h3.section-heading {
 .toast--sticky  { background: #fff0f0; border: 1px solid #fca5a5; color: #7f1d1d; }
 .toast--success { background: #f0fdf4; border: 1px solid #86efac; color: #14532d; }
 .toast--info    { background: #f0f4ff; border: 1px solid #c7d3f5; color: #1e3a8a; }
+/* The one-time logout note (#514): a toast like the others, at the top right, under the
+   header, where it is seen on arrival. */
+.toast-container-top {
+  position: fixed;
+  top: 4.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  .toast-container-top { top: 5.5rem; right: 1rem; left: 1rem; align-items: flex-end; }
+}
 .toast__msg  { flex: 1; }
 .toast__close {
   background: none;
@@ -4767,5 +4788,10 @@ body[data-demo] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* An account kind, not a username: cut short it says nothing, so it wraps instead. */
+  .header-account-kind {
+    max-width: 140px;
+    line-height: 1.25;
   }
 }

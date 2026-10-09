@@ -4,6 +4,7 @@ import {MessageProvider} from './i18n/messages';
 import {Navigate, Route, Routes, useLocation} from 'react-router-dom';
 
 import {ForkPage} from './features/legacy/public-pages';
+import {LogoutNoticeProvider} from './features/legacy/logout-notice';
 import {ConversationLanePage} from './features/legacy/conversation-lane-page';
 import {ConversationWorkspacePage} from './features/legacy/conversation-workspace-page';
 import {
@@ -118,7 +119,9 @@ export function App() {
         {/* Inside the existing boundary on purpose: the catalogue fetch reuses this
             fallback instead of adding a second async gate in front of every route. */}
         <MessageProvider>
-          <DeferredRoutes />
+          <LogoutNoticeProvider>
+            <DeferredRoutes />
+          </LogoutNoticeProvider>
         </MessageProvider>
       </Suspense>
     </>

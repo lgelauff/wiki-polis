@@ -16,7 +16,8 @@ import secrets
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote, urlencode, urlparse, urljoin
+from html.parser import HTMLParser
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urljoin
 
 import coolname
 import nh3
@@ -267,12 +268,29 @@ _VOUCHER_MESSAGES = {
     'joined': ('voucher-already-joined',
                'You already take part in this consultation with a voucher in this browser. '
                'Log out first to use a different code.'),
-    'switch-heading': ('voucher-switch-heading', 'You are signed in with another account'),
+    'switch-heading': ('voucher-switch-heading', 'Continue with this code?'),
     'switch-body': ('voucher-switch-body',
-                    'Continuing signs you out of your current account in this browser. '
-                    'You then take part in this consultation with the voucher account.'),
-    'switch-confirm': ('voucher-switch-confirm', 'Sign out and continue'),
-    'switch-cancel': ('voucher-switch-cancel', 'Cancel'),
+                    'This code gives you a separate account for this consultation only, '
+                    'not linked to your Wikimedia account. To use it, you are logged out of '
+                    'your Wikimedia account here, in this browser; you stay logged in at '
+                    'Wikimedia itself.'),
+    'switch-confirm': ('voucher-switch-confirm', 'Log out and continue with the code'),
+    'switch-cancel': ('voucher-switch-cancel', 'Cancel and stay logged in'),
+    'switch-voucher-body': ('voucher-switch-voucher-body',
+                            'You are logged in with a single-consultation account for '
+                            '<strong>$1</strong>. Continuing logs you out of it; this code then '
+                            'gives you a separate account for <strong>$2</strong> only.'),
+    'switch-voucher-cancel': ('voucher-switch-voucher-cancel',
+                              'Cancel and stay with your current account'),
+    # The one-time note on the page a logout lands on (#514); the SPA shows the same keys.
+    'logout-notice': ('logout-notice', 'You are logged out.'),
+    'logout-notice-voucher': ('logout-notice-voucher',
+                              'To come back to this account later, use the link or code you '
+                              "received again. Don't share it: anyone with it can take part "
+                              'as you.'),
+    'logout-notice-revoked': ('logout-notice-revoked',
+                              'Your code is no longer valid. You are logged out.'),
+    'dismiss': ('base-dismiss', 'Close'),
 }
 
 _VOUCHER_PAGE = (
@@ -292,7 +310,18 @@ _VOUCHER_PAGE = (
     'button{{margin-top:.75rem;padding:.5rem 1.25rem;font-size:1rem;border:none;border-radius:4px;background:#36c;color:#fff;cursor:pointer}}'
     'button:hover{{background:#25a}}'
     'a{{color:#36c}}'
+    '.lead{{color:#222;margin:0 0 1.5rem}}'
+    '.lead p{{margin:.25rem 0 0}}'
+    # The logout toast: the same look as the SPA's LegacyToast (static/style.css .toast).
+    '#toast-container{{position:fixed;top:1rem;right:1rem;left:1rem;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none}}'
+    '.toast{{pointer-events:all;display:flex;align-items:flex-start;gap:.75rem;padding:.75rem 1rem;border-radius:8px;font-size:13px;line-height:1.5;max-width:340px;box-shadow:0 2px 12px rgba(0,0,0,.12)}}'
+    '.toast--info{{background:#f0f4ff;border:1px solid #c7d3f5;color:#1e3a8a}}'
+    '.toast__msg{{flex:1}}'
+    '.toast__close{{margin:0;padding:0;background:none;border:none;cursor:pointer;color:inherit;opacity:.5;font-size:16px;line-height:1;min-width:24px;min-height:24px}}'
+    '.toast__close:hover{{background:none;opacity:1}}'
     '</style></head><body><main>'
+    '{notice}'
+    '{lead}'
     '<h1>{heading}</h1>'
     '{body}'
     '</main></body></html>'
@@ -310,13 +339,72 @@ def _voucher_text(name: str, *params) -> str:
     return html.escape(text)
 
 
-def _voucher_response(conv, heading: str, body: str):
+def _voucher_rich_text(name: str, *params) -> str:
+    """Like :func:`_voucher_text`, keeping the message's own <strong> tags.
+
+    Parameters go in escaped after the message is escaped, so a title can never add
+    markup of its own.
+    """
+    slots = [f'\x00{index}\x00' for index in range(1, len(params) + 1)]
+    text = _voucher_text(name, *slots)
+    for tag in ('strong', '/strong'):
+        text = text.replace(f'&lt;{tag}&gt;', f'<{tag}>')
+    for slot, value in zip(slots, params):
+        text = text.replace(slot, html.escape(str(value)))
+    return text
+
+
+class _FirstParagraph(HTMLParser):
+    """Collects the text of the first paragraph of sanitised introduction HTML."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.done = False
+
+    def handle_endtag(self, tag):
+        if tag == 'p' and ''.join(self.parts).strip():
+            self.done = True
+
+    def handle_data(self, data):
+        if not self.done:
+            self.parts.append(data)
+
+
+def _intro_excerpt(intro_html: str | None, limit: int = 300) -> str:
+    """Plain text of the first paragraph of an introduction, cut at a word near *limit*.
+
+    Unescaped: the caller escapes it for the page it goes into.
+    """
+    if not intro_html:
+        return ''
+    parser = _FirstParagraph()
+    parser.feed(intro_html)
+    parser.close()
+    text = ' '.join(''.join(parser.parts).split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(' ', 1)[0] or text[:limit]
+    return cut.rstrip(' ,.;:') + '…'
+
+
+def _voucher_lead(conv) -> str:
+    """The consultation's title and the start of its introduction, escaped."""
+    excerpt = _intro_excerpt(conv.intro_text)
+    return (
+        f'<div class="lead"><strong>{html.escape(conv.title)}</strong>'
+        + (f'<p>{html.escape(excerpt)}</p>' if excerpt else '')
+        + '</div>'
+    )
+
+
+def _voucher_response(conv, heading: str, body: str, *, lead: str = ''):
     """Self-contained page: it carries a credential, so it is never cached."""
     locale = g.get('locale') or i18n.SOURCE_LOCALE
     response = make_response(_VOUCHER_PAGE.format(
         lang=html.escape(locale), dir=i18n.text_direction(locale),
         doc_title=_voucher_text('doc-title', conv.title),
-        heading=heading, body=body,
+        heading=heading, body=body, lead=lead, notice=_take_logout_notice_html(),
     ))
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'
@@ -367,9 +455,26 @@ def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
 
 
 def _voucher_switch_page(conv, code: str):
-    """Ask before a voucher replaces the identity already in this browser."""
+    """Ask before a voucher replaces the identity already in this browser.
+
+    The texts depend on what would be logged out: a Wikimedia account (which stays
+    logged in at Wikimedia itself) or another single-consultation account, which is
+    named by its own consultation.
+    """
+    current_voucher = _signed_in_voucher_account()
+    own = (db.session.get(Conversation, current_voucher.conversation_id)
+           if current_voucher is not None else None)
+    if own is not None:
+        body_text = _voucher_rich_text('switch-voucher-body', own.title, conv.title)
+        # Cancel keeps the account: back to the consultation it belongs to.
+        cancel_href, cancel_key = _path_conversation(own.slug), 'switch-voucher-cancel'
+    else:
+        body_text = _voucher_text('switch-body')
+        # Cancel keeps the current account and leaves this consultation's door: the
+        # consultations list, not the consultation page that would ask again.
+        cancel_href, cancel_key = '/consultations', 'switch-cancel'
     body = (
-        f'<p>{_voucher_text("switch-body")}</p>'
+        f'<p>{body_text}</p>'
         f'<form method="post" action="{html.escape(_voucher_form_action(conv))}"'
         ' autocomplete="off">'
         f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
@@ -377,10 +482,11 @@ def _voucher_switch_page(conv, code: str):
         '<input type="hidden" name="confirm" value="1">'
         f'<button type="submit">{_voucher_text("switch-confirm")}</button>'
         '</form>'
-        f'<p><a href="{html.escape(_keep_other_params(_path_conversation(conv.slug)))}">'
-        f'{_voucher_text("switch-cancel")}</a></p>'
+        f'<p><a href="{html.escape(_keep_other_params(cancel_href))}">'
+        f'{_voucher_text(cancel_key)}</a></p>'
     )
-    return _voucher_response(conv, _voucher_text('switch-heading'), body)
+    return _voucher_response(conv, _voucher_text('switch-heading'), body,
+                             lead=_voucher_lead(conv))
 
 
 _CONVERSATION_PAGE_RE = re.compile(r'/c/([^/]+)')
@@ -406,6 +512,17 @@ def _linked_voucher_redirect():
     return redirect(_keep_other_params(_path_conversation(slug)))
 
 
+# Every logout leaves a one-time note for the page it lands on (#514): "You are logged
+# out.", plus, for a single-consultation (voucher) account, how to come back to it, or
+# that its code is no longer valid. The session keeps only which note to show, never a
+# code or a consultation: the database holds only a code's HMAC, and neither the session,
+# a log line nor a page carries the plaintext after redemption. The note is taken out of
+# the session by whichever page shows it first: the SPA through /api/v1/session, or a
+# Flask-rendered voucher page.
+LOGOUT_NOTICE_KEY = 'logout_notice'
+LOGOUT_NOTICES = ('logged-out', 'voucher', 'revoked')
+
+
 def _start_voucher_session(participant) -> None:
     """One identity per browser session (#368): nothing from a previous login,
     demo guest or voucher account survives into the voucher session."""
@@ -415,13 +532,75 @@ def _start_voucher_session(participant) -> None:
     g.pop('participant', None)  # resolved earlier in this request, before the switch
 
 
+def _signed_in_voucher_account():
+    """The voucher account signed in in this browser now, or None."""
+    current = _current_participant()
+    if current is None or current.account_kind != ACCOUNT_KIND_VOUCHER or current.is_demo:
+        return None
+    if 'username' in session:
+        return None
+    return current
+
+
+def _leave_logout_notice(kind: str) -> None:
+    """Queue the one-time logout note. Call after the session is cleared or replaced."""
+    session[LOGOUT_NOTICE_KEY] = kind
+
+
+def take_logout_notice() -> str | None:
+    """The queued logout note, removed from the session as it is read."""
+    kind = session.pop(LOGOUT_NOTICE_KEY, None)
+    return kind if kind in LOGOUT_NOTICES else None
+
+
+def _take_logout_notice_html() -> str:
+    """The queued logout note as a toast for a Flask-rendered voucher page, or ''.
+
+    The same toast as the SPA's: "You are logged out." closes itself after 5 seconds;
+    the code-account reminder and the withdrawn-code note stay until closed. The close
+    button needs a few lines of script, which the CSP admits through this request's nonce.
+    """
+    kind = take_logout_notice()
+    if kind is None:
+        return ''
+    if kind == 'revoked':
+        text = _voucher_text('logout-notice-revoked')
+    else:
+        text = _voucher_text('logout-notice')
+        if kind == 'voucher':
+            text += ' ' + _voucher_text('logout-notice-voucher')
+    sticky = kind != 'logged-out'
+    nonce = html.escape(g.get('csp_nonce', ''))
+    return (
+        '<div id="toast-container">'
+        f'<div class="toast toast--info" role="status"{" data-sticky" if sticky else ""}>'
+        f'<span class="toast__msg">{text}</span>'
+        f'<button class="toast__close" type="button" aria-label="{_voucher_text("dismiss")}">'
+        '×</button></div></div>'
+        f'<script nonce="{nonce}">'
+        "document.querySelectorAll('#toast-container .toast').forEach(function(t){"
+        "t.querySelector('.toast__close').addEventListener('click',function(){t.remove();});"
+        "if(!t.hasAttribute('data-sticky')){setTimeout(function(){t.remove();},5000);}"
+        '});</script>'
+    )
+
+
+def _without_voucher_code(path: str) -> str:
+    """*path* without a ``v`` query parameter: a code never rides along to a next page."""
+    parts = urlparse(path)
+    if not parts.query:
+        return path
+    pairs = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != 'v']
+    return parts._replace(query=urlencode(pairs)).geturl()
+
+
 def _voucher_identity_conflict(conv, target) -> str | None:
     """How the identity already in this session relates to the voucher entry.
 
     ``None``: nothing to lose (no session, a demo guest, or the same account).
     ``'joined'``: this browser already takes part here with another voucher, and
     the code would mint a second account, which #368 refuses.
-    ``'switch'``: another account would be signed out; ask first.
+    ``'switch'``: another account would be logged out; ask first.
     """
     current = _current_participant()
     if 'username' in session:
@@ -533,6 +712,9 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
         g.voucher_attempt_failed = True
         return _voucher_switch_page(conv, code)
 
+    # The account this switch logs out gets the logout note on the next page (#514).
+    previous = _current_participant() if conflict == 'switch' else None
+    previous_kind = 'voucher' if _signed_in_voucher_account() is not None else 'logged-out'
     participant = entry.participant
     if entry.outcome == 'redeem':
         participant = redeem_voucher_code(
@@ -546,6 +728,8 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
             return _voucher_not_valid(conv, code)
 
     _start_voucher_session(participant)
+    if conflict == 'switch' and (previous is None or previous.xid != participant.xid):
+        _leave_logout_notice(previous_kind)
     return redirect(_keep_other_params(_path_conversation(conv.slug)))
 
 
@@ -4587,13 +4771,25 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
 
 
 def _conversation_access_decision(conversation, participant):
-    """Resolve access once; a participation classifies refusal, never grants it."""
-    return check_access(
+    """Resolve access once; a participation classifies refusal, never grants it.
+
+    A single-consultation (voucher) account whose code the organizers have revoked is
+    logged out here, where that is found (#514): the account can do nothing any more,
+    and the page then shows the one-time "no longer valid" logout note.
+    """
+    decision = check_access(
         conversation,
         participant,
         demo_session=_is_demo_session(),
         demo_conversation_id=_demo_bound_conversation_id(),
     )
+    if decision.reason == 'access-voucher-revoked':
+        current = _signed_in_voucher_account()
+        if current is not None and participant is not None and current.id == participant.id:
+            session.clear()
+            g.pop('participant', None)
+            _leave_logout_notice('revoked')
+    return decision
 
 
 def _conversation_access_denial(conversation, participant):
@@ -5819,6 +6015,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     app.register_blueprint(create_api_v1_blueprint(
         resolve_participant=_current_participant,
+        take_logout_notice=take_logout_notice,
         resolve_global_admin=_is_global_admin,
         resolve_developer_logins=lambda: [
             {
@@ -6191,11 +6388,26 @@ def _register_routes(app: Flask) -> None:
 
     # Not behind login_required, which checks for a Wikimedia username: a voucher account
     # has none, so its "log out" button used to start a Wikimedia login instead of logging
-    # out (#510). Any session that passes the CSRF check is cleared and sent home.
+    # out (#511). Any session that passes the CSRF check is cleared and sent home, or to
+    # `next` (a plain path on this site, without a code) when the logout was a step towards
+    # a page (#514). That page shows a one-time "You are logged out." note; for a
+    # single-consultation (voucher) account it adds how to come back to the account.
+    # A stale form (CSRF token from an expired session) is redirected home by the CSRF
+    # error handler in api/v1.py, nothing cleared.
     @app.post('/logout')
     def logout():
+        next_url = _without_voucher_code(
+            _safe_redirect(request.form.get('next', '').strip(), '/'))
+        if _signed_in_voucher_account() is not None:
+            kind = 'voucher'
+        elif 'username' in session:
+            kind = 'logged-out'
+        else:
+            kind = None  # nobody was logged in (a demo guest, an expired session)
         session.clear()
-        return redirect('/')
+        if kind is not None:
+            _leave_logout_notice(kind)
+        return redirect(next_url)
 
     # ── Health ────────────────────────────────────────────────────────────────
 

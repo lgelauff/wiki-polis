@@ -1630,6 +1630,20 @@
               {"type": "null"}
             ]
           },
+          "voucherConsultation": {
+            "description": "voucher: the one consultation the voucher account belongs to; null otherwise.",
+            "oneOf": [
+              {"$ref": "#/components/schemas/VoucherConsultation"},
+              {"type": "null"}
+            ]
+          },
+          "logoutNotice": {
+            "description": "Once, on the first page after a logout: which note to show (logged-out: any account; voucher: a single-consultation account, with how to come back to it; revoked: logged out because its code was withdrawn). Null on every other request.",
+            "oneOf": [
+              {"type": "string", "enum": ["logged-out", "voucher", "revoked"]},
+              {"type": "null"}
+            ]
+          },
           "capabilities": {"$ref": "#/components/schemas/SiteCapabilities"},
           "csrfToken": {"type": "string", "minLength": 1},
           "developerLogins": {
@@ -1671,6 +1685,15 @@
         "properties": {
           "username": {"type": "string", "minLength": 1},
           "href": {"type": "string", "minLength": 1}
+        }
+      },
+      "VoucherConsultation": {
+        "type": "object",
+        "required": ["slug", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1}
         }
       },
       "SessionUser": {

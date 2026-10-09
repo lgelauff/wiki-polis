@@ -25,12 +25,12 @@ to catalogue copy instead
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (990 messages, 100% documented; 598 offered to translators, 392 held back) | committed |
+| `en.json` + `qqq.json` (1001 messages, 100% documented; 609 offered to translators, 392 held back) | committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | committed |
 | React SPA reads it via `banana-i18n` | participant interface; not yet the help pages and admin console (see above) |
-| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 541 of 990 messages) |
+| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 541 of 1001 messages) |
 
 `ENABLED_LOCALES` defaults to `en,nl` when unset (`app.py`), so the language switcher is visible
 and Dutch is live wherever the variable is left alone. Most keys were authored against the
