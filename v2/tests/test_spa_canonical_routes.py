@@ -17,7 +17,7 @@ quietly twice over in principle:
     — a shape Prettier can produce on reflow — parsed to nothing; and
   * an empty parametrize list is a *skip*, not a failure (pytest's
     `empty_parameter_set_mark` defaults to `skip` and pyproject.toml does not
-    override it), and this file already contains one legitimate skip for the
+    override it), and this file then contained one legitimate skip for the
     catch-all, so a second would not have looked wrong.
 
 Together those meant a rename or a reflow of app.tsx would have turned the guard
@@ -130,11 +130,11 @@ def test_the_react_route_parse_is_not_silently_empty():
     )
 
 
-@pytest.mark.parametrize('route', sorted(set(_react_route_paths())))
+# The client-side catch-all (`*`) is not a server path, so it is left out of the list
+# rather than skipped: a skip that always skips is noise in every run.
+@pytest.mark.parametrize('route', sorted(set(_react_route_paths()) - {'*'}))
 def test_every_react_route_has_a_server_counterpart(client, route):
     """Guard against the #310 failure: a React route the server does not know."""
-    if route == '*':
-        pytest.skip('client-side catch-all, not a server path')
     path = _as_concrete_path(route)
 
     # /app/* is served by the spa_shell view rather than the canonical table.
