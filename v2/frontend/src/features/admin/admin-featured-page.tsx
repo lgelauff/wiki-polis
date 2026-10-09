@@ -13,6 +13,7 @@ import {
   putAdminFeaturedStatement,
 } from '../../api/queries';
 import {useMessage, type Message} from '../../i18n/messages';
+import {usePercentFormat} from '../../i18n/numbers';
 import {AdminShell} from './admin-shell';
 import {AdminTime} from './admin-time';
 import {StatementProvenance} from './admin-provenance';
@@ -135,12 +136,21 @@ function SelectedRow({
   );
 }
 
+/** Opinion data in admin views follows the floor too (owner, 2026-10-15): below ten agree and
+ *  disagree responses the agreement share is withheld, not shown. */
+const AGREEMENT_FLOOR = 10;
+
 function CandidateRow({candidate, pending, onConfirm}: {
   candidate: Candidate;
   pending: boolean;
   onConfirm: () => void;
 }) {
   const msg = useMessage();
+  const percentage = usePercentFormat();
+  const {agree, disagree, agreementPercent} = candidate.votes;
+  const agreement = agreementPercent === null || agree + disagree < AGREEMENT_FLOOR
+    ? msg('featured-agreement-few', AGREEMENT_FLOOR)
+    : percentage(agreementPercent, {digits: 0});
   return (
     <tr>
       <td className="admin-num">{candidate.statementId}</td>
@@ -154,6 +164,7 @@ function CandidateRow({candidate, pending, onConfirm}: {
       <td className="admin-num">{candidate.votes.disagree}</td>
       <td className="admin-num">{candidate.votes.pass}</td>
       <td className="admin-num">{candidate.votes.total}</td>
+      <td className="admin-num">{agreement}</td>
       <td>
         <button type="button" className="admin-row__text-button" disabled={pending} onClick={onConfirm}>
           {msg('featured-btn-confirm')}<RowName>{`#${candidate.statementId}`}</RowName>
@@ -249,12 +260,15 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           <p className="admin-empty">{msg('featured-suggestions-empty')}</p>
         ) : (
           // A table: the response counts are compared down the columns.
+          <>
+          <p className="admin-row__note">{msg('featured-agreement-note')}</p>
           <div className="admin-table-wrap">
           <table className="admin-table">
             <thead><tr>
               <th>{msg('featured-th-number')}</th><th>{msg('featured-th-text')}</th><th>{msg('featured-th-seed')}</th>
               <th className="admin-num">{msg('featured-th-agree')}</th><th className="admin-num">{msg('featured-th-disagree')}</th>
               <th className="admin-num">{msg('conv-vote-pass')}</th><th className="admin-num">{msg('featured-th-votes')}</th>
+              <th className="admin-num">{msg('featured-th-agreement')}</th>
               <th>{msg('admin-th-actions')}</th>
             </tr></thead>
             <tbody>
@@ -269,6 +283,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
             </tbody>
           </table>
           </div>
+          </>
         )}
 
         <h2>{msg('featured-addnumber-heading')}</h2>
