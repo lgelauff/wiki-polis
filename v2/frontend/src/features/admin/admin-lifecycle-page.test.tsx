@@ -261,3 +261,35 @@ test('a moderator sees the phase control and statistics read-only, with nothing 
     '#phaseControl :is(button, input, select, form), .mode-guided-part :is(button, input, select, form), .mode-advanced-part',
   )).toHaveLength(0);
 });
+
+test('a moderator is told which phase comes next and when, only while a transition is scheduled', async () => {
+  // Owner, 2026-10-09: for a moderator no readiness list and no "next phase" head; one plain
+  // line when a transition is scheduled, in the participant notice's words.
+  serve(moderatorLifecycle);
+  const {container} = renderConsole();
+
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  const line = container.querySelector('.admin-scheduled-transition');
+  expect(line).not.toBeNull();
+  const [before] = testMessages['conv-scheduled-transition']!.split('<strong>');
+  expect(line!.textContent!.startsWith(before!)).toBe(true);
+  expect(line!.querySelector('strong')).toHaveTextContent(testMessages['phase-label-argument_mapping']!);
+  expect(line!.querySelector('time')).toHaveAttribute('datetime', '2026-11-01T12:00:00Z');
+  // Text only, and no readiness list.
+  expect(line!.querySelectorAll('button, input, a')).toHaveLength(0);
+  expect(screen.queryByText('Every statement has been moderated', {exact: false})).toBeNull();
+});
+
+test('a moderator sees no next-phase line when nothing is scheduled, or the schedule is frozen', async () => {
+  for (const schedule of [
+    {...moderatorLifecycle.schedule, scheduledAt: null, targetKey: null, targetLabel: null},
+    {...moderatorLifecycle.schedule, frozen: true},
+  ]) {
+    serve({...moderatorLifecycle, schedule});
+    const {container, unmount} = renderConsole();
+
+    await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+    expect(container.querySelector('.admin-scheduled-transition')).toBeNull();
+    unmount();
+  }
+});
