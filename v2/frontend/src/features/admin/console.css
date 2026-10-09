@@ -1087,8 +1087,12 @@
    component: this rule lays the frame out in one column, the component decides what is in
    it. */
 @media (max-width: 1023px) {
+  /* The sidebar row is as tall as its content and the page takes the rest: on a short page
+     (Admin home with one row) the spare height would otherwise be split between the two,
+     and the sidebar would grow an empty grey band. */
   .admin-shell__body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
   }
 
   .admin-shell__side {
