@@ -30,13 +30,12 @@ const lifecycle: Lifecycle = {
   schedule: {canSchedule: false, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
   publicationReadiness: {windowOpen: false, preconditions: []},
   statistics: {upstreamUnavailable: false, groups: [], informedVoting: null},
-  counts: {participants: 12, invitations: 1, openFlags: 3, featuredStatements: 4},
+  counts: {participants: 12, openFlags: 3, featuredStatements: 4},
   capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
   links: {
     self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy',
-    participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags',
-    invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles',
-    statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured',
+    moderation: '/admin/conversations/7/flags',
+    statements: '/admin/conversations/7/statements',
     settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination',
   },
 };

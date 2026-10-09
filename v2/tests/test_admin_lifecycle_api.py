@@ -28,9 +28,15 @@ def test_lifecycle_contract_separates_phase_from_publication(
     assert pending['publicationReadiness']['windowOpen'] is True
     assert pending['publicationReadiness']['preconditions'][-1]['met'] is True
     assert pending['phase']['transition'] is None
-    assert pending['links']['participants'].endswith(
-            f'/admin/conversations/{conversation.id}/participants'
+    assert pending['links']['settings'].endswith(
+            f'/admin/conversations/{conversation.id}/settings'
     )
+    # Only what a console page links to: the Overview's "Content & access" cards went, and
+    # with them the links and the invitation count only they used.
+    assert set(pending['links']) == {
+        'self', 'participantView', 'moderation', 'statements', 'settings', 'termination',
+    }
+    assert set(pending['counts']) == {'participants', 'openFlags', 'featuredStatements'}
 
     conversation.active = False
     conversation.closed_at = datetime.now(timezone.utc)

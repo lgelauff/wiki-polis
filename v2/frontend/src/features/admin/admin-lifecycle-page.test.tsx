@@ -36,9 +36,9 @@ const lifecycle: Lifecycle = {
   statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}],
     informedVoting: {participants: 9, statementCount: 4, excludedStatementCount: 0, excludedParticipantCount: 0,
       largestShift: {text: 'Regional communities should share infrastructure funding.', shift: 12}}},
-  counts: {participants: 12, invitations: 1, openFlags: 1, featuredStatements: 4},
+  counts: {participants: 12, openFlags: 1, featuredStatements: 4},
   capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-  links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+  links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
 };
 
 /** Closed and published, with the identity-reveal window open -- the danger-zone
