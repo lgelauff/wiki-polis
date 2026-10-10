@@ -253,7 +253,7 @@ export function AdminShell({announcer, children, data, gatingType, section, site
           </div>
           <div className="admin-shell__identity">
             {/* The name is cut off with an ellipsis when long, so the whole of it is the hover title. */}
-            <span className="admin-shell__user" title={authenticated ? session.user?.username : undefined}>{authenticated ? session.user?.username : msg('base-voucher-account')}</span>
+            <span className="admin-shell__user" title={authenticated ? session.user?.username : undefined}>{authenticated ? session.user?.username : msg('base-single-consultation-account')}</span>
             {/* The glyph says "your role in this consultation"; a site-level page has no
                 consultation, so there the role word stands alone. */}
             {role && <span className="admin-shell__role">{data && <RoleGlyph label={msg('adminconv-role-title')} />}<span>{roleLabel(msg, role)}</span></span>}

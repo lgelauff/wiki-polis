@@ -23,9 +23,12 @@ const durations: Partial<Record<LegacyToastMessage['category'], number>> = {
 export function LegacyToast({
   toast,
   onDismiss,
+  sticky = false,
 }: {
   toast: LegacyToastMessage | null;
   onDismiss: () => void;
+  /** No timer: the toast stays until × or the page goes away. */
+  sticky?: boolean;
 }) {
   const msg = useMessage();
   // Inside the admin console the shell's always-mounted region reads the toast out, once per
@@ -33,11 +36,11 @@ export function LegacyToast({
   // created together with its text does not reliably do. Elsewhere the toast keeps its role.
   const announce = useAnnounce();
   useEffect(() => {
-    const duration = toast ? durations[toast.category] : undefined;
+    const duration = toast && !sticky ? durations[toast.category] : undefined;
     if (duration === undefined) return undefined;
     const timer = window.setTimeout(onDismiss, duration);
     return () => window.clearTimeout(timer);
-  }, [onDismiss, toast]);
+  }, [onDismiss, sticky, toast]);
   const urgent = toast ? toast.category === 'error' || toast.category === 'warning' : false;
   const toastId = toast?.id;
   const toastText = toast?.message;

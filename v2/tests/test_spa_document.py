@@ -50,6 +50,11 @@ def test_react_owned_forms_do_not_fall_back_to_legacy_posts():
             Path('features/legacy/legacy-shell.tsx'),
             "<form method=\"post\" action={session.links.logout} style={{display: 'inline'}}>",
         ),
+        (
+            # Log out of a voucher account before a page that needs another login (#514).
+            Path('features/legacy/logout-choice.tsx'),
+            "<form method=\"post\" action={session.links.logout} style={{margin: '18px 0 1.5rem'}}>",
+        ),
     ]
 
 

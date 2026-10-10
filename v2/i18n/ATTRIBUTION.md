@@ -53,7 +53,6 @@ for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegesta
 | Our key | English | Source | Source key | Licence | Copied |
 |---|---|---|---|---|---|
 | `common-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
-| `voucher-switch-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `adminconv-edit` | `Edit` | MediaWiki core | [`edit`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `admin-save` | `Save` | MediaWiki core | [`saveprefs`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/preferences/en.json) | GPL-2.0-or-later | en |
 | `admin-th-actions` | `Actions` | MediaWiki core | [`actions`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
@@ -66,6 +65,7 @@ for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegesta
 | `conv-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `featured-arg-unhide` | `Unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en |
 | `base-log-in` | `log in` | MediaWiki core | [`loginreqlink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
+| `login-prompt-heading` | `Login required` | MediaWiki core | [`loginreqtitle`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `base-log-out` | `log out` | MediaWiki core | [`logout`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `conv-crumb-about` | `About` | MediaWiki core | [`about`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-reason-label` | `Reason` | MediaWiki core | [`block-reason`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |

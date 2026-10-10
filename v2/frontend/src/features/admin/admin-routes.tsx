@@ -4,6 +4,7 @@ import type {ReactNode} from 'react';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
+import {useMessage} from '../../i18n/messages';
 import {AdminAccessBoundary} from './admin-access-boundary';
 import {AdminCatalogPage} from './admin-catalog-page';
 import {AdminFeaturedPage} from './admin-featured-page';
@@ -30,6 +31,7 @@ function OrbitMark() {
 }
 
 function AdminHeader() {
+  const msg = useMessage();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const login = useLoginHref(session.links.login);
   return (
@@ -48,7 +50,7 @@ function AdminHeader() {
           <InternalLink className="account-link" href={login}>Log in</InternalLink>
         ) : (
           <form method="post" action={session.links.logout} className="account-form">
-            <span>{session.user?.username ?? 'Demo session'}</span>
+            <span>{session.state === 'voucher' ? msg('base-single-consultation-account') : session.user?.username ?? 'Demo session'}</span>
             <input type="hidden" name="csrf_token" value={session.csrfToken} />
             <button type="submit">Log out</button>
           </form>

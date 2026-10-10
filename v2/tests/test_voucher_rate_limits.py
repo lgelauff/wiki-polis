@@ -144,7 +144,7 @@ def test_checking_codes_through_the_switch_page_is_charged(limited_app, conv):  
         sess['username'] = 'Someone'
         sess['xid'] = wiki.xid
     for _ in range(SESSION_BUDGET):
-        assert 'signed in with another account' in _try(client, conv, CODE).data.decode()
+        assert 'Continue with this code?' in _try(client, conv, CODE).data.decode()
     assert _try(client, conv, CODE).status_code == 429
 
 

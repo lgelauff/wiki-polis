@@ -1954,6 +1954,10 @@ export interface components {
              */
             state: "anonymous" | "authenticated" | "demo" | "voucher";
             user: components["schemas"]["SessionUser"] | null;
+            /** @description voucher: the one consultation the voucher account belongs to; null otherwise. */
+            voucherConsultation?: components["schemas"]["VoucherConsultation"] | null;
+            /** @description Once, on the first page after a logout: which note to show (logged-out: any account; voucher: a single-consultation account, with how to come back to it; revoked: logged out because its code was withdrawn). Null on every other request. */
+            logoutNotice?: ("logged-out" | "voucher" | "revoked") | null;
             capabilities: components["schemas"]["SiteCapabilities"];
             csrfToken: string;
             developerLogins: components["schemas"]["DeveloperLogin"][];
@@ -1976,6 +1980,10 @@ export interface components {
         DeveloperLogin: {
             username: string;
             href: string;
+        };
+        VoucherConsultation: {
+            slug: string;
+            title: string;
         };
         SessionUser: {
             username: string;

@@ -21,6 +21,9 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, a { font: inherit; }
 a { color: inherit; }
 :focus-visible { outline: 3px solid #315c9b; outline-offset: 3px; }
+/* A heading focused by script so a screen reader announces a replaced page is not a
+   control: no ring (keyboard users cannot tab to it). */
+h1[tabindex="-1"]:focus { outline: none; }
 .legacy-main button { font-family: Arial; line-height: normal; }
 .legacy-main .vote-choice,
 .legacy-main .v2-option-card,

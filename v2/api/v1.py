@@ -8,13 +8,14 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from flask import Blueprint, Flask, current_app, g, jsonify, request, session, url_for
+from flask import (Blueprint, Flask, current_app, g, jsonify, redirect, request, session,
+                   url_for)
 from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
 import i18n
 from api.admin_routes import register_admin_routes
-from db import ACCOUNT_KIND_VOUCHER, Participant
+from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
 from services.explore import ExploreUpstreamError, StatementAlreadyExists
@@ -71,6 +72,7 @@ def error_response(code: str, message: str, status: int, *, details=None):
 def create_api_v1_blueprint(
     *,
     resolve_participant: Callable[[], Participant | None],
+    take_logout_notice: Callable[[], str | None],
     resolve_global_admin: Callable[[Participant | None], bool],
     resolve_developer_logins: Callable[[], list[dict]],
     resolve_git_version: Callable[[], str],
@@ -157,6 +159,14 @@ def create_api_v1_blueprint(
         else:
             state = 'anonymous'
 
+        # The one consultation a voucher account belongs to (#368, #514): pages it is
+        # refused on name it, so the visitor knows which account is logged in.
+        voucher_consultation = None
+        if state == 'voucher' and participant.conversation_id is not None:
+            own = db.session.get(Conversation, participant.conversation_id)
+            if own is not None:
+                voucher_consultation = {'slug': own.slug, 'title': own.title}
+
         user = None
         if state == 'authenticated':
             user = {
@@ -168,6 +178,10 @@ def create_api_v1_blueprint(
             'data': {
                 'state': state,
                 'user': user,
+                'voucherConsultation': voucher_consultation,
+                # Once, on the page a logout landed on (#514): which note to show. Read
+                # here, it is gone from the session for every later request.
+                'logoutNotice': take_logout_notice(),
                 'capabilities': {
                     'administerSite': bool(resolve_global_admin(participant)),
                 },
@@ -739,6 +753,11 @@ def register_api_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(exc):
+        # A log-out form from an expired session carries a stale token. Refusing it with a
+        # bare 400 is a dead end; going home without clearing anything is as safe against
+        # a cross-site post and leaves the visitor somewhere they can act (#514).
+        if request.method == 'POST' and request.path == url_for('logout'):
+            return redirect('/')
         if is_api_request():
             return error_response('csrf_failed', exc.description, 400)
         return exc

@@ -460,7 +460,10 @@ def test_switch_page_cancel_keeps_other_parameters(app, client, voucher_conv, pa
         sess['xid'] = participant.xid
     html = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}&uselang=qqx').data.decode()
     assert f'action="/c/{voucher_conv.slug}/v?uselang=qqx"' in html
-    assert f'href="/c/{voucher_conv.slug}?uselang=qqx"' in html
+    # Cancel keeps the account and leaves for the consultations list, not the
+    # consultation page that would ask again.
+    assert 'href="/consultations?uselang=qqx"' in html
+    assert f'href="/c/{voucher_conv.slug}?uselang=qqx"' not in html
 
 
 def test_missed_code_with_excluded_letters_gets_a_hint(app, client, voucher_conv):
@@ -614,7 +617,7 @@ def test_wikimedia_session_is_asked_before_it_is_replaced(app, client, voucher_c
     # A link must not silently swap the identity.
     resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
     assert resp.status_code == 200
-    assert 'signed in with another account' in resp.data.decode()
+    assert 'Continue with this code?' in resp.data.decode()
     assert _session_xid(client) == participant.xid
     assert _voucher_participants() == []
 
@@ -634,7 +637,8 @@ def test_voucher_session_carries_nothing_from_the_previous_one(app, client, vouc
         sess['space'] = 'demo'
     _redeem(client, voucher_conv)
     with client.session_transaction() as sess:
-        assert set(sess.keys()) - {'_permanent', '_fresh', 'csrf_token'} == {'xid', 'emailable'}
+        assert set(sess.keys()) - {'_permanent', '_fresh', 'csrf_token'} == {
+            'xid', 'emailable'}
 
 
 def test_second_code_in_the_same_session_is_refused_and_stays_unused(app, client, voucher_conv):
@@ -850,3 +854,295 @@ def test_voucher_redemption_and_access_flow(app, client, voucher_conv):
     assert 'not valid' in client.post(
         f'/c/{voucher_conv.slug}/v', data={'code': codes[0]},
     ).data.decode()
+
+
+# ── The switch page names the consultation; the one-time logout note (#514) ──
+
+def test_switch_page_shows_the_title_and_the_start_of_the_introduction(
+    app, client, voucher_conv, participant,
+):
+    voucher_conv.intro_text = ('<p>Help shape <strong>the plan</strong> &amp; '
+                               '<script>x</script>its budget.</p><p>Second paragraph.</p>')
+    voucher_conv.title = 'Plan <b>2027</b>'
+    db.session.commit()
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    html = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}').data.decode()
+    lead = html.split('<h1>')[0]
+    assert '<strong>Plan &lt;b&gt;2027&lt;/b&gt;</strong>' in lead
+    assert 'Help shape the plan &amp; xits budget.' in lead
+    assert 'Second paragraph' not in html
+    assert '<h1>Continue with this code?</h1>' in html
+    assert 'Log out and continue with the code' in html
+    assert 'Cancel and stay logged in' in html
+
+
+def test_intro_excerpt_is_cut_at_a_word_with_an_ellipsis():
+    from app import _intro_excerpt
+    long = '<p>' + ' '.join(['word'] * 100) + '</p>'
+    excerpt = _intro_excerpt(long)
+    assert excerpt.endswith('word…')
+    assert len(excerpt) <= 301
+    assert _intro_excerpt(None) == ''
+    assert _intro_excerpt('Plain text, no paragraph.') == 'Plain text, no paragraph.'
+
+
+def _redeem_and_log_out(client, conv, code=CODE, **logout_form):
+    _redeem(client, conv, code=code)
+    return client.post('/logout', data=logout_form)
+
+
+def _assert_no_code_in_session(client, *codes):
+    """No session value holds a voucher code, in any spelling (#514: codes are never kept)."""
+    import json
+    with client.session_transaction() as sess:
+        stored = json.dumps(dict(sess), default=str)
+    for code in codes:
+        assert code not in stored
+        assert code.lower() not in stored
+
+
+def _logout_notice(client):
+    """What the SPA is told to show once, as /api/v1/session hands it out."""
+    return client.get('/api/v1/session').get_json()['data']['logoutNotice']
+
+
+def test_redemption_stores_no_code_in_the_session(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv, code='x7f3-k9m2 abcd')
+    assert _session_xid(client)
+    _assert_no_code_in_session(client, CODE, 'x7f3-k9m2 abcd', 'X7F3-K9M2', 'K9M2')
+
+
+def test_a_voucher_logout_lands_home_with_the_reminder_once(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    out = _redeem_and_log_out(client, voucher_conv)
+    assert out.status_code == 302
+    assert out.headers['Location'] == '/'
+    with client.session_transaction() as sess:
+        assert 'xid' not in sess
+        # Only which note to show: no code, no consultation.
+        assert set(sess.keys()) - {'_permanent', '_fresh', 'csrf_token'} == {'logout_notice'}
+        assert sess['logout_notice'] == 'voucher'
+    _assert_no_code_in_session(client, CODE)
+
+    assert _logout_notice(client) == 'voucher'
+    # Gone once read: a reload or the next page shows nothing.
+    assert _logout_notice(client) is None
+
+
+def test_a_wikimedia_logout_also_leaves_the_note(app, auth_client):
+    resp = auth_client.post('/logout')
+    assert resp.headers['Location'] == '/'
+    data = auth_client.get('/api/v1/session').get_json()['data']
+    assert data['state'] == 'anonymous'
+    assert data['logoutNotice'] == 'logged-out'
+    assert _logout_notice(auth_client) is None
+
+
+def test_no_note_when_nobody_was_logged_in(app, client):
+    demo = Conversation(slug='demo-conv', polis_id='demo123456', title='Demo',
+                        active=True, access_policy='demo')
+    db.session.add(demo)
+    db.session.commit()
+    client.get('/api/v1/conversations/demo-conv/workspace')
+    resp = client.post('/logout', data={'next': '/demo'})
+    assert resp.headers['Location'] == '/demo'
+    assert _logout_notice(client) is None
+
+
+def test_there_is_no_separate_logged_out_page(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem_and_log_out(client, voucher_conv)
+    assert client.get('/signed-out').status_code == 404
+    assert not any(rule.rule == '/signed-out' for rule in app.url_map.iter_rules())
+
+
+def test_logging_out_towards_a_page_continues_there(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    out = _redeem_and_log_out(client, voucher_conv, next='/c/other/reveal?uselang=en')
+    assert out.headers['Location'] == '/c/other/reveal?uselang=en'
+    assert _logout_notice(client) == 'voucher'
+
+
+def test_logging_out_drops_a_code_from_the_next_page(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    out = _redeem_and_log_out(client, voucher_conv, next=f'/c/other?v={CODE}&uselang=en')
+    assert out.headers['Location'] == '/c/other?uselang=en'
+    _assert_no_code_in_session(client, CODE)
+
+
+def test_logging_out_never_continues_off_the_site(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    out = _redeem_and_log_out(client, voucher_conv, next='//evil.example/')
+    assert out.headers['Location'] == '/'
+
+
+def _other_voucher_conv():
+    other = Conversation(slug='other-conv', polis_id='other12345', title='Other <i>one</i>',
+                         active=True, access_policy='public', gated=True,
+                         gating_type='voucher')
+    db.session.add(other)
+    db.session.commit()
+    return other
+
+
+def test_switch_page_texts_for_a_logged_in_voucher_account(app, client, voucher_conv):
+    other = _other_voucher_conv()
+    _make_voucher(voucher_conv)
+    _make_voucher(other, code='Q2W3E4R5T6Y7')
+    _redeem(client, voucher_conv)
+
+    html = client.get(f'/c/{other.slug}/v?v=Q2W3E4R5T6Y7').data.decode()
+    assert '<h1>Continue with this code?</h1>' in html
+    # Both consultations named, titles escaped, the message's own <strong> kept.
+    assert (f'You are logged in with a single-consultation account for '
+            f'<strong>{voucher_conv.title}</strong>. Continuing logs you out of it; this code '
+            'then gives you a separate account for <strong>Other &lt;i&gt;one&lt;/i&gt;</strong> '
+            'only.') in html
+    assert 'Log out and continue with the code' in html
+    # Cancel keeps the account: back to its own consultation.
+    assert (f'<a href="/c/{voucher_conv.slug}">Cancel and stay with your current account</a>'
+            in html)
+    assert 'Wikimedia' not in html
+    assert 'Cancel and stay logged in' not in html
+
+
+def test_switch_page_texts_for_a_logged_in_wikimedia_account(
+    app, client, voucher_conv, participant,
+):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    html = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}').data.decode()
+    assert ('To use it, you are logged out of your Wikimedia account here, in this browser; '
+            'you stay logged in at Wikimedia itself.') in html
+    assert '<a href="/consultations">Cancel and stay logged in</a>' in html
+    assert 'single-consultation account' not in html
+
+
+def test_switching_voucher_accounts_lands_on_the_new_one_with_the_reminder(
+    app, client, voucher_conv,
+):
+    other = _other_voucher_conv()
+    _make_voucher(voucher_conv)
+    _make_voucher(other, code='Q2W3E4R5T6Y7')
+    _redeem(client, voucher_conv)
+
+    switched = _redeem(client, other, code='Q2W3E4R5T6Y7', confirm='1')
+    assert switched.headers['Location'] == '/c/other-conv'
+    _assert_no_code_in_session(client, CODE, 'Q2W3E4R5T6Y7')
+    data = client.get('/api/v1/session').get_json()['data']
+    assert data['state'] == 'voucher'
+    assert data['voucherConsultation']['slug'] == 'other-conv'
+    assert data['logoutNotice'] == 'voucher'
+    assert _logout_notice(client) is None
+
+
+def test_switching_from_wikimedia_leaves_the_plain_note(app, client, voucher_conv, participant):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    resp = _redeem(client, voucher_conv, confirm='1')
+    assert resp.headers['Location'] == f'/c/{voucher_conv.slug}'
+    assert _logout_notice(client) == 'logged-out'
+
+
+def test_a_flask_voucher_page_shows_the_note_once(app, client, voucher_conv):
+    """The note is taken by whichever page shows it first, the SPA or a Flask voucher page,
+    which shows it as the SPA's toast: same classes, a close button, kept until closed."""
+    _make_voucher(voucher_conv)
+    _redeem_and_log_out(client, voucher_conv, next=f'/c/{voucher_conv.slug}/v')
+    html = client.get(f'/c/{voucher_conv.slug}/v').data.decode()
+    assert ('<div id="toast-container"><div class="toast toast--info" role="status" data-sticky>'
+            '<span class="toast__msg">You are logged out. To come back to this account '
+            'later, use the link or code you received again. Don&#x27;t share it: anyone with '
+            'it can take part as you.</span>'
+            '<button class="toast__close" type="button" aria-label="Close">×</button>'
+            '</div></div>') in html
+    assert CODE not in html
+    assert 'class="toast' not in client.get(f'/c/{voucher_conv.slug}/v').data.decode()
+    assert _logout_notice(client) is None
+
+
+def test_the_flask_toast_script_runs_under_the_csp(app, client, voucher_conv, participant):
+    """The close button and the timer need script: it carries this response's CSP nonce.
+    The plain note closes itself; the others are marked to stay."""
+    import re
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    client.post('/logout', data={'next': f'/c/{voucher_conv.slug}/v'})
+    resp = client.get(f'/c/{voucher_conv.slug}/v')
+    html = resp.data.decode()
+    assert '<div class="toast toast--info" role="status"><span class="toast__msg">You are logged out.</span>' in html
+    nonce = re.search(r"'nonce-([^']+)'", resp.headers['Content-Security-Policy']).group(1)
+    assert f'<script nonce="{nonce}">' in html
+    assert 'setTimeout' in html and "hasAttribute('data-sticky')" in html
+
+
+def test_a_revoked_code_logs_the_account_out_with_its_own_note(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+    participant = Participant.query.filter_by(xid=_session_xid(client)).one()
+    revoke_voucher(VoucherCode.query.filter_by(participant_id=participant.id).one())
+    db.session.commit()
+
+    lost = client.get(f'/api/v1/conversations/{voucher_conv.slug}/workspace')
+    assert lost.status_code == 403
+    assert lost.get_json()['error']['details']['reason'] == 'access-voucher-revoked'
+    with client.session_transaction() as sess:
+        assert 'xid' not in sess
+    data = client.get('/api/v1/session').get_json()['data']
+    assert data['state'] == 'anonymous'
+    assert data['logoutNotice'] == 'revoked'
+    assert _logout_notice(client) is None
+
+
+def test_a_revoked_note_on_a_flask_voucher_page(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+    participant = Participant.query.filter_by(xid=_session_xid(client)).one()
+    revoke_voucher(VoucherCode.query.filter_by(participant_id=participant.id).one())
+    db.session.commit()
+    client.get(f'/api/v1/conversations/{voucher_conv.slug}/workspace')
+    html = client.get(f'/c/{voucher_conv.slug}/v').data.decode()
+    assert ('<div class="toast toast--info" role="status" data-sticky>'
+            '<span class="toast__msg">Your code is no longer valid. You are logged out.</span>'
+            ) in html
+
+
+def test_the_code_stays_out_of_logs_pages_and_addresses(app, client, voucher_conv, caplog):
+    """After redemption: the code is POSTed here, so no request line carries it. A link
+    with ?v= is a GET and can reach a web server's access log before the app sees it."""
+    import logging
+    _make_voucher(voucher_conv)
+    with caplog.at_level(logging.DEBUG):
+        redeemed = _redeem(client, voucher_conv)
+        page = client.get(f'/c/{voucher_conv.slug}')
+        session_api = client.get('/api/v1/session')
+        out = client.post('/logout')
+        notice = client.get('/api/v1/session')
+    assert caplog.records  # the requests were logged, so the check is not vacuous
+    assert CODE not in caplog.text
+    for resp in (redeemed, page, session_api, out, notice):
+        assert CODE not in resp.headers.get('Location', '')
+        assert CODE not in resp.headers.get('Set-Cookie', '')
+        assert CODE not in resp.get_data(as_text=True)
+
+
+def test_the_session_names_the_voucher_accounts_consultation(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+    data = client.get('/api/v1/session').get_json()['data']
+    assert data['state'] == 'voucher'
+    assert data['voucherConsultation'] == {'slug': voucher_conv.slug, 'title': voucher_conv.title}
+    assert data['logoutNotice'] is None
+
+
+def test_other_sessions_name_no_voucher_consultation(app, auth_client):
+    assert auth_client.get('/api/v1/session').get_json()['data']['voucherConsultation'] is None

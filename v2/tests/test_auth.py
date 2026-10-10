@@ -107,7 +107,6 @@ def test_oauth_callback_updates_username_if_changed(client, app, participant):
          patch('app._is_emailable', return_value=False):
         client.get('/oauth-callback?code=x&state=st')
 
-    from db import db
     db.session.refresh(participant)
     assert participant.mw_username == 'RenamedUser'
 
@@ -260,6 +259,45 @@ def test_logout_clears_session(auth_client):
     assert resp.status_code == 302
     with auth_client.session_transaction() as sess:
         assert 'username' not in sess
+
+
+def test_a_voucher_account_logs_out_instead_of_being_sent_to_the_login(client, participant):
+    """A voucher session has an xid and no Wikimedia username. Its log-out button must log it
+    out, not start a Wikimedia login (#511)."""
+    with client.session_transaction() as sess:
+        sess['xid'] = participant.xid
+        sess['emailable'] = False
+    resp = client.post('/logout')
+    assert resp.status_code == 302
+    assert resp.headers['Location'] == '/'
+    with client.session_transaction() as sess:
+        assert 'xid' not in sess
+
+
+def test_logout_without_a_valid_csrf_token_goes_home_and_keeps_the_session(app, auth_client):
+    """/logout is no longer behind login_required (#511); the global CSRF check is what
+    stops another site from logging people out. Production runs with CSRF enabled.
+
+    A refused log-out (no token, or a stale one from an expired session) is not a bare
+    400 dead end (#514): it goes home, and nothing is cleared."""
+    app.config['WTF_CSRF_ENABLED'] = True
+    for form in ({}, {'csrf_token': 'stale-token-from-an-old-page'}):
+        resp = auth_client.post('/logout', data={**form, 'next': '/c/somewhere'})
+        assert resp.status_code == 302
+        assert resp.headers['Location'] == '/'
+        with auth_client.session_transaction() as sess:
+            assert sess.get('username') == 'testuser'
+            assert 'logout_notice' not in sess
+
+
+def test_other_form_posts_without_a_csrf_token_are_still_refused(app, client, conversation):
+    """Only /logout turns a CSRF failure into a redirect."""
+    app.config['WTF_CSRF_ENABLED'] = True
+    conversation.gated = True
+    conversation.gating_type = 'voucher'
+    db.session.commit()
+    resp = client.post(f'/c/{conversation.slug}/v', data={'code': 'X7F3K9M2ABCD'})
+    assert resp.status_code == 400
 
 
 def test_protected_api_denies_unauthenticated_and_leaks_nothing(client, conversation):

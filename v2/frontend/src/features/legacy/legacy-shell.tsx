@@ -7,6 +7,7 @@ import {InternalLink} from '../../internal-link';
 import {useLoginHref} from '../../login-href';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {LogoutNotice} from './logout-notice';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'plain';
 
@@ -141,7 +142,8 @@ export function LegacyShell({
   const {data: session} = useSuspenseQuery(sessionQuery());
   const login = useLoginHref(session.links.login);
   const authenticated = session.state === 'authenticated';
-  // A voucher account is signed in but has no username to show (#368).
+  // A voucher account is signed in but has no username to show (#368): the header names
+  // the kind of account instead.
   const signedIn = authenticated || session.state === 'voucher';
   useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
 
@@ -197,10 +199,15 @@ export function LegacyShell({
           <div className="header-identity">
             {signedIn ? (
               <>
-                <span className="header-user-chip">
-                  <span className="header-user-chip-dot" />
-                  {authenticated ? session.user?.username : msg('base-voucher-account')}
-                </span>
+                {authenticated ? (
+                  <span className="header-user-chip">
+                    <span className="header-user-chip-dot" />
+                    {session.user?.username}
+                  </span>
+                ) : (
+                  // A status, not a name: plain text, no chip.
+                  <span className="header-account-kind">{msg('base-single-consultation-account')}</span>
+                )}
                 <form method="post" action={session.links.logout} style={{display: 'inline'}}>
                   <input type="hidden" name="csrf_token" value={session.csrfToken} />
                   <button type="submit" className="header-logout">{msg('base-log-out')}</button>
@@ -215,6 +222,8 @@ export function LegacyShell({
 
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
       <div id="toast-container">{toast}</div>
+      {/* The one-time logout note (#514): the same toast, at the top right under the header. */}
+      <div className="toast-container-top"><LogoutNotice /></div>
       <footer style={{display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
         <span dangerouslySetInnerHTML={richHtml(msg('base-footer-licence',
           `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style="color:inherit">`
