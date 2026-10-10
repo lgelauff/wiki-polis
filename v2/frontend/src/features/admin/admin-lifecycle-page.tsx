@@ -5,13 +5,16 @@ import {Link} from 'react-router-dom';
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {
+  adminCatalogQuery,
   adminLifecycleQuery,
   adminRoleRosterQuery,
   adminSettingsQuery,
   adminTerminationQuery,
+  conversationLaneQuery,
   createAdminPhase6Initialization,
   createAdminPublication,
   deleteAdminConversation,
+  putAdminArchive,
   putAdminPause,
   putAdminPhase,
   putAdminPhases,
@@ -229,8 +232,9 @@ function ClosedDescription({lifecycle}: {lifecycle: Lifecycle}) {
   return <>{closedAt ? closed : msg('adminconv-closed-undated')} {msg('adminconv-closed-cannot-reopen')}</>;
 }
 
-function DangerSection({conversationId, csrfToken, lifecycle, fail}: {
+function DangerSection({conversationId, csrfToken, lifecycle, fail, onArchive, archivePending}: {
   conversationId: number; csrfToken: string; lifecycle: Lifecycle; fail: (error: Error) => void;
+  onArchive: (archived: boolean) => void; archivePending: boolean;
 }) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(adminTerminationQuery(conversationId));
@@ -241,10 +245,21 @@ function DangerSection({conversationId, csrfToken, lifecycle, fail}: {
   });
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const closed = lifecycle.conversation.status === 'closed';
+  const archived = lifecycle.conversation.status === 'archived';
   const cleanup = lifecycle.publicationReadiness.windowOpen;
+  const deletionReason = data.deletion.state === 'unavailable'
+    ? msg('adminconv-delete-unverified')
+    : data.deletion.validVoteCount === 0
+      ? msg('adminconv-delete-available')
+      : archived
+        ? msg('adminconv-delete-archived', data.deletion.validVoteCount ?? 0)
+        : closed
+          ? msg('adminconv-delete-published', data.deletion.validVoteCount ?? 0)
+          : msg('adminconv-delete-hasvotes', data.deletion.validVoteCount ?? 0);
   return <div className="console-section"><div className="console-section-label" style={{color: 'var(--disagree)'}}>{msg('adminconv-danger-label')}</div><div className="danger-zone">
     {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-perm-closed')} · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>{msg('adminconv-view-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-publish-report')}</div>{cleanup ? <div className="danger-row-desc" dangerouslySetInnerHTML={richHtml(msg('adminconv-publish-irrev', escapeHtml(`/c/${lifecycle.conversation.slug}/report`)))} /> : <div className="danger-row-desc">{msg('adminconv-publish-unavailable')}</div>}</div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-publish'))) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">({msg('adminconv-met')})</span> : <span className="phase-check-unmet">{msg('adminconv-not-met')}</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">{msg('adminconv-publish-report')}</button></form> : <button type="button" className="btn-small btn-danger" disabled>{msg('adminconv-publish-report')}</button>}</div>}
-    <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-delete-title')}</div><div className="danger-row-desc">{msg('adminconv-delete-desc')} {data.deletion.state === 'unavailable' ? msg('adminconv-delete-unverified') : data.deletion.validVoteCount === 0 ? msg('adminconv-delete-available') : msg('adminconv-delete-hasvotes', data.deletion.validVoteCount ?? 0)}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-delete'))) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>{msg('adminconv-delete-btn')}</button></form></div>
+    <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-delete-title')}</div><div className="danger-row-desc">{msg('adminconv-delete-desc')} {deletionReason}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-delete'))) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>{msg('adminconv-delete-btn')}</button></form></div>
+    {archived && lifecycle.capabilities.archive ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-reopen-title')}</div><div className="danger-row-desc">{msg('adminconv-reopen-desc')}</div></div><button type="button" className="btn-small" disabled={archivePending} onClick={() => {if (globalThis.confirm(msg('adminconv-confirm-reopen'))) onArchive(false);}}>{msg('adminconv-reopen-btn')}</button></div> : data.deletion.state === 'blocked_by_votes' && lifecycle.capabilities.archive ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-archive-title')}</div><div className="danger-row-desc">{msg('adminconv-archive-desc')}</div></div><button type="button" className="btn-small" disabled={archivePending} onClick={() => {if (globalThis.confirm(msg('adminconv-confirm-archive'))) onArchive(true);}}>{msg('adminconv-archive-btn')}</button></div> : null}
   </div></div>;
 }
 
@@ -286,12 +301,24 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
 
   const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]); const receipt = phaseTransitionToast(msg, result.transition); notify(receipt.category, receipt.message);}, onError: fail});
   const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
+  const archiveMutation = useMutation({
+    mutationFn: (archived: boolean) => putAdminArchive(conversationId, {archived}, csrfToken),
+    onSuccess: (result) => {
+      setLifecycle(result.lifecycle);
+      setScheduleAt(utcInput(result.lifecycle.schedule.scheduledAt));
+      void queryClient.invalidateQueries({queryKey: adminCatalogQuery().queryKey});
+      void queryClient.invalidateQueries({queryKey: conversationLaneQuery('real').queryKey});
+      void queryClient.invalidateQueries({queryKey: conversationLaneQuery('demo').queryKey});
+    },
+    onError: fail,
+  });
   const scheduleMutation = useMutation({mutationFn: (body: components['schemas']['AdminScheduleRequest']) => putAdminSchedule(conversationId, body, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
   const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); if (!result.visibilitySynced) notify('error', msg('flash-phases-saved-sync-failed'));}, onError: fail});
   const initialization = useMutation({mutationFn: () => createAdminPhase6Initialization(conversationId, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
 
   const isAdmin = data.capabilities.useAdvancedPhases;
   const canOrganize = data.capabilities.editSettings;
+  const isArchived = data.conversation.status === 'archived';
   const isActive = data.conversation.status !== 'archived' && data.conversation.status !== 'closed';
   const current = data.phase.steps[data.phase.currentIndex]!;
   const transition = data.phase.transition;
@@ -307,7 +334,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
     toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
   >
     <div className="console">
-      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
+      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{isArchived ? msg('adminconv-status-archived') : !isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
       <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {accessPolicyLabel(msg, data.conversation.accessPolicy)} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
 
       <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">{msg('adminconv-phase-control')}</span></div>
@@ -336,7 +363,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
       </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
       {canOrganize && <ConfigurationSection settings={settings} />}
-      {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}
+      {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} onArchive={(archived) => archiveMutation.mutate(archived)} archivePending={archiveMutation.isPending} />}
     </div>
   </AdminShell>;
 }
