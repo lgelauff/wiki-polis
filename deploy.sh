@@ -134,8 +134,10 @@ elif command -v toolforge >/dev/null 2>&1; then
   # Toolforge bastions intentionally do not provide application runtimes. Run
   # the build in an ephemeral Node pod; the shared home mount makes the output
   # immediately available to the Python webservice after it restarts.
-  echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell..."
-  toolforge webservice --backend=kubernetes node20 shell -- \
+  # The default shell pod is too small for `tsc -b` + `vite build` (Node ran out of
+  # heap at ~256 MB on 2026-10-10), so ask for more memory explicitly.
+  echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell (2Gi)..."
+  toolforge webservice --backend=kubernetes --mem 2Gi node20 shell -- \
     "$HOME/wiki-polis/v2/bin/build-spa.sh"
 else
   echo "!!  ERROR: npm is required to build v2/frontend (Toolforge CLI fallback unavailable)." >&2

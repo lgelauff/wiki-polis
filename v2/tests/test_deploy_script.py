@@ -26,3 +26,8 @@ def test_deploy_script_prunes_refs_and_has_no_obsolete_component_warning():
     assert 'git fetch --prune origin' in source
     assert 'refs/pull/$PULL_REQUEST/head' in source
     assert 'particiapp-web-components.js' not in source
+
+
+def test_deploy_script_gives_the_spa_build_pod_enough_memory():
+    source = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    assert '--mem 2Gi node20 shell' in source
