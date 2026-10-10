@@ -1,9 +1,19 @@
 """Explore-phase read model and server-side Particiapi gateway."""
 
 import hashlib
+import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import requests
+
+logger = logging.getLogger(__name__)
+
+# Particiapi rejects its session cookie after PERMANENT_SESSION_LIFETIME (7 days upstream,
+# particiapi/config_defaults.py), while wiki-polis keeps that cookie in its own 30-day
+# session. Re-bind after 6 days so a cached cookie is never one Particiapi has expired.
+SESSION_MAX_AGE_SECONDS = 6 * 24 * 60 * 60
 
 
 class ExploreUpstreamError(RuntimeError):
@@ -48,34 +58,80 @@ def _problem_type(response) -> str | None:
 class ParticiapiSessionState:
     cookie: str | None = None
     csrf_token: str | None = None
+    # Epoch seconds of the bind that produced ``cookie``. None for state cached before this
+    # field existed: its age is unknown, so it is re-bound on first use.
+    bound_at: float | None = None
 
     @classmethod
     def from_dict(cls, value: dict | None):
-        value = value or {}
-        return cls(cookie=value.get('cookie'), csrf_token=value.get('csrfToken'))
+        value = value if isinstance(value, dict) else {}
+        bound_at = value.get('boundAt')
+        if isinstance(bound_at, bool) or not isinstance(bound_at, (int, float)):
+            bound_at = None
+        return cls(cookie=value.get('cookie'), csrf_token=value.get('csrfToken'),
+                   bound_at=bound_at)
 
     def to_dict(self) -> dict:
-        return {'cookie': self.cookie, 'csrfToken': self.csrf_token}
+        return {'cookie': self.cookie, 'csrfToken': self.csrf_token,
+                'boundAt': self.bound_at}
+
+
+def _is_empty_participant(payload: dict) -> bool:
+    return not payload.get('votes') and not payload.get('statements')
 
 
 class ExploreGateway:
     """Translate wiki-polis use cases into private Particiapi HTTP calls."""
 
     def __init__(self, *, base_url: str, transport, state: ParticiapiSessionState,
-                 subject: str | None, subject_secret: str | None):
+                 subject: str | None, subject_secret: str | None,
+                 log_context: str = '', clock: Callable[[], float] = time.time):
         self.base_url = base_url.rstrip('/')
         self.transport = transport
         self.state = state
         self.subject = subject
         self.subject_secret = subject_secret
+        # "phase=... conversation_id=..." only: never the xid, subject, username or pid.
+        self.log_context = log_context
+        self.clock = clock
+        self._bound_in_this_request = False
 
     def _cookies(self) -> dict:
         return {'session': self.state.cookie} if self.state.cookie else {}
 
-    def _refresh_session(self) -> None:
+    def rebind_reason(self) -> str | None:
+        """Why the cached session cannot be used as it is, or None when it can."""
+        if not (self.state.cookie and self.state.csrf_token):
+            return 'missing'
+        if self.state.bound_at is None:
+            return 'legacy'
+        if self.clock() - self.state.bound_at >= SESSION_MAX_AGE_SECONDS:
+            return 'age'
+        return None
+
+    def _rebind(self, reason: str) -> None:
         self.state.cookie = None
         self.state.csrf_token = None
-        self.ensure_session()
+        self._bind(reason)
+
+    def _refresh_session(self) -> None:
+        self._rebind('rejected')
+
+    def _rebind_if_empty(self, participant_payload: dict) -> bool:
+        """Re-bind once when a cached session reads as an all-empty participant.
+
+        Particiapi answers 200 with an empty participant when it no longer accepts the
+        session cookie, which would show every statement as unanswered and let a vote
+        overwrite an earlier one. The cost: a participant who genuinely has no votes or
+        statements yet pays one extra bind per read until they answer something. Only for
+        bound (trusted-sub) sessions: an unbound re-bind cannot recover the old anonymous
+        uid and would only mint a new one.
+        """
+        if (not (self.subject and self.subject_secret) or self._bound_in_this_request
+                or not _is_empty_participant(participant_payload)):
+            return False
+        self._rebind('empty-read')
+        return True
 
     def _retry_authenticated_request(self, response, send):
         if response.status_code not in {401, 403}:
@@ -84,9 +140,13 @@ class ExploreGateway:
         return send()
 
     def ensure_session(self) -> None:
-        if self.state.cookie and self.state.csrf_token:
-            return
+        reason = self.rebind_reason()
+        if reason is not None:
+            self._bind(reason)
+
+    def _bind(self, reason: str) -> None:
         binding = bool(self.subject and self.subject_secret)
+        logger.info('Particiapi session re-bind: reason=%s %s', reason, self.log_context)
         headers = {}
         if binding:
             headers = {
@@ -111,12 +171,16 @@ class ExploreGateway:
         payload = response.json() if response.content else {}
         if not isinstance(payload, dict):
             raise ExploreUpstreamError('Particiapi returned an invalid session payload.')
-        cookie = response.cookies.get('session') or self.state.cookie
+        # A bound session must come from this bind: never date an old cookie as fresh.
+        # (Unbound, Particiapi may refresh the anonymous session we sent without a new one.)
+        cookie = response.cookies.get('session') or (None if binding else self.state.cookie)
         csrf_token = payload.get('csrf_token')
         if not cookie or not csrf_token:
             raise ExploreUpstreamError('Particiapi returned an incomplete session.')
         self.state.cookie = cookie
         self.state.csrf_token = csrf_token
+        self.state.bound_at = self.clock()
+        self._bound_in_this_request = True
 
     def read(self, conversation_id: str) -> tuple[dict, dict]:
         def send():
@@ -139,6 +203,17 @@ class ExploreGateway:
                 statements, participant = send()
         except requests.RequestException as exc:
             raise ExploreUpstreamError('Particiapi is unavailable.') from exc
+        statement_payload, participant_payload = self._parse_read(statements, participant)
+        if self._rebind_if_empty(participant_payload):
+            try:
+                statements, participant = send()
+            except requests.RequestException as exc:
+                raise ExploreUpstreamError('Particiapi is unavailable.') from exc
+            statement_payload, participant_payload = self._parse_read(statements, participant)
+        return statement_payload, participant_payload
+
+    @staticmethod
+    def _parse_read(statements, participant) -> tuple[dict, dict]:
         if not statements.ok or not participant.ok:
             status = statements.status_code if not statements.ok else participant.status_code
             raise ExploreUpstreamError(f'Particiapi read failed with HTTP {status}.')
@@ -160,6 +235,16 @@ class ExploreGateway:
             response = self._retry_authenticated_request(send(), send)
         except requests.RequestException as exc:
             raise ExploreUpstreamError('Particiapi is unavailable.') from exc
+        payload = self._parse_participant(response)
+        if self._rebind_if_empty(payload):
+            try:
+                payload = self._parse_participant(send())
+            except requests.RequestException as exc:
+                raise ExploreUpstreamError('Particiapi is unavailable.') from exc
+        return payload
+
+    @staticmethod
+    def _parse_participant(response) -> dict:
         if not response.ok:
             raise ExploreUpstreamError(
                 f'Particiapi participant read failed with HTTP {response.status_code}.',

@@ -92,7 +92,7 @@ class AdminParticipantRoster:
 
 def build_admin_participant_roster(
     *, conversation: Conversation, polis_client, polis_pg_configured: bool,
-    participant_subject: Callable[[Participant], str],
+    participant_subject: Callable[[Participant], str | None],
 ) -> AdminParticipantRoster:
     """Build the single roster read model used by HTML and JSON adapters."""
     participations = (

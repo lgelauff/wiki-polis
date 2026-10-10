@@ -148,9 +148,8 @@ def test_stale_global_phase6_session_is_discarded_not_migrated(
     with auth_client.session_transaction() as browser_session:
         assert '_p6_pa' not in browser_session
         assert '_p6_csrf' not in browser_session
-        assert browser_session['phase6_api_sessions'][str(conv.id)] == {
-            'cookie': 'fresh-cookie', 'csrfToken': 'fresh-csrf',
-        }
+        stored = browser_session['phase6_api_sessions'][str(conv.id)]
+        assert (stored['cookie'], stored['csrfToken']) == ('fresh-cookie', 'fresh-csrf')
 
 
 # ── What the fix must NOT break ───────────────────────────────────────────────

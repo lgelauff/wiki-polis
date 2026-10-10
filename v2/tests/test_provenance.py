@@ -8,6 +8,7 @@ import logging
 from unittest.mock import MagicMock, patch
 
 from db import Conversation, Participant, Participation, StatementProvenance, db
+from tests.conftest import particiapi_state
 
 
 def _login_admin(client, app):
@@ -196,7 +197,7 @@ def _login_participant_for_submission(client, app):
         # Pre-seed the upstream session so a submit makes exactly one Particiapi
         # call, the way the API tests in test_explore_api.py do.
         s['particiapi_api_sessions'] = {
-            str(conv_id): {'cookie': 'existing-cookie', 'csrfToken': 'existing-csrf'},
+            str(conv_id): particiapi_state('existing-cookie', 'existing-csrf'),
         }
 
 

@@ -10,6 +10,7 @@ import pytest
 from db import (Argument, Conversation, ConversationBan, FeaturedStatement,
                 Participation, db)
 from services.informed_voting import build_informed_voting_state
+from tests.conftest import particiapi_state
 
 
 def _response(payload=None, *, status=200, cookies=None):
@@ -148,9 +149,7 @@ def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
         # Phase 6 sessions are keyed per conversation, exactly like Phase 2's
         # `particiapi_api_sessions` (see test_phase6_session_scope.py).
         browser_session['phase6_api_sessions'] = {
-            str(conversation.id): {
-                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
-            },
+            str(conversation.id): particiapi_state('phase6-cookie', 'phase6-csrf'),
         }
 
     with patch('app.polis_http.put', return_value=_response({})) as put:
@@ -195,9 +194,7 @@ def test_informed_vote_sends_polis_signs_for_every_choice(
         # Phase 6 sessions are keyed per conversation, exactly like Phase 2's
         # `particiapi_api_sessions` (see test_phase6_session_scope.py).
         browser_session['phase6_api_sessions'] = {
-            str(conversation.id): {
-                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
-            },
+            str(conversation.id): particiapi_state('phase6-cookie', 'phase6-csrf'),
         }
 
     with patch('app.polis_http.put', return_value=_response({})) as put:
@@ -226,9 +223,7 @@ def test_informed_vote_rejects_featured_statement_from_another_round(
     with auth_client.session_transaction() as browser_session:
         # Phase 6 sessions are keyed per conversation (see test_phase6_session_scope.py).
         browser_session['phase6_api_sessions'] = {
-            str(conversation.id): {
-                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
-            },
+            str(conversation.id): particiapi_state('phase6-cookie', 'phase6-csrf'),
         }
 
     with patch('app.polis_http.put') as put:

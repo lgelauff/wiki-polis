@@ -9,7 +9,9 @@ from services.conversation_lanes import participant_can_act, scheduled_transitio
 
 
 def _personal_contributions(conv: Conversation, participation: Participation,
-                            participant: Participant, polis_client) -> dict:
+                            participant: Participant, polis_client,
+                            participant_subject: Callable[[Participant, Conversation], str | None],
+                            ) -> dict:
     arguments_added = (
         db.session.query(db.func.count(Argument.id))
         .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
@@ -31,7 +33,9 @@ def _personal_contributions(conv: Conversation, participation: Participation,
     )
     statement_progress = None
     try:
-        progress = polis_client.get_statement_progress_bulk([conv.polis_id], participant.xid)
+        progress = polis_client.get_statement_progress_bulk(
+            {conv.polis_id: participant_subject(participant, conv)},
+        )
         if progress:
             statement_progress = progress.get(conv.polis_id)
     except Exception:
@@ -107,6 +111,7 @@ def build_conversation_about(
     phase_labels: dict[str, str],
     output_items: Callable[[Conversation], list[dict]],
     polis_client,
+    participant_subject: Callable[[Participant, Conversation], str | None],
     can_moderate: bool,
 ) -> ConversationAbout:
     phase_keys = active_phases(conversation)
@@ -142,7 +147,9 @@ def build_conversation_about(
         'argumentContributors': int(argument_counts[1] or 0),
     }
     personal = (
-        _personal_contributions(conversation, participation, participant, polis_client)
+        _personal_contributions(
+            conversation, participation, participant, polis_client, participant_subject,
+        )
         if participation and participant else None
     )
     moderation_log_count = AuditEvent.query.filter(
