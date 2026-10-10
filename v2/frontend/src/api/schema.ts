@@ -58,6 +58,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the consultations the caller holds a role in, for the Admin home */
+        get: operations["getAdminHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations": {
         parameters: {
             query?: never;
@@ -1070,6 +1087,8 @@ export interface components {
                     manage: string;
                 };
             }[];
+            /** @description Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins. */
+            configuredAdmins: string[];
             globalAdmins: {
                 participantId: number;
                 username: string;
@@ -1087,6 +1106,29 @@ export interface components {
             };
             links: {
                 self: string;
+            };
+        };
+        AdminHomeResponse: {
+            data: components["schemas"]["AdminHome"];
+        };
+        AdminHome: {
+            conversations: {
+                id: number;
+                title: string;
+                /** @enum {string} */
+                role: "Organizer" | "Moderator";
+                /** @enum {string} */
+                status: "active" | "paused" | "archived" | "closed";
+                openFlags: number;
+                /** @description Statements awaiting moderation; null when the voting service's database is unavailable or the consultation is closed or archived (not asked). */
+                pendingStatements: number | null;
+                links: {
+                    overview: string;
+                };
+            }[];
+            links: {
+                self: string;
+                siteAdminDashboard: string | null;
             };
         };
         AdminConversationCreateRequest: {
@@ -2841,6 +2883,44 @@ export interface operations {
             };
         };
     };
+    getAdminHome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin home */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHomeResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No role in any consultation and not a site admin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     postAdminConversation: {
         parameters: {
             query?: never;
@@ -3014,6 +3094,15 @@ export interface operations {
             };
             /** @description Participant not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A site admin cannot remove their own site admin access (own_site_admin_protected) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

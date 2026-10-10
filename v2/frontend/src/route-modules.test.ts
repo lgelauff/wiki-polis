@@ -4,6 +4,7 @@ import {routeChunkForPath} from './route-modules';
 
 test.each([
   ['/admin', 'admin'],
+  ['/site-admin', 'admin'],
   ['/admin/conversations/7/statements', 'admin'],
   ['/help/statements', 'guidance'],
   ['/accept/topic', 'participation-entry'],

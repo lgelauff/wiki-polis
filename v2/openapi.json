@@ -41,6 +41,13 @@
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/home": {
+      "get": {"operationId": "getAdminHome", "summary": "Return the consultations the caller holds a role in, for the Admin home", "responses": {
+        "200": {"description": "Admin home", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminHomeResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "No role in any consultation and not a site admin", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations": {
       "post": {"operationId": "postAdminConversation", "summary": "Create a local conversation and its managed voting conversation", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminConversationCreateRequest"}}}}, "responses": {
         "201": {"description": "Conversation creation receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminConversationCreateResponse"}}}},
@@ -66,7 +73,8 @@
         "200": {"description": "Membership receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
         "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "A site admin cannot remove their own site admin access (own_site_admin_protected)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
     "/admin/conversations/{conversationId}/termination": {
@@ -1107,12 +1115,18 @@
   "components": {
     "schemas": {
       "AdminCatalogResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminCatalog"}}},
-      "AdminCatalog": {"type": "object", "required": ["conversations", "globalAdmins", "phaseRoutes", "creation", "links"], "additionalProperties": false, "properties": {
+      "AdminCatalog": {"type": "object", "required": ["conversations", "configuredAdmins", "globalAdmins", "phaseRoutes", "creation", "links"], "additionalProperties": false, "properties": {
         "conversations": {"type": "array", "items": {"type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "createdAt", "links"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "archived", "closed"]}, "createdAt": {"type": ["string", "null"], "format": "date-time"}, "links": {"type": "object", "required": ["participant", "manage"], "additionalProperties": false, "properties": {"participant": {"type": "string"}, "manage": {"type": "string"}}}}}},
+        "configuredAdmins": {"type": "array", "items": {"type": "string"}, "description": "Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins."},
         "globalAdmins": {"type": "array", "items": {"type": "object", "required": ["participantId", "username"], "additionalProperties": false, "properties": {"participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"}}}},
         "phaseRoutes": {"type": "array", "items": {"type": "object", "required": ["key", "label", "description"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "description": {"type": "string"}}}},
         "creation": {"type": "object", "required": ["mode", "defaultModerationPolicy"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["managed", "manual_polis_id"]}, "defaultModerationPolicy": {"type": "string", "const": "moderate"}}},
         "links": {"type": "object", "required": ["self"], "additionalProperties": false, "properties": {"self": {"type": "string"}}}
+      }},
+      "AdminHomeResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminHome"}}},
+      "AdminHome": {"type": "object", "required": ["conversations", "links"], "additionalProperties": false, "properties": {
+        "conversations": {"type": "array", "items": {"type": "object", "required": ["id", "title", "role", "status", "openFlags", "pendingStatements", "links"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "title": {"type": "string"}, "role": {"type": "string", "enum": ["Organizer", "Moderator"]}, "status": {"type": "string", "enum": ["active", "paused", "archived", "closed"]}, "openFlags": {"type": "integer", "minimum": 0}, "pendingStatements": {"type": ["integer", "null"], "minimum": 0, "description": "Statements awaiting moderation; null when the voting service's database is unavailable or the consultation is closed or archived (not asked)."}, "links": {"type": "object", "required": ["overview"], "additionalProperties": false, "properties": {"overview": {"type": "string"}}}}}},
+        "links": {"type": "object", "required": ["self", "siteAdminDashboard"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "siteAdminDashboard": {"type": ["string", "null"]}}}
       }},
       "AdminConversationCreateRequest": {"type": "object", "required": ["slug", "title", "introHtml", "outroHtml", "accessPolicy", "phaseRoute", "eligibilityEventId", "eligibilityLabel", "polisId"], "additionalProperties": false, "properties": {"slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80}, "title": {"type": "string", "minLength": 1, "maxLength": 255}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "phaseRoute": {"type": "string", "minLength": 1}, "eligibilityEventId": {"type": "string", "maxLength": 80}, "eligibilityLabel": {"type": "string", "maxLength": 255}, "polisId": {"type": ["string", "null"]}}},
       "AdminConversationCreateResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["conversation", "links"], "additionalProperties": false, "properties": {"conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}}, "links": {"type": "object", "required": ["manage", "catalog"], "additionalProperties": false, "properties": {"manage": {"type": "string"}, "catalog": {"type": "string"}}}}}}},

@@ -99,7 +99,9 @@ TAGS:
     - admin-elig-label-ph
     - admin-globals-empty
     - admin-globals-heading
-    - admin-grant-heading
+    - admin-home-empty
+    - admin-home-heading
+    - admin-home-pending-count
     - admin-invitations-added
     - admin-invitations-list-heading
     - admin-invitations-not-signed-in
@@ -178,6 +180,7 @@ TAGS:
     - admin-shell-role-site-admin
     - admin-shell-sections
     - admin-shell-switch-aria
+    - admin-site-admin-configured
     - admin-site-dashboard
     - admin-site-grant-not-found
     - admin-site-group-other

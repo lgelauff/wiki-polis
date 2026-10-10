@@ -87,7 +87,7 @@ function ColumnHeads() {
 function Group({label, count, children}: {label: string; count: number; children: ReactNode}) {
   return (
     <details className="admin-group">
-      <summary>{label}{' '}<span className="admin-count">{count}</span></summary>
+      <summary>{label}{' '}<span className="admin-count">({count})</span></summary>
       <div className="admin-table-wrap">
         <table className="admin-table">
           <ColumnHeads />
@@ -98,7 +98,10 @@ function Group({label, count, children}: {label: string; count: number; children
   );
 }
 
-export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
+/** `ownUsername` is the signed-in site admin's own name: their own row offers no Remove,
+ *  since a site admin cannot remove their own site admin access (owner, 2026-10-09; the
+ *  server refuses it too, `own_site_admin_protected`). */
+export function AdminCatalogPage({csrfToken, ownUsername = null}: {csrfToken: string; ownUsername?: string | null}) {
   const msg = useMessage();
   const navigate = useNavigate();
   const options = adminCatalogQuery();
@@ -109,6 +112,8 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     phaseRoute: data.phaseRoutes[0]?.key ?? '',
   });
   const [username, setUsername] = useState('');
+  const [newOpen, setNewOpen] = useState(false);
+  const [adminsOpen, setAdminsOpen] = useState(false);
   // Each form's refusal is said at the form; the toast is for the row action (remove).
   const [createError, setCreateError] = useState<string | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
@@ -169,6 +174,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const archived = data.conversations.filter(
     (row) => row.accessPolicy !== 'demo' && row.status === 'archived',
   );
+  const adminCount = data.configuredAdmins.length + data.globalAdmins.length;
   const consultations = data.conversations.filter(
     (row) => row.accessPolicy !== 'demo' && row.status !== 'archived',
   );
@@ -207,8 +213,11 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         </Group>}
 
 
-        <div className="admin-form">
-          <h2>{msg('admin-new-conv-heading')}</h2>
+        {/* Folded by default (owner, 2026-10-09): creating a consultation is rare, the list is what a
+            site admin comes for. It stays open once opened, so an error after Create stays in view. */}
+        <details className="admin-form admin-fold" open={newOpen}
+          onToggle={(event) => setNewOpen(event.currentTarget.open)}>
+          <summary><h2>{msg('admin-new-conv-heading')}</h2></summary>
           <form onSubmit={submitConversation}>
             <label className="admin-field admin-field--medium">{msg('admin-label-slug')}<input type="text" className="admin-mono" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
             <label className="admin-field">{msg('admin-label-title')}<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
@@ -224,20 +233,29 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             </div>
             {createError && <p className="admin-error" role="alert">{createError}</p>}
           </form>
-        </div>
+        </details>
 
-        <h2>{msg('admin-globals-heading')}</h2>
-        {/* One row per site admin: a list, not a table, since there is one column. */}
-        {data.globalAdmins.length ? <ul className="admin-rows">
-          {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
-            <div className="admin-row__text">{admin.username}</div>
-            <div className="admin-row__actions">
-              <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
-            </div>
-          </li>)}
-        </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
-        <div className="admin-form">
-          <h2>{msg('admin-grant-heading')}</h2>
+        {/* One "Site admins" section: who they are, and directly below them the field that
+            grants it (owner, 2026-10-09). Folded like New consultation, and it stays open once
+            opened, so a refusal at the field stays in view. */}
+        <details className="admin-form admin-fold" open={adminsOpen}
+          onToggle={(event) => setAdminsOpen(event.currentTarget.open)}>
+          <summary><h2>{msg('admin-globals-heading')}</h2>{' '}<span className="admin-count">({adminCount})</span></summary>
+          {/* One row per site admin: a list, not a table, since there is one column. Those
+              set in the server configuration cannot be removed here, so they say where they
+              come from instead of offering Remove. Your own row is a plain row too: you cannot
+              remove your own site admin access. */}
+          {adminCount ? <ul className="admin-rows">
+            {data.configuredAdmins.map((name) => <li className="admin-row" key={`configured-${name}`}>
+              <div className="admin-row__text">{name}<span className="admin-row__suffix">{' · '}{msg('admin-site-admin-configured')}</span></div>
+            </li>)}
+            {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
+              <div className="admin-row__text">{admin.username}</div>
+              {admin.username !== ownUsername && <div className="admin-row__actions">
+                <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
+              </div>}
+            </li>)}
+          </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
           <form onSubmit={submitGrant}>
             <label className="admin-field admin-field--medium">{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" value={username}
               {...(grantError ? {'aria-invalid': true, 'aria-describedby': grantErrorId} : {})}
@@ -247,10 +265,9 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
               <button type="submit" className="admin-button admin-button--primary" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
             </div>
           </form>
-        </div>
+        </details>
 
         {/* What is not built yet, last on the page (see `AdminComing`). */}
-        <AdminComing what="Admin home, one table of the consultations you have a role in" issue={473} />
         <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />
         <AdminComing what="voucher use, correct and wrong codes per consultation" issue={473} />
       </div>

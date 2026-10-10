@@ -147,7 +147,7 @@ global-admin-only even though role *listing* is moderator-gated
 | `/api/v1/admin` | GET | **global admin only** | `_admin_catalog_api_payload` (app.py:3492) |
 | `/api/v1/admin/conversations` | POST | **global admin only** | `_create_admin_conversation_api_payload` (app.py:3507) |
 | `/api/v1/admin/global-admin-grants` | POST | **global admin only** | `_grant_global_admin_api_payload` (app.py:3559) |
-| `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only** | `_set_global_admin_api_payload` (app.py:3580) |
+| `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only**; a site admin cannot remove their own access (`granted: false` for the caller is refused with 409 `own_site_admin_protected`, nothing changed, no audit row) | `_set_global_admin_api_payload` (app.py:3725), `set_global_admin` (services/admin_catalog.py) |
 | `/api/v1/admin/conversations/<id>` | DELETE | **global admin only**; deletes only when Polis reports zero valid votes (`delete_empty_conversation`), otherwise refuses | `_delete_admin_conversation_api_payload` (app.py:4206) |
 | `/api/v1/admin/conversations/<id>/termination` | GET | **global admin only** | `_admin_termination_api_payload` (app.py:3776) |
 | `/api/v1/admin/conversations/<id>/pause` | PUT | **global admin only** | `_set_admin_pause_api_payload` (app.py:4332) |

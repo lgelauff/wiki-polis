@@ -8,11 +8,13 @@ import {
   deleteAdminConversation,
 } from '../../api/queries';
 import {InternalLink} from '../../internal-link';
+import {useMessage} from '../../i18n/messages';
 
 export function AdminTerminationPage({conversationId, csrfToken}: {
   conversationId: number;
   csrfToken: string;
 }) {
+  const msg = useMessage();
   const {data} = useSuspenseQuery(adminTerminationQuery(conversationId));
   const [confirmation, setConfirmation] = useState('');
   const mutation = useMutation({
@@ -48,8 +50,10 @@ export function AdminTerminationPage({conversationId, csrfToken}: {
   return (
     <main className="termination-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/admin">Admin panel</Link><span>/</span>
-        <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span>
+        {/* Deleting is for site admins, so the way back is their dashboard, where the receipt's
+            link goes too (#538); /admin is Admin home now. */}
+        <Link to="/site-admin">{msg('admin-site-dashboard')}</Link><span aria-hidden="true">/</span>
+        <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span aria-hidden="true">/</span>
         <span>Delete</span>
       </nav>
       <header className="termination-heading">

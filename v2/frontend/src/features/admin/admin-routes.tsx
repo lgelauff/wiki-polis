@@ -7,6 +7,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage} from '../../i18n/messages';
 import {AdminAccessBoundary} from './admin-access-boundary';
 import {AdminCatalogPage} from './admin-catalog-page';
+import {AdminHomePage} from './admin-home-page';
 import {AdminFeaturedPage} from './admin-featured-page';
 import {AdminInvitationsPage} from './admin-invitations-page';
 import {AdminLifecyclePage} from './admin-lifecycle-page';
@@ -71,6 +72,7 @@ function Protected({children}: {children: ReactNode}) {
 
 type AdminRouteKind =
   | 'catalog'
+  | 'home'
   | 'lifecycle'
   | 'moderation-featured'
   | 'moderation-flags'
@@ -88,7 +90,8 @@ type AdminRouteKind =
 function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
   const {conversationId: rawConversationId} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
-  if (kind === 'catalog') return <AdminCatalogPage csrfToken={session.csrfToken} />;
+  if (kind === 'catalog') return <AdminCatalogPage csrfToken={session.csrfToken} ownUsername={session.user?.username ?? null} />;
+  if (kind === 'home') return <AdminHomePage />;
 
   const conversationId = requiredConversationId(rawConversationId);
   switch (kind) {
@@ -125,7 +128,10 @@ function AdminRoute({kind}: {kind: AdminRouteKind}) {
   return <Protected><AdminRouteContent kind={kind} /></Protected>;
 }
 
+/** `/site-admin`: the site admin dashboard (#479), at its own address since #538. */
 export const AdminCatalogRoute = () => <AdminRoute kind="catalog" />;
+/** `/admin`: Admin home (#538), for everyone with a role and for site admins. */
+export const AdminHomeRoute = () => <AdminRoute kind="home" />;
 export const AdminLifecycleRoute = () => <AdminRoute kind="lifecycle" />;
 export const AdminSettingsBasicsRoute = () => <AdminRoute kind="settings-basics" />;
 export const AdminSettingsAccessRoute = () => <AdminRoute kind="settings-access" />;

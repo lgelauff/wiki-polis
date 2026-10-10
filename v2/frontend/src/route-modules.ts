@@ -24,7 +24,7 @@ const chunkLoaders: Record<RouteChunk, () => Promise<unknown>> = {
 
 export function routeChunkForPath(clientPath: string): RouteChunk | null {
   const pathname = clientPath.split(/[?#]/, 1)[0] ?? '';
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'admin';
+  if (pathname === '/admin' || pathname === '/site-admin' || pathname.startsWith('/admin/')) return 'admin';
   if (pathname === '/help/statements' || pathname === '/help/arguments') return 'guidance';
   if (/^\/accept\/[^/]+$/.test(pathname)) return 'participation-entry';
   if (/^\/c\/[^/]+\/report$/.test(pathname)) return 'results';
