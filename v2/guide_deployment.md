@@ -770,6 +770,7 @@ export DATABASE_URL
 | `pip install` breaks uWSGI | Always install inside `toolforge webservice python3.13 shell` |
 | OAuth callback fails silently | `uwsgi.ini` must have `[uwsgi]` section header + `buffer-size = 65536`; without the header uWSGI ignores the file |
 | `webservice restart` fails | Must run from `~`, not from inside the repo |
+| Frontend build dies with "JavaScript heap out of memory" in the `node20` shell pod | The default pod is too small for the SPA build; `deploy.sh` asks for `--mem 2Gi`. If a deploy stopped there, rerun the build by hand with the same flag, then `toolforge jobs load ~/wiki-polis/jobs.yaml` and restart the webservice |
 | No SQLite CLI on Toolforge | Use `python3 -c 'import sqlite3; ...'` if needed |
 | Replica DBs unavailable locally | `get_polis_stats()` already handles missing `POLIS_DATABASE_URL` gracefully |
 | "lseek: Illegal seek" in logs | uWSGI stdout rotation noise — safe to ignore |
