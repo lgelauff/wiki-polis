@@ -452,6 +452,17 @@ PY
 unset STAGING_DEV_TOKEN
 ```
 
+Or print one ready login link without the secret ever appearing on screen or in history:
+
+```bash
+STAGING_DEV_TOKEN=$(toolforge envvars show STAGING_DEV_TOKEN | tail -1 | awk '{print $NF}') python3 -c 'import hmac,hashlib,os;print("https://wiki-polis-dev.toolforge.org/dev/login/dev-user-3?token="+hmac.new(os.environ["STAGING_DEV_TOKEN"].encode(),b"dev-user-3",hashlib.sha256).hexdigest())'
+```
+
+The link works as a password for that test user: open it yourself, and don't paste it into a
+chat or an issue. To check that the route is switched on without a token, request
+`/dev/login/dev-user-1?token=x`: 403 means it is on (wrong token), 404 means it is off.
+For role checks see `guide_testing-tiers.md` → *Test identities and roles*.
+
 Then either open `/dev/login/dev-user-1?token=<token>` in a browser or let
 `synthetic_traffic.py` use the route directly:
 
