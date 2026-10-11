@@ -58,6 +58,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the consultations the caller holds a role in, for the Admin home */
+        get: operations["getAdminHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations": {
         parameters: {
             query?: never;
@@ -1070,9 +1087,13 @@ export interface components {
                     manage: string;
                 };
             }[];
+            /** @description Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins: an app grant for a configured username is shown once, as configured, and cannot be removed in the app; once the username is taken out of the server configuration, that grant is listed in globalAdmins again and can be removed. */
+            configuredAdmins: string[];
             globalAdmins: {
                 participantId: number;
                 username: string;
+                /** @description True on the caller's own row (matched by participant id); the caller cannot remove their own site admin access. */
+                self: boolean;
             }[];
             phaseRoutes: {
                 key: string;
@@ -1087,6 +1108,29 @@ export interface components {
             };
             links: {
                 self: string;
+            };
+        };
+        AdminHomeResponse: {
+            data: components["schemas"]["AdminHome"];
+        };
+        AdminHome: {
+            conversations: {
+                id: number;
+                title: string;
+                /** @enum {string} */
+                role: "Organizer" | "Moderator";
+                /** @enum {string} */
+                status: "active" | "paused" | "archived" | "closed";
+                openFlags: number;
+                /** @description Statements awaiting moderation; null when the voting service's database is unavailable or the consultation is closed or archived (not asked). */
+                pendingStatements: number | null;
+                links: {
+                    overview: string;
+                };
+            }[];
+            links: {
+                self: string;
+                siteAdminDashboard: string | null;
             };
         };
         AdminConversationCreateRequest: {
@@ -2841,6 +2885,44 @@ export interface operations {
             };
         };
     };
+    getAdminHome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin home */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHomeResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No role in any consultation and not a site admin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     postAdminConversation: {
         parameters: {
             query?: never;
@@ -2968,6 +3050,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description The username is already a site admin through the server configuration (already_configured_site_admin); nothing is granted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     putGlobalAdmin: {
@@ -3014,6 +3105,15 @@ export interface operations {
             };
             /** @description Participant not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Refused, nothing changed: a site admin cannot remove their own site admin access (own_site_admin_protected); a site admin set in the server configuration cannot be removed here (configured_site_admin_protected); a username set in the server configuration cannot also be granted in the app (already_configured_site_admin) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

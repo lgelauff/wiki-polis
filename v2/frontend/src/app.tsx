@@ -26,6 +26,7 @@ const ModerationLogPage = lazy(() => loadConversationReadPages().then((module) =
 const ResultsRoute = lazy(() => loadResultsPage().then((module) => ({default: module.ResultsRoute})));
 
 const AdminCatalogRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminCatalogRoute})));
+const AdminHomeRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminHomeRoute})));
 const AdminLifecycleRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminLifecycleRoute})));
 const AdminSettingsIndexRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsIndexRoute})));
 const AdminSectionIndexRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSectionIndexRoute})));
@@ -87,7 +88,8 @@ function DeferredRoutes() {
       <Route path="/c/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
       <Route path="/c/:slug/report" element={<ResultsRoute />} />
       <Route path="/c/:slug/reveal" element={<IdentityRevealLegacyPage />} />
-      <Route path="/admin" element={<AdminCatalogRoute />} />
+      <Route path="/admin" element={<AdminHomeRoute />} />
+      <Route path="/site-admin" element={<AdminCatalogRoute />} />
       <Route path="/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
       <Route path="/admin/conversations/:conversationId/settings" element={<AdminSettingsIndexRoute />} />
       <Route path="/admin/conversations/:conversationId/settings/basics" element={<AdminSettingsBasicsRoute />} />
@@ -124,7 +126,8 @@ function DeferredRoutes() {
       <Route path="/app/conversations/:slug/informed-voting" element={<ConversationWorkspacePage />} />
       <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
       <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
-      <Route path="/app/admin" element={<AdminCatalogRoute />} />
+      {/* The old dashboard address: the dashboard lives at /site-admin now (#538). */}
+      <Route path="/app/admin" element={<Navigate replace to="/site-admin" />} />
       <Route path="/app/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsIndexRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings/basics" element={<AdminSettingsBasicsRoute />} />

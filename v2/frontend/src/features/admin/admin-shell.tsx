@@ -156,7 +156,8 @@ function LanguageSwitcher({locales, active, msg}: {
  *  the frame is what marks it, and what builds the sidebar and the breadcrumb from it. */
 export type AdminSection = 'overview' | 'settings' | 'moderation' | 'content';
 
-/** Where a page sits: inside one consultation, or at site level (the site admin dashboard).
+/** Where a page sits: inside one consultation, or at site level (Admin home, or the site
+ *  admin dashboard).
  *
  *  A consultation page passes the lifecycle DTO the frame is built from. `section` is the
  *  section the page belongs to: the sidebar marks it and the breadcrumb names it. `subPage`
@@ -166,11 +167,12 @@ export type AdminSection = 'overview' | 'settings' | 'moderation' | 'content';
  *
  *  A site-level page passes `site`, its own name, which is the whole breadcrumb. It has no
  *  consultation, so the sidebar lists no sections: a link to a consultation's Settings from
- *  a page that is not about one would be a link to nowhere. */
+ *  a page that is not about one would be a link to nowhere. Admin home also passes `home`,
+ *  so the mark, which links there, is plain text on the page it would link to. */
 type ShellScope =
   | {data: Lifecycle; gatingType: GatingType; section: AdminSection; subPage?: string | undefined;
-    site?: undefined}
-  | {site: string; data?: undefined; gatingType?: undefined; section?: undefined;
+    site?: undefined; home?: undefined}
+  | {site: string; home?: boolean; data?: undefined; gatingType?: undefined; section?: undefined;
     subPage?: undefined};
 
 /** The frame every admin page sits in: sidebar, top bar, one main, one announcement region
@@ -178,7 +180,7 @@ type ShellScope =
  *  session) already carries, so a page inside it needs no new server field to get a
  *  complete frame. `title` is the document title, assembled by the page because the wording
  *  is that page's. */
-export function AdminShell({announcer, children, data, gatingType, section, site, subPage, title, toast}: {
+export function AdminShell({announcer, children, data, gatingType, home, section, site, subPage, title, toast}: {
   announcer?: Announcer | undefined;
   children: ReactNode;
   title: string;
@@ -224,8 +226,6 @@ export function AdminShell({announcer, children, data, gatingType, section, site
   return (
     <div className="admin-shell">
       <header className="admin-shell__topbar">
-        {/* At site level the dashboard says this itself, last on its page. */}
-        {data && <p className="admin-shell__coming" lang="en">Also coming: Admin home — not available yet (#473)</p>}
         <nav className="admin-shell__crumbs" aria-label={msg('admin-crumb-aria')}>
           <ol>
             {crumbs.map((crumb, index) => (
@@ -270,11 +270,13 @@ export function AdminShell({announcer, children, data, gatingType, section, site
       <div className="admin-shell__body">
         <nav className="admin-shell__side" aria-label={msg('admin-shell-nav-aria')}>
           <div className="admin-shell__brand">
-            {/* Admin home only for a site administrator: today's crumb sends an organizer
-                to a 403, and a link to a page you may not open is information as an action.
-                Not on the dashboard itself either: a link to where you are goes nowhere. */}
-            {session.capabilities.administerSite && data ? (
-              <InternalLink href="/admin" className="admin-shell__mark">
+            {/* The mark goes to Admin home (#538), which everyone in the console can open:
+                a role in a consultation, or site-wide access, is what got them here. Not on
+                Admin home itself: a link to where you are goes nowhere. */}
+            {!home ? (
+              // Named for where it goes, since the mark is the one way back to Admin home.
+              <InternalLink href="/admin" className="admin-shell__mark"
+                aria-label={msg('admin-home-heading')} title={msg('admin-home-heading')}>
                 <ConsoleMark />
                 <span className="admin-shell__mark-word">{msg('base-admin-badge')}</span>
               </InternalLink>
@@ -285,6 +287,21 @@ export function AdminShell({announcer, children, data, gatingType, section, site
               </span>
             )}
           </div>
+          {/* The site admin dashboard has its own address (#538); a site admin reaches it
+              from here on every console page, and on the dashboard it is the current page. */}
+          {session.capabilities.administerSite && (
+            <ul className="admin-shell__sections admin-shell__site-links">
+              <li className="admin-shell__section">
+                <InternalLink
+                  href="/site-admin"
+                  className="admin-shell__section-link"
+                  aria-current={!data && !home ? 'page' : undefined}
+                >
+                  <span>{msg('admin-site-dashboard')}</span>
+                </InternalLink>
+              </li>
+            </ul>
+          )}
           <p className="admin-shell__coming" lang="en">Also coming: switching between consultations — not available yet (#473)</p>
           {narrow && sections.length > 0 && (
             <button

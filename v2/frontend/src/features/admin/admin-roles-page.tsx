@@ -84,7 +84,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
     >
       <div>
       <section aria-labelledby="role-roster-heading">
-        <h2 id="role-roster-heading">{msg('admin-roles-assigned')}{' '}<span className="admin-count">{data.assignments.length}</span></h2>
+        <h2 id="role-roster-heading">{msg('admin-roles-assigned')}{' '}<span className="admin-count">({data.assignments.length})</span></h2>
         {/* One row per person, their roles as plain words after the name. */}
         {data.assignments.length ? <ul className="admin-rows">{data.assignments.map((row) => (
           <li className="admin-row" key={row.participantId}>

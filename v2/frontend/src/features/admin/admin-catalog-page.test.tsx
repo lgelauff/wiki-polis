@@ -54,6 +54,14 @@ function renderPage(locale: 'en' | 'provider' = 'en') {
   );
 }
 
+/** Opens the folded "Site admins" section, as a site admin does before granting or removing. */
+function openSiteAdmins() {
+  const heading = screen.getByRole('heading', {name: 'Site admins', level: 2});
+  const fold = heading.closest('details')!;
+  if (!fold.open) fireEvent.click(heading.closest('summary')!);
+  return fold;
+}
+
 /** The consultations table, as opposed to the site-admin one below it. */
 function conversationsTable() {
   return screen.getAllByRole('table')[0]!;
@@ -107,9 +115,9 @@ test('each status says the server’s word, archived included', async () => {
     expect(cell.children).toHaveLength(0);
     expect(cell.className).toBe('');
   }
-  // A group's count is a bare number beside its name, not in brackets.
+  // A group's count stands in brackets beside its name, so it does not read as part of it (owner, 2026-10-09).
   expect(screen.getByText('Practice Environment', {selector: 'summary'}).querySelector('.admin-count'))
-    .toHaveTextContent(/^1$/);
+    .toHaveTextContent(/^\(1\)$/);
 });
 
 test('the practice item and the archived one sit in collapsed groups, not in the table', async () => {
@@ -153,7 +161,8 @@ test('with neither a practice item nor an archived one there is no group at all'
   renderPage();
 
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
-  expect(document.querySelectorAll('details')).toHaveLength(0);
+  // The folded forms (New consultation, Site admins) are not groups of consultations.
+  expect(document.querySelectorAll('details.admin-group')).toHaveLength(0);
 });
 
 test('a title opens the participant view and "manage" the console, on one request', async () => {
@@ -188,6 +197,7 @@ test('granting site admin posts the username and says so when nobody has signed 
   ));
   renderPage();
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  openSiteAdmins();
 
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
@@ -223,6 +233,7 @@ test('retiring a site admin puts granted:false', async () => {
   ));
   renderPage();
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  openSiteAdmins();
 
   // The button carries whose role it removes after its visible word, so two rows' Removes
   // are told apart by name.
@@ -240,21 +251,19 @@ test('a 403 on the catalogue shows the boundary, not the page', async () => {
       <MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(await screen.findByRole('heading', {name: 'Forbidden'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Not allowed', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Site admin dashboard'})).toBeNull();
 });
 
-test('the three "Also coming" lines are muted English and nothing else', async () => {
+test('the two "Also coming" lines are muted English and nothing else', async () => {
   serve([row(1)]);
   renderPage();
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
 
   // The page's own lines; the console frame carries one of its own in the sidebar.
   const lines = within(document.querySelector<HTMLElement>('.admin-page')!).getAllByText(/^Also coming:/);
-  expect(lines).toHaveLength(3);
+  expect(lines).toHaveLength(2);
   expect(lines.map((line) => line.textContent)).toEqual([
-    'Also coming: Admin home, one table of the consultations you have a role in'
-    + ' — not available yet (#473)',
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'
     + ' a consultation — not available yet (#473)',
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
@@ -270,10 +279,10 @@ test('the three "Also coming" lines are muted English and nothing else', async (
   }
   // Last on the page, after everything that works.
   const page = lines[0]!.parentElement!;
-  expect(Array.from(page.children).slice(-3)).toEqual(lines);
+  expect(Array.from(page.children).slice(-2)).toEqual(lines);
 });
 
-test('under a key-id catalogue the page is all keys and the three coming lines', async () => {
+test('under a key-id catalogue the page is all keys and the two coming lines', async () => {
   renderAsQqx();
   serve([row(1)]);
   const {container} = renderPage('provider');
@@ -284,9 +293,7 @@ test('under a key-id catalogue the page is all keys and the three coming lines',
   const page = container.querySelector('.admin-page')!;
   expect(untranslatedCopy([page], [
     // The fixture's own words: participant data is never keyed.
-    'Consultation 1', 'consultation-1', 'adminuser', '— adminuser', 'Full consultation',
-    'Also coming: Admin home, one table of the consultations you have a role in'
-    + ' — not available yet (#473)',
+    'Consultation 1', 'consultation-1', 'Config admin', 'adminuser', '— adminuser', 'Full consultation',
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'
     + ' a consultation — not available yet (#473)',
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
@@ -317,4 +324,141 @@ test('the dashboard sits in the console frame, with no consultation sections in 
   expect(within(side).queryByRole('button', {name: 'Sections'})).toBeNull();
   // The participant side of a site-level page is the list of consultations.
   expect(screen.getByRole('link', {name: 'Participant'})).toHaveAttribute('href', '/consultations');
+});
+
+test('New consultation is folded behind its heading until opened, and stays open', async () => {
+  serve(mixed);
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const heading = screen.getByRole('heading', {name: 'New consultation', level: 2});
+  const fold = heading.closest('details')!;
+  expect(fold).not.toHaveAttribute('open');
+  expect(within(fold).getByRole('button', {name: 'Create consultation'})).not.toBeVisible();
+  fireEvent.click(heading.closest('summary')!);
+  expect(fold).toHaveAttribute('open');
+  expect(within(fold).getByRole('button', {name: 'Create consultation'})).toBeVisible();
+});
+
+test('Site admins is one folded section: the list, then the Grant field, under one heading', async () => {
+  serve(mixed);
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const heading = screen.getByRole('heading', {name: 'Site admins', level: 2});
+  const fold = heading.closest('details')!;
+  // Folded by default, with the count in brackets beside the heading, outside its name.
+  expect(fold).not.toHaveAttribute('open');
+  expect(heading.closest('summary')!.querySelector('.admin-count')).toHaveTextContent(/^\(2\)$/);
+  expect(within(fold).getByRole('button', {name: 'Grant'})).not.toBeVisible();
+  // No second heading for the grant form.
+  expect(screen.queryByRole('heading', {name: 'Grant site admin'})).toBeNull();
+
+  fireEvent.click(heading.closest('summary')!);
+  expect(fold).toHaveAttribute('open');
+  expect(within(fold).getByLabelText('Wikimedia username')).toBeVisible();
+  expect(within(fold).getByRole('button', {name: 'Grant'})).toBeVisible();
+  expect(within(fold).getByRole('button', {name: 'Remove — adminuser'})).toBeVisible();
+  // The list comes first, then the field.
+  const list = within(fold).getByRole('list');
+  expect(list.compareDocumentPosition(within(fold).getByLabelText('Wikimedia username'))
+    & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  // It stays open after a refusal at the field, so the refusal stays in view.
+  server.use(http.post(
+    new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString(),
+    () => HttpResponse.json({error: {code: 'participant_not_found', message: 'x'}}, {status: 404}),
+  ));
+  fireEvent.change(within(fold).getByLabelText('Wikimedia username'), {target: {value: 'Nobody'}});
+  fireEvent.click(within(fold).getByRole('button', {name: 'Grant'}));
+  expect(await within(fold).findByRole('alert')).toBeVisible();
+  expect(fold).toHaveAttribute('open');
+});
+
+test('a site admin set in the server configuration is listed with a note and no Remove', async () => {
+  serve(mixed);
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const fold = openSiteAdmins();
+  const rows = within(within(fold).getByRole('list')).getAllByRole('listitem');
+  expect(rows.map((item) => item.textContent)).toEqual([
+    'Config admin · set in the server configuration',
+    'adminuserRemove — adminuser',
+  ]);
+  // Configured on the server: the app cannot take it away, so there is nothing to press.
+  expect(within(rows[0]!).queryByRole('button')).toBeNull();
+  expect(within(rows[0]!).getByText(/set in the server configuration/)).toHaveClass('admin-row__suffix');
+  // Granted in the app: Remove, named for whose role it removes.
+  expect(within(rows[1]!).getByRole('button', {name: 'Remove — adminuser'})).toBeVisible();
+});
+
+test('with no site admin of either kind the section says so, and still offers Grant', async () => {
+  const fixture = adminCatalogFixture();
+  server.use(http.get(CATALOG_URL, () => HttpResponse.json({data: {...fixture, configuredAdmins: [], globalAdmins: []}})));
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const fold = openSiteAdmins();
+  expect(within(fold).getByText('No site admins yet.')).toBeVisible();
+  expect(within(fold).getByRole('button', {name: 'Grant'})).toBeVisible();
+});
+
+test('your own row offers no Remove; the row of another site admin does', async () => {
+  // Owner, 2026-10-09: a site admin cannot remove their own site admin access. Which row is
+  // yours is the server's `self` flag (matched by participant id), never the session's
+  // username, which may differ from the row's Wikimedia username.
+  const fixture = adminCatalogFixture(true, 1);
+  server.use(http.get(CATALOG_URL, () => HttpResponse.json({data: {...fixture, configuredAdmins: []}})));
+  renderPage('en');
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const fold = openSiteAdmins();
+  const rows = within(within(fold).getByRole('list')).getAllByRole('listitem');
+  expect(rows.map((item) => item.textContent)).toEqual([
+    'adminuser',
+    'Example editorRemove — Example editor',
+  ]);
+  expect(within(rows[0]!).queryByRole('button')).toBeNull();
+  expect(within(rows[1]!).getByRole('button', {name: 'Remove — Example editor'})).toBeVisible();
+});
+
+/** Each refusal of a site admin change says the console's own keyed words, not the server's
+ *  English (served here as a placeholder so the difference shows). */
+const PUT_URL = new URL('/api/v1/admin/global-admins/:participantId', globalThis.location.origin).toString();
+const GRANT_URL = new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString();
+
+test.each([
+  ['own_site_admin_protected', 'You cannot remove your own site admin access.'],
+  ['configured_site_admin_protected', 'This site admin is set in the server configuration and cannot be removed here.'],
+])('a 409 %s on Remove is said in keyed words', async (code, text) => {
+  server.use(http.put(PUT_URL, () => HttpResponse.json(
+    {error: {code, message: 'server text'}}, {status: 409},
+  )));
+  renderPage();
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  openSiteAdmins();
+
+  fireEvent.click(screen.getByRole('button', {name: 'Remove — adminuser'}));
+
+  const toast = (await screen.findByText(text)).closest('.toast');
+  expect(toast).toHaveClass('toast--error');
+  expect(screen.queryByText('server text')).toBeNull();
+});
+
+test('a 409 already_configured_site_admin on Grant is said at the field in keyed words', async () => {
+  server.use(http.post(GRANT_URL, () => HttpResponse.json(
+    {error: {code: 'already_configured_site_admin', message: 'server text'}}, {status: 409},
+  )));
+  renderPage();
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  openSiteAdmins();
+
+  fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Config admin'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This person is already a site admin through the server configuration.',
+  );
+  expect(screen.getByLabelText('Wikimedia username')).toHaveValue('Config admin');
 });

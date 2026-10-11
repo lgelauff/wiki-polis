@@ -2,7 +2,8 @@
 
 > **Class: tracks-code reference.** Verified against `bf07842` (2026-09-28) by enumerating
 > the live `app.url_map` and reading the app-layer function each endpoint delegates to.
-> Every `app.py:<line>` below was checked to point at the `def` it names.
+> Every `app.py:<line>` below was checked to point at the `def` it names. Rows changed since
+> then cite the function name alone, since line numbers drift with every edit.
 >
 > **Planned:** a generator that walks `app.url_map` and fails with a non-zero exit on a
 > route it cannot classify, so drift is a red build rather than a stale paragraph. Until it
@@ -142,12 +143,16 @@ global-admin-only even though role *listing* is moderator-gated
 (`_replace_admin_roles_api_payload` calls `_require_mod_for_conv` and then
 `_is_global_admin()` itself, `app.py:4428-4429`).
 
+Nothing prevents the last app-granted site admin from being removed (two app-granted site
+admins can remove each other). The way back in is the `admin-users` secret (`ADMIN_USERS`):
+a username named there is a site admin regardless of the database, and the app cannot remove it.
+
 | Route | Method | Authorization | Enforced by |
 |---|---|---|---|
-| `/api/v1/admin` | GET | **global admin only** | `_admin_catalog_api_payload` (app.py:3492) |
-| `/api/v1/admin/conversations` | POST | **global admin only** | `_create_admin_conversation_api_payload` (app.py:3507) |
-| `/api/v1/admin/global-admin-grants` | POST | **global admin only** | `_grant_global_admin_api_payload` (app.py:3559) |
-| `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only** | `_set_global_admin_api_payload` (app.py:3580) |
+| `/api/v1/admin` | GET | **global admin only** | `_admin_catalog_api_payload` (app.py) |
+| `/api/v1/admin/conversations` | POST | **global admin only** | `_create_admin_conversation_api_payload` (app.py) |
+| `/api/v1/admin/global-admin-grants` | POST | **global admin only**; a username set in the server configuration (`ADMIN_USERS`, the `admin-users` secret) is refused with 409 `already_configured_site_admin`, nothing granted, no audit row | `_grant_global_admin_api_payload` (app.py), `set_global_admin` (services/admin_catalog.py) |
+| `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only**; refused with 409, nothing changed, no audit row: removing a site admin set in the server configuration (`configured_site_admin_protected`, checked first), removing the caller's own access (`own_site_admin_protected`), or granting a configured username (`already_configured_site_admin`) | `_set_global_admin_api_payload` (app.py), `set_global_admin` (services/admin_catalog.py) |
 | `/api/v1/admin/conversations/<id>` | DELETE | **global admin only**; deletes only when Polis reports zero valid votes (`delete_empty_conversation`), otherwise refuses | `_delete_admin_conversation_api_payload` (app.py:4206) |
 | `/api/v1/admin/conversations/<id>/termination` | GET | **global admin only** | `_admin_termination_api_payload` (app.py:3776) |
 | `/api/v1/admin/conversations/<id>/pause` | PUT | **global admin only** | `_set_admin_pause_api_payload` (app.py:4332) |

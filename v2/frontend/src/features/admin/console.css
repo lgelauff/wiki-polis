@@ -888,7 +888,7 @@
   text-align: end;
 }
 
-/* A count is a bare number beside what it counts: muted, tabular, never in brackets. */
+/* A count stands in brackets beside what it counts, so it does not read as part of the name: muted, tabular. */
 .admin-shell .admin-count {
   color: var(--shell-muted);
   font-weight: 400;
@@ -1087,8 +1087,12 @@
    component: this rule lays the frame out in one column, the component decides what is in
    it. */
 @media (max-width: 1023px) {
+  /* The sidebar row is as tall as its content and the page takes the rest: on a short page
+     (Admin home with one row) the spare height would otherwise be split between the two,
+     and the sidebar would grow an empty grey band. */
   .admin-shell__body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
   }
 
   .admin-shell__side {
@@ -1120,4 +1124,14 @@
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* A form folded behind its heading (New consultation on the site admin dashboard). */
+.admin-shell .admin-fold > summary {
+  cursor: pointer;
+}
+
+.admin-shell .admin-fold > summary > h2 {
+  display: inline;
+  margin: 0;
 }
