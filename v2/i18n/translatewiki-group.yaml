@@ -196,6 +196,9 @@ TAGS:
     - adminconv-add-role
     - adminconv-admin-can-adjust
     - adminconv-advanced-note
+    - adminconv-archive-btn
+    - adminconv-archive-desc
+    - adminconv-archive-title
     - adminconv-assigned-count
     - adminconv-card-featured
     - adminconv-card-featured-desc
@@ -219,8 +222,10 @@ TAGS:
     - adminconv-closed-undated
     - adminconv-command-failed
     - adminconv-config-label
+    - adminconv-confirm-archive
     - adminconv-confirm-delete
     - adminconv-confirm-publish
+    - adminconv-confirm-reopen
     - adminconv-content-access
     - adminconv-countdown-days
     - adminconv-countdown-hours
@@ -229,9 +234,11 @@ TAGS:
     - adminconv-custom-state
     - adminconv-danger-label
     - adminconv-delete-available
+    - adminconv-delete-archived
     - adminconv-delete-btn
     - adminconv-delete-desc
     - adminconv-delete-hasvotes
+    - adminconv-delete-published
     - adminconv-delete-title
     - adminconv-delete-unverified
     - adminconv-doc-title
@@ -297,6 +304,9 @@ TAGS:
     - adminconv-rec-summary
     - adminconv-report-published-note
     - adminconv-report-unpublished-note
+    - adminconv-reopen-btn
+    - adminconv-reopen-desc
+    - adminconv-reopen-title
     - adminconv-resume
     - adminconv-reveal-ended
     - adminconv-reveal-open-date
@@ -316,6 +326,7 @@ TAGS:
     - adminconv-statements-voted-on
     - adminconv-stats-below
     - adminconv-stats-warning
+    - adminconv-status-archived
     - adminconv-status-active
     - adminconv-status-closed
     - adminconv-status-paused
