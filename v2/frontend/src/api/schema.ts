@@ -2447,6 +2447,7 @@ export interface components {
             dataAvailability: {
                 detailedCounts: boolean;
                 opinionGroups: boolean;
+                personalLens: boolean;
             };
             moderation: {
                 excludedStatements: number;
@@ -2470,6 +2471,17 @@ export interface components {
             agreementShift: number | null;
             /** @enum {string|null} */
             viewerChoice: "agree" | "pass" | "disagree" | null;
+            /** @enum {string|null} */
+            viewerGroupChoice: "agree" | "pass" | "disagree" | null;
+            viewerMatchesGroup: boolean | null;
+            personalDelta: components["schemas"]["PersonalDelta"] | null;
+        };
+        PersonalDelta: {
+            /** @enum {string} */
+            initial: "agree" | "pass" | "disagree";
+            /** @enum {string} */
+            informed: "agree" | "pass" | "disagree";
+            changed: boolean;
         };
         VoteTally: {
             counts: {

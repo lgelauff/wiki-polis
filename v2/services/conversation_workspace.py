@@ -76,7 +76,8 @@ def build_conversation_workspace(
         if (conversation.phase_informed_voting
                 and conversation.phase6_polis_conversation_id):
             tab_keys.append('informed-voting')
-        if conversation.phase_public_results and phase6_results_available:
+        if ((conversation.phase_public_results or conversation.phase_informed_voting)
+                and phase6_results_available):
             tab_keys.append('p6-results')
 
     phases = {

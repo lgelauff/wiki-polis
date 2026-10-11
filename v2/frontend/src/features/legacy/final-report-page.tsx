@@ -6,6 +6,7 @@ import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {usePercentFormat} from '../../i18n/numbers';
 import {outputMethod, outputPhase} from '../../i18n/server-labels';
+import {rankOpinionStatements} from './statement-rankings';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
@@ -28,18 +29,6 @@ function LegacyVoteBar({tally}: {tally: Tally}) {
     </div>
     <span className="p6-bar-label">{msg('report-bar-label', percentage(percentages.agree), percentage(percentages.pass), counts.voters)}</span>
   </>;
-}
-
-function initialOpinionRows(statements: Statement[]) {
-  const available = statements.filter((statement) => statement.initial && statement.initial.counts.voters > 0);
-  const consensus = [...available].sort((left, right) =>
-    (right.initial?.percentages.agree ?? 0) - (left.initial?.percentages.agree ?? 0)).slice(0, 3);
-  const divisive = [...available].sort((left, right) => {
-    const leftGap = Math.abs((left.initial?.percentages.agree ?? 0) - (left.initial?.percentages.disagree ?? 0));
-    const rightGap = Math.abs((right.initial?.percentages.agree ?? 0) - (right.initial?.percentages.disagree ?? 0));
-    return leftGap - rightGap;
-  }).slice(0, 3);
-  return {consensus, divisive};
 }
 
 function PlaceholderSections() {
@@ -104,7 +93,7 @@ function ParticipationSummary({report}: {report: Report}) {
 
 function InitialOpinions({statements}: {statements: Statement[]}) {
   const msg = useMessage();
-  const {consensus, divisive} = initialOpinionRows(statements);
+  const {consensus, divisive} = rankOpinionStatements(statements, 'initial');
   if (consensus.length === 0 && divisive.length === 0) return null;
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-initial-heading')} <span className="report-section-sub">{msg('report-initial-sub')}</span></h2>

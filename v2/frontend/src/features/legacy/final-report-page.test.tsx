@@ -25,7 +25,7 @@ const reportFixture: components['schemas']['ResultsReport'] = {
   // Deliberately unlike the catalogue's English, so a page echoing the server shows the marker.
   context: {phase: 'SERVER ENGLISH', status: 'final', method: 'SERVER ENGLISH'},
   participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
-  dataAvailability: {detailedCounts: true, opinionGroups: true},
+  dataAvailability: {detailedCounts: true, opinionGroups: true, personalLens: false},
   moderation: {excludedStatements: 1, excludedParticipants: 0},
   statements: [{
     featuredStatementId: 31,
@@ -34,6 +34,9 @@ const reportFixture: components['schemas']['ResultsReport'] = {
     informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
     agreementShift: 10,
     viewerChoice: null,
+    viewerGroupChoice: null,
+    viewerMatchesGroup: null,
+    personalDelta: null,
   }],
   opinionGroups: [{
     // Unlike the catalogue's "Group $1", so the server's label cannot pass for the mapped one.

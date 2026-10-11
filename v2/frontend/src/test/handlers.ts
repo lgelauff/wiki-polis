@@ -557,7 +557,7 @@ export const handlers = [
           method: 'Informed-voting tallies frozen at publication.',
         },
         participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
-        dataAvailability: {detailedCounts: true, opinionGroups: true},
+        dataAvailability: {detailedCounts: true, opinionGroups: true, personalLens: false},
         moderation: {excludedStatements: 1, excludedParticipants: 0},
         statements: [{
           featuredStatementId: 31,
@@ -572,6 +572,9 @@ export const handlers = [
           },
           agreementShift: 10,
           viewerChoice: null,
+          viewerGroupChoice: null,
+          viewerMatchesGroup: null,
+          personalDelta: null,
         }],
         opinionGroups: [{
           label: 'Group 1',
@@ -589,7 +592,7 @@ export const handlers = [
           about: '/c/community-strategy/about',
           identityReveal: '/c/community-strategy/reveal',
         },
-      },
+      } satisfies components['schemas']['ResultsReport'],
     }),
   ),
   http.get(

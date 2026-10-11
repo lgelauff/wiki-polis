@@ -484,6 +484,8 @@
     "conv-p6-reveal-link": "Link text inside {{msg-proto|conv-p6-reveal-open}}, leading to the identity-reveal page. A decorative arrow follows.",
     "conv-p6-badge-prelim": "Badge marking the results as preliminary.",
     "conv-p6-counts-unavailable": "Shown when detailed counts cannot be loaded.",
+    "conv-preliminary-results-intro": "Explains that the public preliminary-results panel is based only on the informed-vote round and does not compare it with the earlier round.",
+    "conv-preliminary-no-votes": "Shown when detailed counts are available but no informed-round statements have votes yet.",
     "conv-p6-table-aria": "Accessible label for the preliminary-results table.",
     "conv-col-statement": "Table column header for the statement text.\n{{Identical|Statement}}",
     "conv-col-initial-vote": "Table column header for the responses given in the first round (Phase 2), before anyone saw arguments.",

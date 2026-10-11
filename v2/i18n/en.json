@@ -485,6 +485,8 @@
     "conv-p6-reveal-link": "Open the linking page",
     "conv-p6-badge-prelim": "Preliminary",
     "conv-p6-counts-unavailable": "Detailed counts are not available right now.",
+    "conv-preliminary-results-intro": "These preliminary results show only the informed-vote round; they do not compare rounds.",
+    "conv-preliminary-no-votes": "No informed-vote results are available yet.",
     "conv-p6-table-aria": "Preliminary informed opinion results by statement",
     "conv-col-statement": "Statement",
     "conv-col-initial-vote": "Explore",
