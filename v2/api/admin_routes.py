@@ -41,7 +41,7 @@ from services.admin_featured import (
 from services.admin_catalog import (
     ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
     ConversationSlugConflict, GlobalAdminParticipantNotFound,
-    GlobalAdminSelfRevoke,
+    GlobalAdminAlreadyConfigured, GlobalAdminConfiguredProtected, GlobalAdminSelfRevoke,
 )
 from services.admin_settings import (
     AccessSettingsLocked, DemoSwitchForbidden, InvalidAccessSettings,
@@ -94,6 +94,13 @@ def register_admin_routes(
 ) -> None:
     """Register admin-only HTTP adapters on the shared API blueprint."""
     _no_store = no_store
+
+    def _already_configured_site_admin():
+        return error_response(
+            'already_configured_site_admin',
+            'This person is already a site admin through the server configuration.', 409,
+        )
+
     @bp.get('/admin')
     def get_admin_catalog():
         return _no_store(jsonify({'data': resolve_admin_catalog()}))
@@ -161,6 +168,8 @@ def register_admin_routes(
                 'participant_not_found',
                 'That account must sign in once before it can be granted access.', 404,
             )
+        except GlobalAdminAlreadyConfigured:
+            return _already_configured_site_admin()
         return _no_store(jsonify({'data': data})), 201 if data['changed'] else 200
 
     @bp.put('/admin/global-admins/<int:participant_id>')
@@ -176,6 +185,14 @@ def register_admin_routes(
         except GlobalAdminParticipantNotFound:
             return error_response(
                 'participant_not_found', 'That participant does not exist.', 404,
+            )
+        except GlobalAdminAlreadyConfigured:
+            return _already_configured_site_admin()
+        except GlobalAdminConfiguredProtected:
+            return error_response(
+                'configured_site_admin_protected',
+                'This site admin is set in the server configuration and cannot be removed here.',
+                409,
             )
         except GlobalAdminSelfRevoke:
             return error_response(

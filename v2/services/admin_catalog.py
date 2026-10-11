@@ -19,13 +19,24 @@ def conversation_status(conversation) -> str:
 def build_admin_catalog(
     *, conversations, global_admins, phase_routes: dict,
     managed_creation: bool, self_link: str, conversation_link, configured_admins=(),
+    actor_id: int | None = None,
 ) -> dict:
     """The site admin dashboard's data.
 
     There are two kinds of site admin. ``configured_admins`` are the usernames set in the
     server configuration (the ``admin-users`` secret); the app cannot remove them, so they
     are listed apart, without a participant id. ``global_admins`` are the participants
-    granted site admin in the app. A username in both is listed once, as configured.
+    granted site admin in the app.
+
+    A username in both (an app grant that predates the name being added to the secret) is
+    shown once, as configured, and the app refuses to remove it
+    (``configured_site_admin_protected``); it cannot be created through the app either
+    (``already_configured_site_admin``). Once the name is taken out of the secret, the app
+    grant shows again as an app-granted row that can be removed: nothing stays hidden after
+    the configuration stops covering it.
+
+    ``self`` marks the caller's own row (matched by participant id, as the server's
+    self-revoke guard is), so the client offers no Remove on it.
     """
     status = conversation_status
     configured = list(dict.fromkeys(name for name in configured_admins if name))
@@ -47,6 +58,7 @@ def build_admin_catalog(
         'globalAdmins': [{
             'participantId': row.id,
             'username': row.mw_username,
+            'self': actor_id is not None and row.id == actor_id,
         } for row in global_admins if row.mw_username not in configured],
         'phaseRoutes': [{
             'key': key,
@@ -142,6 +154,16 @@ class GlobalAdminSelfRevoke(RuntimeError):
     """A site admin may not remove their own site admin access (owner, 2026-10-09)."""
 
 
+class GlobalAdminConfiguredProtected(RuntimeError):
+    """A site admin set in the server configuration cannot be removed in the app
+    (owner, 2026-10-11)."""
+
+
+class GlobalAdminAlreadyConfigured(RuntimeError):
+    """A username set in the server configuration is already a site admin; granting it in
+    the app as well would leave a grant the dashboard does not show (owner, 2026-10-11)."""
+
+
 @dataclass(frozen=True)
 class ConversationCreationResult:
     conversation: object
@@ -184,10 +206,15 @@ def create_conversation(
 
 def set_global_admin(
     *, participant, granted: bool, session, audit, actor_id: int | None = None,
+    configured_usernames=(),
 ) -> bool:
     if participant is None:
         raise GlobalAdminParticipantNotFound()
-    # Refused before anything is written: no change, no audit row.
+    # Each refusal comes before anything is written: no change, no audit row. A configured
+    # site admin is refused first, so removing one's own configured access says why (the
+    # configuration) rather than the self-revoke rule.
+    if participant.mw_username and participant.mw_username in configured_usernames:
+        raise GlobalAdminAlreadyConfigured() if granted else GlobalAdminConfiguredProtected()
     if not granted and actor_id is not None and participant.id == actor_id:
         raise GlobalAdminSelfRevoke()
     changed = bool(participant.is_global_admin) != granted

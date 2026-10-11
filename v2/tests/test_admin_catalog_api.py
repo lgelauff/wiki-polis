@@ -37,6 +37,7 @@ def test_admin_catalog_is_privacy_safe_and_spa_linked(
     assert data['globalAdmins'] == [{
         'participantId': admin_participant.id,
         'username': 'adminuser',
+        'self': True,
     }]
     assert conversation.polis_id not in response.text
 
@@ -196,7 +197,7 @@ def test_site_admins_set_in_the_server_configuration_are_listed_apart(
 ):
     """Two kinds of site admin: set in the server configuration (`admin-users`, matched by
     username), which the app cannot remove, and granted in the app. A username in both is
-    listed once, as configured."""
+    listed once, as configured (and the app refuses to remove it, see below)."""
     import app as app_module
     participant.is_global_admin = True
     from db import db as _db
@@ -206,7 +207,9 @@ def test_site_admins_set_in_the_server_configuration_are_listed_apart(
     data = admin_client.get('/api/v1/admin').get_json()['data']
 
     assert data['configuredAdmins'] == ['Config-admin', 'adminuser']
-    assert data['globalAdmins'] == [{'participantId': participant.id, 'username': 'testuser'}]
+    assert data['globalAdmins'] == [
+        {'participantId': participant.id, 'username': 'testuser', 'self': False},
+    ]
 
 
 def test_a_configured_site_admin_with_no_participant_row_sees_the_dashboard(client, monkeypatch):
@@ -234,7 +237,7 @@ def test_build_admin_catalog_lists_a_username_once_and_keeps_order():
     )
 
     assert data['configuredAdmins'] == ['Zed', 'Both']
-    assert data['globalAdmins'] == [{'participantId': 4, 'username': 'Granted'}]
+    assert data['globalAdmins'] == [{'participantId': 4, 'username': 'Granted', 'self': False}]
 
 
 def test_openapi_documents_configured_site_admins(client):
@@ -242,3 +245,148 @@ def test_openapi_documents_configured_site_admins(client):
     catalog = spec['components']['schemas']['AdminCatalog']
     assert 'configuredAdmins' in catalog['required']
     assert catalog['properties']['configuredAdmins']['items'] == {'type': 'string'}
+
+
+def _site_admin_audit_count():
+    return AuditEvent.query.filter(
+        AuditEvent.operation.in_(['global_admin.grant', 'global_admin.revoke']),
+    ).count()
+
+
+def test_a_configured_site_admin_cannot_be_removed_in_the_app(
+    admin_client, participant, monkeypatch,
+):
+    """Owner, 2026-10-11: a site admin named in the server configuration is hard-coded. An app
+    grant for the same username (pre-existing data) is refused removal: nothing changed, no
+    audit row."""
+    import app as app_module
+    participant.is_global_admin = True
+    db.session.commit()
+    monkeypatch.setattr(app_module, 'ADMIN_USERS', ['testuser'])
+
+    response = admin_client.put(
+        f'/api/v1/admin/global-admins/{participant.id}', json={'granted': False},
+    )
+
+    assert response.status_code == 409
+    error = response.get_json()['error']
+    assert error['code'] == 'configured_site_admin_protected'
+    assert error['message'] == (
+        'This site admin is set in the server configuration and cannot be removed here.'
+    )
+    db.session.expire_all()
+    assert db.session.get(Participant, participant.id).is_global_admin is True
+    assert _site_admin_audit_count() == 0
+
+
+def test_removing_ones_own_configured_access_says_it_is_configured(
+    admin_client, admin_participant, monkeypatch,
+):
+    """The configuration refusal comes before the self-revoke one, so it says why."""
+    import app as app_module
+    monkeypatch.setattr(app_module, 'ADMIN_USERS', ['adminuser'])
+
+    response = admin_client.put(
+        f'/api/v1/admin/global-admins/{admin_participant.id}', json={'granted': False},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'configured_site_admin_protected'
+    db.session.expire_all()
+    assert db.session.get(Participant, admin_participant.id).is_global_admin is True
+    assert _site_admin_audit_count() == 0
+
+
+def test_a_configured_username_cannot_also_be_granted_in_the_app(
+    admin_client, participant, monkeypatch,
+):
+    """Owner, 2026-10-11: no hidden app grant can be created through the dashboard."""
+    import app as app_module
+    monkeypatch.setattr(app_module, 'ADMIN_USERS', ['testuser'])
+
+    by_name = admin_client.post(
+        '/api/v1/admin/global-admin-grants', json={'username': 'testuser'},
+    )
+    by_id = admin_client.put(
+        f'/api/v1/admin/global-admins/{participant.id}', json={'granted': True},
+    )
+
+    for response in (by_name, by_id):
+        assert response.status_code == 409
+        error = response.get_json()['error']
+        assert error['code'] == 'already_configured_site_admin'
+        assert error['message'] == (
+            'This person is already a site admin through the server configuration.'
+        )
+    db.session.expire_all()
+    assert db.session.get(Participant, participant.id).is_global_admin is False
+    assert _site_admin_audit_count() == 0
+
+
+def test_an_app_grant_reappears_once_the_name_leaves_the_configuration(
+    admin_client, participant, monkeypatch,
+):
+    """Shown once, as configured, while the secret names it; once it no longer does, the app
+    grant is an ordinary app-granted row again and can be removed."""
+    import app as app_module
+    participant.is_global_admin = True
+    db.session.commit()
+    monkeypatch.setattr(app_module, 'ADMIN_USERS', ['testuser'])
+    covered = admin_client.get('/api/v1/admin').get_json()['data']
+    assert covered['configuredAdmins'] == ['testuser']
+    assert participant.id not in [row['participantId'] for row in covered['globalAdmins']]
+
+    monkeypatch.setattr(app_module, 'ADMIN_USERS', [])
+    data = admin_client.get('/api/v1/admin').get_json()['data']
+
+    assert data['configuredAdmins'] == []
+    assert {'participantId': participant.id, 'username': 'testuser', 'self': False} in (
+        data['globalAdmins']
+    )
+    removed = admin_client.put(
+        f'/api/v1/admin/global-admins/{participant.id}', json={'granted': False},
+    )
+    assert removed.status_code == 200
+    assert removed.get_json()['data']['changed'] is True
+
+
+def test_self_marks_the_callers_own_row_by_participant_id(
+    admin_client, admin_participant, participant,
+):
+    """Matched by participant id, as the self-revoke guard is, not by the session's username,
+    which may differ from the row's Wikimedia username."""
+    participant.is_global_admin = True
+    db.session.commit()
+    with admin_client.session_transaction() as sess:
+        sess['username'] = 'Renamed admin'
+
+    rows = admin_client.get('/api/v1/admin').get_json()['data']['globalAdmins']
+
+    assert {row['username']: row['self'] for row in rows} == {
+        'adminuser': True, 'testuser': False,
+    }
+
+
+def test_build_admin_catalog_marks_self_only_for_the_actor():
+    from types import SimpleNamespace
+    from services.admin_catalog import build_admin_catalog
+    granted = [SimpleNamespace(id=3, mw_username='Me'), SimpleNamespace(id=4, mw_username='Other')]
+
+    data = build_admin_catalog(
+        conversations=[], global_admins=granted, phase_routes={}, managed_creation=False,
+        self_link='/api/v1/admin', conversation_link=str, actor_id=3,
+    )
+
+    assert [row['self'] for row in data['globalAdmins']] == [True, False]
+
+
+def test_openapi_documents_the_site_admin_refusals(client):
+    spec = client.get('/api/v1/openapi.json').get_json()
+    put_409 = spec['paths']['/admin/global-admins/{participantId}']['put']['responses']['409']
+    grant_409 = spec['paths']['/admin/global-admin-grants']['post']['responses']['409']
+    for code in ('own_site_admin_protected', 'configured_site_admin_protected',
+                 'already_configured_site_admin'):
+        assert code in put_409['description']
+    assert 'already_configured_site_admin' in grant_409['description']
+    row = spec['components']['schemas']['AdminCatalog']['properties']['globalAdmins']['items']
+    assert 'self' in row['required']

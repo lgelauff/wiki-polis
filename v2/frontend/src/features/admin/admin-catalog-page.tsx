@@ -42,6 +42,18 @@ function errorMessage(error: Error | null) {
   return error instanceof ApiContractError ? error.message : null;
 }
 
+/** The server's refusals of a site admin change, in the console's own keyed words rather
+ *  than the server's English. Nothing was changed when any of these comes back. */
+function siteAdminRefusal(msg: Message, error: Error): string | null {
+  if (!(error instanceof ApiContractError)) return null;
+  switch (error.code) {
+    case 'own_site_admin_protected': return msg('admin-site-own-protected');
+    case 'configured_site_admin_protected': return msg('admin-site-configured-protected');
+    case 'already_configured_site_admin': return msg('admin-site-already-configured');
+    default: return null;
+  }
+}
+
 /** One row: title, who gets in, where it stands, and the three ways into it. */
 function ConversationRow({conversation}: {conversation: Row}) {
   const msg = useMessage();
@@ -98,10 +110,11 @@ function Group({label, count, children}: {label: string; count: number; children
   );
 }
 
-/** `ownUsername` is the signed-in site admin's own name: their own row offers no Remove,
- *  since a site admin cannot remove their own site admin access (owner, 2026-10-09; the
- *  server refuses it too, `own_site_admin_protected`). */
-export function AdminCatalogPage({csrfToken, ownUsername = null}: {csrfToken: string; ownUsername?: string | null}) {
+/** The caller's own row in the site admin list comes marked `self` by the server (matched
+ *  by participant id, as its own guard is) and offers no Remove: a site admin cannot remove
+ *  their own site admin access (owner, 2026-10-09; the server refuses it too,
+ *  `own_site_admin_protected`). */
+export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const msg = useMessage();
   const navigate = useNavigate();
   const options = adminCatalogQuery();
@@ -143,7 +156,7 @@ export function AdminCatalogPage({csrfToken, ownUsername = null}: {csrfToken: st
       // as it always has been (#479, default f).
       setGrantError(error instanceof ApiContractError && error.code === 'participant_not_found'
         ? msg('admin-site-grant-not-found', username)
-        : errorMessage(error) ?? msg('adminconv-command-failed'));
+        : siteAdminRefusal(msg, error) ?? errorMessage(error) ?? msg('adminconv-command-failed'));
     },
   });
   const membership = useMutation({
@@ -156,7 +169,7 @@ export function AdminCatalogPage({csrfToken, ownUsername = null}: {csrfToken: st
     onError: (error: Error) => setToast({
       id: Date.now(),
       category: 'error',
-      message: errorMessage(error) ?? msg('adminconv-command-failed'),
+      message: siteAdminRefusal(msg, error) ?? errorMessage(error) ?? msg('adminconv-command-failed'),
     }),
   });
 
@@ -251,7 +264,7 @@ export function AdminCatalogPage({csrfToken, ownUsername = null}: {csrfToken: st
             </li>)}
             {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
               <div className="admin-row__text">{admin.username}</div>
-              {admin.username !== ownUsername && <div className="admin-row__actions">
+              {!admin.self && <div className="admin-row__actions">
                 <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
               </div>}
             </li>)}

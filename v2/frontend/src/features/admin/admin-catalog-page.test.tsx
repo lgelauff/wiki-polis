@@ -42,12 +42,12 @@ function serve(conversations: Row[]) {
 }
 
 /** `locale` is left to the provider by default so that `renderAsQqx()` can take effect. */
-function renderPage(locale: 'en' | 'provider' = 'en', ownUsername: string | null = null) {
+function renderPage(locale: 'en' | 'provider' = 'en') {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/admin']}>
         <Suspense fallback={null}>
-          <MessageProvider {...(locale === 'provider' ? {} : {locale})}><AdminCatalogPage csrfToken="test-csrf-token" ownUsername={ownUsername} /></MessageProvider>
+          <MessageProvider {...(locale === 'provider' ? {} : {locale})}><AdminCatalogPage csrfToken="test-csrf-token" /></MessageProvider>
         </Suspense>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -405,10 +405,12 @@ test('with no site admin of either kind the section says so, and still offers Gr
 });
 
 test('your own row offers no Remove; the row of another site admin does', async () => {
-  // Owner, 2026-10-09: a site admin cannot remove their own site admin access.
-  const fixture = adminCatalogFixture(true);
+  // Owner, 2026-10-09: a site admin cannot remove their own site admin access. Which row is
+  // yours is the server's `self` flag (matched by participant id), never the session's
+  // username, which may differ from the row's Wikimedia username.
+  const fixture = adminCatalogFixture(true, 1);
   server.use(http.get(CATALOG_URL, () => HttpResponse.json({data: {...fixture, configuredAdmins: []}})));
-  renderPage('en', 'adminuser');
+  renderPage('en');
 
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
   const fold = openSiteAdmins();
@@ -419,4 +421,44 @@ test('your own row offers no Remove; the row of another site admin does', async 
   ]);
   expect(within(rows[0]!).queryByRole('button')).toBeNull();
   expect(within(rows[1]!).getByRole('button', {name: 'Remove — Example editor'})).toBeVisible();
+});
+
+/** Each refusal of a site admin change says the console's own keyed words, not the server's
+ *  English (served here as a placeholder so the difference shows). */
+const PUT_URL = new URL('/api/v1/admin/global-admins/:participantId', globalThis.location.origin).toString();
+const GRANT_URL = new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString();
+
+test.each([
+  ['own_site_admin_protected', 'You cannot remove your own site admin access.'],
+  ['configured_site_admin_protected', 'This site admin is set in the server configuration and cannot be removed here.'],
+])('a 409 %s on Remove is said in keyed words', async (code, text) => {
+  server.use(http.put(PUT_URL, () => HttpResponse.json(
+    {error: {code, message: 'server text'}}, {status: 409},
+  )));
+  renderPage();
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  openSiteAdmins();
+
+  fireEvent.click(screen.getByRole('button', {name: 'Remove — adminuser'}));
+
+  const toast = (await screen.findByText(text)).closest('.toast');
+  expect(toast).toHaveClass('toast--error');
+  expect(screen.queryByText('server text')).toBeNull();
+});
+
+test('a 409 already_configured_site_admin on Grant is said at the field in keyed words', async () => {
+  server.use(http.post(GRANT_URL, () => HttpResponse.json(
+    {error: {code: 'already_configured_site_admin', message: 'server text'}}, {status: 409},
+  )));
+  renderPage();
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  openSiteAdmins();
+
+  fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Config admin'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This person is already a site admin through the server configuration.',
+  );
+  expect(screen.getByLabelText('Wikimedia username')).toHaveValue('Config admin');
 });

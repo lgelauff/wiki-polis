@@ -181,9 +181,12 @@ TAGS:
     - admin-shell-sections
     - admin-shell-switch-aria
     - admin-site-admin-configured
+    - admin-site-already-configured
+    - admin-site-configured-protected
     - admin-site-dashboard
     - admin-site-grant-not-found
     - admin-site-group-other
+    - admin-site-own-protected
     - admin-slug-ph
     - admin-slug-title
     - admin-status-active

@@ -1087,11 +1087,13 @@ export interface components {
                     manage: string;
                 };
             }[];
-            /** @description Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins. */
+            /** @description Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins: an app grant for a configured username is shown once, as configured, and cannot be removed in the app; once the username is taken out of the server configuration, that grant is listed in globalAdmins again and can be removed. */
             configuredAdmins: string[];
             globalAdmins: {
                 participantId: number;
                 username: string;
+                /** @description True on the caller's own row (matched by participant id); the caller cannot remove their own site admin access. */
+                self: boolean;
             }[];
             phaseRoutes: {
                 key: string;
@@ -3040,6 +3042,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description The username is already a site admin through the server configuration (already_configured_site_admin); nothing is granted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     putGlobalAdmin: {
@@ -3093,7 +3104,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A site admin cannot remove their own site admin access (own_site_admin_protected) */
+            /** @description Refused, nothing changed: a site admin cannot remove their own site admin access (own_site_admin_protected); a site admin set in the server configuration cannot be removed here (configured_site_admin_protected); a username set in the server configuration cannot also be granted in the app (already_configured_site_admin) */
             409: {
                 headers: {
                     [name: string]: unknown;

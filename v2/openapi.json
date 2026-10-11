@@ -64,7 +64,8 @@
         "201": {"description": "New grant receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
         "400": {"description": "Invalid username", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "404": {"description": "Participant has not signed in", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        "404": {"description": "Participant has not signed in", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "The username is already a site admin through the server configuration (already_configured_site_admin); nothing is granted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
     "/admin/global-admins/{participantId}": {
@@ -74,7 +75,7 @@
         "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "409": {"description": "A site admin cannot remove their own site admin access (own_site_admin_protected)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        "409": {"description": "Refused, nothing changed: a site admin cannot remove their own site admin access (own_site_admin_protected); a site admin set in the server configuration cannot be removed here (configured_site_admin_protected); a username set in the server configuration cannot also be granted in the app (already_configured_site_admin)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
     "/admin/conversations/{conversationId}/termination": {
@@ -1117,8 +1118,8 @@
       "AdminCatalogResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminCatalog"}}},
       "AdminCatalog": {"type": "object", "required": ["conversations", "configuredAdmins", "globalAdmins", "phaseRoutes", "creation", "links"], "additionalProperties": false, "properties": {
         "conversations": {"type": "array", "items": {"type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "createdAt", "links"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "archived", "closed"]}, "createdAt": {"type": ["string", "null"], "format": "date-time"}, "links": {"type": "object", "required": ["participant", "manage"], "additionalProperties": false, "properties": {"participant": {"type": "string"}, "manage": {"type": "string"}}}}}},
-        "configuredAdmins": {"type": "array", "items": {"type": "string"}, "description": "Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins."},
-        "globalAdmins": {"type": "array", "items": {"type": "object", "required": ["participantId", "username"], "additionalProperties": false, "properties": {"participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"}}}},
+        "configuredAdmins": {"type": "array", "items": {"type": "string"}, "description": "Site admins set in the server configuration (usernames); the app cannot remove them. A username here is not repeated in globalAdmins: an app grant for a configured username is shown once, as configured, and cannot be removed in the app; once the username is taken out of the server configuration, that grant is listed in globalAdmins again and can be removed."},
+        "globalAdmins": {"type": "array", "items": {"type": "object", "required": ["participantId", "username", "self"], "additionalProperties": false, "properties": {"participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "self": {"type": "boolean", "description": "True on the caller's own row (matched by participant id); the caller cannot remove their own site admin access."}}}},
         "phaseRoutes": {"type": "array", "items": {"type": "object", "required": ["key", "label", "description"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "description": {"type": "string"}}}},
         "creation": {"type": "object", "required": ["mode", "defaultModerationPolicy"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["managed", "manual_polis_id"]}, "defaultModerationPolicy": {"type": "string", "const": "moderate"}}},
         "links": {"type": "object", "required": ["self"], "additionalProperties": false, "properties": {"self": {"type": "string"}}}

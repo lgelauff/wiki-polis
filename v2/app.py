@@ -3589,6 +3589,7 @@ def _admin_catalog_api_payload() -> dict:
             Participant.mw_username,
         ).all(),
         configured_admins=ADMIN_USERS,
+        actor_id=getattr(_current_participant(), 'id', None),
         phase_routes=PHASE_ROUTES,
         managed_creation=_managed_polis_creation(),
         self_link=url_for('api_v1.get_admin_catalog'),
@@ -3708,6 +3709,7 @@ def _grant_global_admin_api_payload(body: dict) -> dict:
     ).first()
     changed = set_global_admin(
         participant=participant, granted=True, session=db.session,
+        configured_usernames=ADMIN_USERS,
         audit=lambda participant_id, granted: record_audit(
             'global_admin.grant', target_type='participant', target_id=participant_id,
         ),
@@ -3729,6 +3731,7 @@ def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     changed = set_global_admin(
         participant=participant, granted=body['granted'], session=db.session,
         actor_id=actor.id if actor is not None else None,
+        configured_usernames=ADMIN_USERS,
         audit=lambda target_id, granted: record_audit(
             'global_admin.grant' if granted else 'global_admin.revoke',
             target_type='participant', target_id=target_id,

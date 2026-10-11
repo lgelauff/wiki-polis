@@ -45,15 +45,16 @@ function statementWorkspaceFixture(
   };
 }
 
+/** `selfId` marks that participant's row as the caller's own (`self`), as the server does. */
 export function adminCatalogFixture(
-  includeNewAdmin = false,
+  includeNewAdmin = false, selfId: number | null = null,
 ): components['schemas']['AdminCatalog'] {
   return {
     conversations: [{id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', createdAt: '2026-08-01T10:00:00Z', links: {participant: '/c/community-strategy', manage: '/admin/conversations/7'}}],
     configuredAdmins: ['Config admin'],
     globalAdmins: [
-      {participantId: 1, username: 'adminuser'},
-      ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor'}] : []),
+      {participantId: 1, username: 'adminuser', self: selfId === 1},
+      ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor', self: selfId === 23}] : []),
     ],
     phaseRoutes: [{key: 'default_7', label: 'Full consultation', description: 'Explore through informed voting and report.'}],
     creation: {mode: 'manual_polis_id', defaultModerationPolicy: 'moderate'},
