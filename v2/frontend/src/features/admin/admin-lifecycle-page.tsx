@@ -1,6 +1,5 @@
 import {Fragment, useCallback, useLayoutEffect, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -182,7 +181,7 @@ function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
  * how a change made on one screen gets silently written back by a stale copy held on the
  * other: the settings endpoint takes the whole representation at once, so each form had to
  * echo the other's fields untouched to avoid clobbering them. Editing now lives on the
- * settings page alone, which the management grid above links to.
+ * settings page alone, which the console sidebar links to.
  *
  * What is left is read-only, and is deliberately what the settings page does *not* show:
  * the phase route and the Polis conversation id, neither of them writable after launch,
@@ -297,7 +296,6 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const transition = data.phase.transition;
   const unmet = transition?.preconditions.filter((row) => row.met === false).length ?? 0;
   const allChecked = Boolean(transition) && transition!.preconditions.every((row) => phaseChecks.includes(row.id));
-  const roleCount = roles.assignments.reduce((total, row) => total + row.roles.length, 0);
 
   return <AdminShell
     title={msg('adminconv-doc-title', data.conversation.title)}
@@ -325,15 +323,6 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
       {isAdmin && <div className="mode-advanced-part"><div className="box-adv-note"><span aria-hidden="true">⚠️</span><span dangerouslySetInnerHTML={richHtml(msg('adminconv-advanced-note'))} /></div><form className="phases-form" style={{flexWrap: 'wrap', gap: '.75rem', marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); phasesMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />{data.phase.advancedControls.map((row) => <label key={row.key}><input type="checkbox" checked={advancedKeys.includes(row.key)} onChange={() => setAdvancedKeys((items) => items.includes(row.key) ? items.filter((item) => item !== row.key) : [...items, row.key])} /> {advancedPhaseLabel(msg, row.key, row.label)}</label>)}<button type="submit" className="btn-small phases-save">{msg('adminconv-save-phases')}</button></form>{data.phase.activeKeys.includes('informed_voting') && <div style={{marginTop: '1rem'}}><div className="console-section-label">{msg('adminconv-p6-setup-label')}</div>{data.phase.phase6Setup?.polisConversationId ? <p style={{fontSize: 13}}>{msg('adminconv-p6-conv')} <code>{data.phase.phase6Setup.polisConversationId}</code> · {msg('adminconv-p6-seeded', data.phase.phase6Setup.seededStatementCount, data.phase.phase6Setup.confirmedStatementCount)}</p> : <><p style={{fontSize: 13, marginBottom: '.5rem'}}>{msg('adminconv-p6-not-init')}</p><form onSubmit={(event) => {event.preventDefault(); initialization.mutate();}}><button type="submit" className="btn-small">{msg('adminconv-p6-init-btn')}</button></form></>}</div>}</div>}
       </div>
 
-      <div className="console-section"><div className="console-section-label">{msg('adminconv-content-access')}</div><div className="manage-grid">
-        <Link className="manage-card" to={data.links.statements}><div className="manage-card-title">{msg('adminconv-card-statements')}</div><div className="manage-card-desc">{msg('adminconv-card-statements-desc')}</div></Link>
-        <Link className="manage-card" to={data.links.invitations}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-invite-count', data.counts.invitations)}</span></div><div className="manage-card-title">{msg('adminconv-card-invites')}</div><div className="manage-card-desc">{msg('adminconv-card-invites-desc')}</div></Link>
-        <Link className="manage-card" to={data.links.featuredStatements}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-featured-count', data.counts.featuredStatements)}</span></div><div className="manage-card-title">{msg('adminconv-card-featured')}</div><div className="manage-card-desc">{msg('adminconv-card-featured-desc')}</div></Link>
-        <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-joined', data.counts.participants)}</span></div><div className="manage-card-title">{msg('adminconv-card-participants')}</div><div className="manage-card-desc">{msg('adminconv-card-participants-desc')}</div></Link>
-        <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-open-count', data.counts.openFlags)}</span></div><div className="manage-card-title">{msg('adminconv-card-modqueue')}</div><div className="manage-card-desc">{msg('adminconv-card-modqueue-desc')}</div></Link>
-        <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-assigned-count', roleCount)}</span></div><div className="manage-card-title">{msg('adminconv-roles-label')}</div><div className="manage-card-desc">{msg('adminconv-card-roles-desc')}</div></Link>
-        <Link className="manage-card" to={data.links.settings}><div className="manage-card-title">{msg('admin-overview-card-settings')}</div><div className="manage-card-desc">{msg('admin-overview-card-settings-desc')}</div></Link>
-      </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
       {canOrganize && <ConfigurationSection settings={settings} />}
       {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}

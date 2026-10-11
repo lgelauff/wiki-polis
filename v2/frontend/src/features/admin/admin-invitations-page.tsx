@@ -113,11 +113,14 @@ export function AdminInvitationsPage({
   // person has joined *this* consultation. "Not signed in yet" = no account with this
   // exact name has logged in to the site yet, so the invitation is not bound to one.
   // Invites only admit anyone while the invitation list is the answer to who gets in, so
-  // only then can more be added. Otherwise one line, shown to every viewer above the form
-  // and the list, says the list is not in effect and names the access policy that is (#478);
-  // for an organizer the add form is greyed out, with that line as its reason. The stored
-  // list stays shown either way: with its Remove buttons for an organizer, without them for
-  // a moderator.
+  // only then can more be added. Otherwise the tab is still there and looks like any other
+  // tab (owner, 2026-10-09), but its content is greyed: one line, shown to every viewer
+  // above the form and the list, says the list is not in effect and names the access policy
+  // that is (#478); for an organizer the add form is disabled, with that line as its reason;
+  // and the stored list is shown muted, not removed. Remove stays usable on the muted list
+  // for an organizer or site admin: stored invitations may need cleaning up whatever the
+  // answer is, and a removal changes nothing about who gets in. A moderator reads the list
+  // either way.
   const invitationList = settings.conversation.gatingType === 'invite_only';
   // Organizers (and site admins) manage the list; a moderator reads it: no add form and no
   // Remove at all, not greyed out (owner, 2026-10-09).
@@ -134,7 +137,7 @@ export function AdminInvitationsPage({
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
       announcer={announcer}
     >
-      <div>
+      <div className={invitationList ? undefined : 'admin-muted'}>
         {!invitationList && <p className="admin-note" id={unavailableId}>
           {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
         </p>}
@@ -169,7 +172,8 @@ export function AdminInvitationsPage({
             is compared. Its own heading, for every viewer: a moderator has no add form, and
             the list would otherwise be a bare list under the tab strip. Not the tab's name,
             which the frame does not repeat as a heading. */}
-        <section aria-labelledby={listHeadingId}>
+        <section aria-labelledby={listHeadingId}
+          aria-describedby={invitationList ? undefined : unavailableId}>
           <h2 id={listHeadingId}>{msg('admin-invitations-list-heading')}</h2>
           {data.invitations.length ? (
             <ul className="admin-rows" ref={listRef}>

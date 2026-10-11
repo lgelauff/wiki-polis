@@ -633,6 +633,19 @@
   font-size: 13px;
 }
 
+/* A tab's content while it does not decide anything (the Invitations tab while access is
+   not an invitation list): greyed, not removed. Greyed by colour rather than the disabled
+   fade, because a control in it may still work -- an organizer can still remove a stored
+   invitation -- and it should read as part of the muted list, not as switched off. */
+.admin-shell .admin-muted :is(h2, .admin-rows, .admin-row__text, .admin-row__counts,
+  .admin-row__text-button, .admin-empty) {
+  color: var(--shell-muted);
+}
+
+.admin-shell .admin-muted .admin-rows {
+  background: var(--shell-sunken);
+}
+
 /* A row's counts and facts sit between the text and the actions, and wrap under the text
    at phone width rather than squeezing it. */
 .admin-shell .admin-row__counts {

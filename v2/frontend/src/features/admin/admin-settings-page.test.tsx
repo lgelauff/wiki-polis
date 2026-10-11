@@ -190,11 +190,13 @@ test('the tab strip lists the four tabs in order and marks exactly one', async (
 });
 
 test.each([
-  ['invite_only', 'Invitations'],
-  ['wiki_based', 'Invitations'],
-  [null, 'Invitations'],
-  ['voucher', 'Vouchers'],
-] as const)('who-gets-in %s names the third tab %s', async (gatingType, label) => {
+  ['invite_only', false],
+  ['wiki_based', false],
+  [null, false],
+  ['voucher', true],
+] as const)('who-gets-in %s: Invitations is always in the strip, Access codes only for codes', async (gatingType, codes) => {
+  // Owner, 2026-10-09: Invitations is always a tab (stored invitations can be read and
+  // removed whatever the answer is); Access codes sits next to it on a code consultation.
   serve({...settings, conversation: {
     ...settings.conversation, gated: gatingType !== null, gatingType,
     accessPolicy: gatingType === 'voucher' ? 'invite_only' : 'public',
@@ -202,16 +204,20 @@ test.each([
   renderPage('basics');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(within(tabs()).getByRole('link', {name: label})).toBeVisible();
-  const other = label === 'Vouchers' ? 'Invitations' : 'Vouchers';
-  expect(within(tabs()).queryByRole('link', {name: other})).toBeNull();
-  // Whichever the answer is, the strip points at the tab of this consultation's own kind.
-  expect(within(tabs()).getByRole('link', {name: label})).toHaveAttribute(
-    'href',
-    gatingType === 'voucher'
-      ? '/admin/conversations/7/settings/vouchers'
-      : '/admin/conversations/7/settings/invitations',
+  expect(within(tabs()).getAllByRole('link').map((link) => link.textContent)).toEqual(
+    codes
+      ? ['Basics', 'Access', 'Invitations', 'Access codes', 'Roles']
+      : ['Basics', 'Access', 'Invitations', 'Roles'],
   );
+  expect(within(tabs()).getByRole('link', {name: 'Invitations'}))
+    .toHaveAttribute('href', '/admin/conversations/7/settings/invitations');
+  if (codes) {
+    // The address keeps its old word; only the name changed.
+    expect(within(tabs()).getByRole('link', {name: 'Access codes'}))
+      .toHaveAttribute('href', '/admin/conversations/7/settings/vouchers');
+  }
+  // "Voucher" is the old word; the strip no longer says it.
+  expect(tabs()).not.toHaveTextContent(/voucher/i);
 });
 
 test('the access tab marks itself in the strip', async () => {
@@ -978,10 +984,9 @@ test('saving Access sends the Basics fields back as they were loaded', async () 
   });
 });
 
-test('a voucher consultation can be sent to Invitations, which still says what it is', async () => {
-  // `…/settings/invitations` stays routable for every gating type (#478 item 4), so a link
-  // from an e-mail or an old bookmark does not land on a page that says it is the wrong
-  // thing for this consultation.
+test('on an access-code consultation, Invitations is a tab of its own and marks itself', async () => {
+  // `…/settings/invitations` is a tab for every gating type: on a code consultation it sits
+  // next to Access codes, and its own page marks it, not Access codes.
   serve({...settings, conversation: {
     ...settings.conversation, gated: true, gatingType: 'voucher', accessPolicy: 'invite_only',
   }});
@@ -989,12 +994,13 @@ test('a voucher consultation can be sent to Invitations, which still says what i
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
-  // The strip still names the tab this consultation uses.
-  expect(within(tabs()).getByRole('link', {name: 'Vouchers'}))
-    .toHaveAttribute('href', '/admin/conversations/7/settings/vouchers');
+  expect(within(tabs()).getByRole('link', {name: 'Invitations'}))
+    .toHaveAttribute('aria-current', 'page');
+  expect(within(tabs()).getByRole('link', {name: 'Access codes'}))
+    .not.toHaveAttribute('aria-current');
 });
 
-test('the Vouchers tab is the strip and one line about what is not built yet', async () => {
+test('the Access codes tab is the strip and one line about what is not built yet', async () => {
   serve({...settings, conversation: {
     ...settings.conversation, gated: true, gatingType: 'voucher', accessPolicy: 'invite_only',
   }});
@@ -1011,15 +1017,15 @@ test('the Vouchers tab is the strip and one line about what is not built yet', a
   );
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.queryByRole('heading', {name: 'Vouchers'})).toBeNull();
-  expect(within(tabs()).getByRole('link', {name: 'Vouchers'}))
+  expect(screen.queryByRole('heading', {name: 'Access codes'})).toBeNull();
+  expect(within(tabs()).getByRole('link', {name: 'Access codes'}))
     .toHaveAttribute('aria-current', 'page');
-  // Every voucher action is parked (#368): the page says so once instead of offering a
+  // Every access-code action is parked (#368): the page says so once instead of offering a
   // control that saves nothing.
   const lines = within(screen.getByRole('main')).getAllByText(/^Also coming:/);
   expect(lines).toHaveLength(1);
   expect(lines[0]).toHaveTextContent(
-    'Also coming: generating, importing, checking and withdrawing voucher codes here'
+    'Also coming: generating, importing, checking and withdrawing access codes here'
     + ' — not available yet (#368)',
   );
   expect(lines[0]).toHaveAttribute('lang', 'en');
@@ -1031,13 +1037,15 @@ test('the Vouchers tab is the strip and one line about what is not built yet', a
 });
 
 test.each([
-  ['voucher', 'invitations', 'Vouchers'],
-  ['invite_only', 'vouchers', 'Invitations'],
-] as const)('a %s consultation on the %s tab still marks one tab as current', async (
+  ['voucher', 'invitations', 'Invitations'],
+  ['voucher', 'vouchers', 'Access codes'],
+  ['invite_only', 'invitations', 'Invitations'],
+  ['invite_only', 'vouchers', 'Access codes'],
+] as const)('a %s consultation on the %s page marks exactly that tab as current', async (
   gatingType, page, label,
 ) => {
-  // The third tab is named by this consultation's kind, while the URL may be the other
-  // kind's (an old link, a changed answer). The strip still says "you are here" once.
+  // Each page marks its own tab, once. The Access codes page, reached by an old link after
+  // the answer changed from codes, still shows its own tab, so the strip says where you are.
   serve({...settings, conversation: {
     ...settings.conversation, gated: true, gatingType, accessPolicy: 'invite_only',
   }});
