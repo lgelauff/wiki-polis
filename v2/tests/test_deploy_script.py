@@ -31,3 +31,11 @@ def test_deploy_script_prunes_refs_and_has_no_obsolete_component_warning():
 def test_deploy_script_gives_the_spa_build_pod_enough_memory():
     source = DEPLOY_SCRIPT.read_text(encoding='utf-8')
     assert '--mem 2Gi node20 shell' in source
+
+
+def test_deploy_script_restarts_itself_once_when_the_checkout_changed_it():
+    source = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    assert 'SELF_HASH_BEFORE=$(git hash-object "$SELF_PATH")' in source
+    assert 'DEPLOY_REEXEC=1 exec bash "$SELF_PATH"' in source
+    assert '[ -z "${DEPLOY_REEXEC:-}" ]' in source
+    assert 'REEXEC_ARGS+=(--expect "$TARGET_REV")' in source
