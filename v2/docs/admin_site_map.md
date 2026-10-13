@@ -25,8 +25,7 @@ when a route is added, moved or removed.
 
 **Everyone else** signed in, with no role, gets the access page ("Not allowed"). Signed
 out, every admin page, `/site-admin` included, sends them to the login and back (the API
-answers 401). A practice session is treated as signed out only on Admin home (`/admin`);
-on the other admin pages it gets the access page.
+answers 401). A practice session counts as signed out on every admin page.
 
 ## Site level
 

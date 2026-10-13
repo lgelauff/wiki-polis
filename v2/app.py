@@ -3690,17 +3690,26 @@ def _log_statement_post_failure(
     )
 
 
+def _admin_caller_signed_out() -> bool:
+    """Whether the admin console should treat the caller as signed out: no session username,
+    and no participant or only a practice session's demo participant. A practice session is
+    not a sign-in, here as on Admin home (`_admin_home_api_payload`) and in the workspace."""
+    if session.get('username') is not None:
+        return False
+    participant = _current_participant()
+    return participant is None or participant.is_demo
+
+
 def _refuse_admin() -> NoReturn:
-    """Refuse an admin API call: 401 when nobody is signed in, 403 otherwise.
+    """Refuse an admin API call: 401 when the caller is signed out, 403 otherwise.
 
     The console's access boundary sends a 401 to the login and back (`?next=`), and shows
-    its access page for a 403, so a signed-out visitor on any admin page is asked to sign
-    in instead of being told "Not allowed". Signed in means a session username or a
-    participant (a Wikimedia or single-consultation account). A practice session also resolves to
-    a (demo) participant and so keeps its 403 here, as before; only Admin home treats it
-    as signed out (`_admin_home_api_payload`).
+    its access page for a 403, so a signed-out visitor who opens any admin page is asked to
+    log in instead of being told "Not allowed". Signed out includes a practice session
+    (`_admin_caller_signed_out`). A signed-in Wikimedia or single-consultation account
+    without the role gets 403.
     """
-    if session.get('username') is None and _current_participant() is None:
+    if _admin_caller_signed_out():
         abort(401)
     abort(403)
 

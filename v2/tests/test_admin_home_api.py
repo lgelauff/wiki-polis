@@ -201,10 +201,9 @@ def test_signed_in_without_the_role_on_a_console_page_is_forbidden(auth_client, 
 @pytest.mark.parametrize('path', [
     '/api/v1/admin', '/api/v1/admin/conversations/{id}', '/api/v1/admin/conversations/{id}/settings',
 ])
-def test_a_practice_session_on_a_console_page_stays_forbidden(client, path):
-    """Unchanged by the 401 for signed-out visitors: a practice session resolves to its demo
-    participant, which is a signed-in identity to these checks. Only Admin home treats it as
-    signed out (`test_a_practice_session_is_unauthorized`)."""
+def test_a_practice_session_on_a_console_page_is_unauthorized(client, path):
+    """A practice session is not a sign-in on any admin page: 401, so the console sends the
+    visitor to the login, as Admin home does (`test_a_practice_session_is_unauthorized`)."""
     guest = Participant(mw_user_id=-1_000_000_003, mw_username='Demo-guest-console', xid='f' * 64,
                         is_demo=True)
     db.session.add(guest)
@@ -216,8 +215,8 @@ def test_a_practice_session_on_a_console_page_stays_forbidden(client, path):
 
     response = client.get(path.format(id=conv.id))
 
-    assert response.status_code == 403
-    assert response.get_json()['error']['code'] == 'forbidden'
+    assert response.status_code == 401
+    assert response.get_json()['error']['code'] == 'unauthorized'
 
 
 def test_admin_home_and_site_admin_pages_are_spa_routes(client, spa_build):

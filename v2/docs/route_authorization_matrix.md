@@ -75,11 +75,11 @@ Two properties these preserve, both worth keeping in mind when reviewing a chang
 `401 unauthorized` means no Flask session. `403 forbidden` means a role check failed.
 On the admin API the two are told apart by `_refuse_admin()`: every admin guard above
 (`_is_global_admin()` checks in the admin payloads, `_require_mod_for_conv`,
-`_require_organizer_for_conv`) refuses with 401 when nobody is signed in (no session
-username and no participant) and with 403 for a signed-in user without the role, so the
-console sends a signed-out visitor to the login (`?next=`) instead of its access page. A
-practice session resolves to its demo participant and so still gets 403 there; only
-`GET /api/v1/admin/home` treats it as signed out (401).
+`_require_organizer_for_conv`) refuses with 401 when the caller is signed out (no session
+username, and no participant or only a practice session's demo participant:
+`_admin_caller_signed_out()`) and with 403 for a signed-in user without the role, so the
+console sends a signed-out visitor to the login (`?next=`) instead of its access page.
+`GET /api/v1/admin/home` treats a practice session the same way.
 `403 access_required` means the conversation's access policy refused you. `409 conflict`
 means you passed the checks but the conversation is not in a phase that permits the
 action. The distinction between the two 403s is deliberate and the SPA depends on it:
