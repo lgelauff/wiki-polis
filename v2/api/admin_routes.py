@@ -100,7 +100,8 @@ def register_admin_routes(
     def _policy_refused(exc: EligibilityPolicyRefused):
         return error_response(
             'validation_failed', 'Check the highlighted settings.', 400,
-            details={'fields': {exc.field: [exc.message]}},
+            # The code is what the console shows, in the reader's language (#454).
+            details={'fields': {exc.field: [exc.message]}, 'codes': {exc.field: exc.code}},
         )
 
     def _already_configured_site_admin():

@@ -34,12 +34,25 @@ RULE_KEYS = ('metric', 'operator', 'value', 'wiki', 'namespace', 'within')
 
 
 class EligibilityPolicyRefused(ValueError):
-    """Raised when a save names a policy that cannot be stored."""
+    """Raised when a save names a policy that cannot be stored.
 
-    def __init__(self, message: str):
-        super().__init__(message)
+    ``code`` says why, for the console to put in the reader's language (#454); ``message``
+    is the same in English, for any other reader of the API.
+    """
+
+    MESSAGES = {
+        'eligibility_policy_unlisted': 'Choose an eligibility policy from the list.',
+        'eligibility_policies_unavailable':
+            'The list of eligibility policies cannot be loaded now. Try again later.',
+        'eligibility_policies_not_configured':
+            'No list of eligibility policies is configured on this server.',
+    }
+
+    def __init__(self, code: str):
+        super().__init__(self.MESSAGES[code])
         self.field = 'eligibilityEventId'
-        self.message = message
+        self.code = code
+        self.message = self.MESSAGES[code]
 
 
 @dataclass(frozen=True)
@@ -187,7 +200,7 @@ def find_policy(policies: list[dict] | None, policy_id: str | None) -> dict | No
 
 def resolve_policy_choice(
     *, requested_id: str, requested_label: str, stored_id: str | None,
-    policies: Callable[[], list[dict] | None],
+    policies: Callable[[], list[dict] | None], configured: bool = True,
 ) -> PolicyChoice:
     """The eligibility pair a save stores, or refuse it.
 
@@ -195,7 +208,8 @@ def resolve_policy_choice(
     sent back unchanged: every Save sends the whole settings representation, so refusing it
     would block a title change because of a policy canivote has since removed, or while
     canivote cannot be reached. A label left empty becomes the policy's title; no policy
-    means no label, since the label only ever names the policy.
+    means no label, since the label only ever names the policy. ``configured`` is false when
+    the server has no canivote address, so a refusal says that rather than "try again later".
     """
     event_id = requested_id.strip()
     label = requested_label.strip()
@@ -209,9 +223,10 @@ def resolve_policy_choice(
     if policy is None:
         if unchanged:
             return PolicyChoice(event_id, label)
+        if not configured:
+            raise EligibilityPolicyRefused('eligibility_policies_not_configured')
         if listed is None:
-            raise EligibilityPolicyRefused(
-                'The list of eligibility policies cannot be loaded now. Try again later.')
-        raise EligibilityPolicyRefused('Choose an eligibility policy from the list.')
+            raise EligibilityPolicyRefused('eligibility_policies_unavailable')
+        raise EligibilityPolicyRefused('eligibility_policy_unlisted')
     return PolicyChoice(event_id, label or policy['title'])
 

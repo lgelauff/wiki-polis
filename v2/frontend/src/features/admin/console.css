@@ -989,29 +989,45 @@
   margin-block: 0 .75rem;
 }
 
+/* The field's name is a <label> (a click on it focuses the box); it keeps the block it had
+   as a paragraph. On the New consultation form it reads like the form's other labels. */
+.admin-shell .policy-field > label.access-answer-legend {
+  display: block;
+}
+
+.admin-shell .admin-page .admin-form .policy-field > label.access-answer-legend {
+  margin-block-end: .25rem;
+  color: var(--shell-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .admin-shell .policy-combobox {
   position: relative;
   max-inline-size: var(--field-wide);
 }
 
 .admin-shell .policy-combobox__box {
-  display: flex;
-  align-items: stretch;
+  position: relative;
 }
 
-.admin-shell .policy-combobox__box input {
-  flex: 1;
-  min-inline-size: 0;
+/* As specific as the console's general input rule (`.admin-page :is(input…)`), and later,
+   so the room kept for the ▾ is not reset by its padding. */
+.admin-shell .admin-page .policy-combobox__box input {
+  inline-size: 100%;
   margin: 0;
+  padding-inline-end: 1.75rem;
 }
 
-.admin-shell .policy-combobox__toggle {
-  padding: 0 .5rem;
-  border: 1px solid var(--shell-line);
-  border-inline-start: 0;
-  background: none;
+/* A picture of a drop-down inside the box; clicks go through it to the box. */
+.admin-shell .policy-combobox__arrow {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: .5rem;
+  display: flex;
+  align-items: center;
   color: var(--shell-muted);
-  cursor: pointer;
+  pointer-events: none;
 }
 
 .admin-shell .policy-combobox__list {
@@ -1037,6 +1053,22 @@
 .admin-shell .policy-combobox__option[aria-selected="true"] {
   background: var(--shell-line);
   color: var(--shell-ink);
+  /* The background alone is too faint to find the highlight by (1.36:1). */
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* Forced colours drop the background: the highlight is the system's own. */
+@media (forced-colors: active) {
+  .admin-shell .policy-combobox__option[aria-selected="true"] {
+    outline-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .admin-shell .policy-combobox__option[aria-selected="true"] .policy-combobox__id {
+    color: HighlightText;
+  }
 }
 
 .admin-shell .policy-combobox__id,

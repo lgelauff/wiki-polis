@@ -3,7 +3,7 @@ import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {AdminCatalogPage} from './admin-catalog-page';
@@ -67,7 +67,8 @@ test('every rule canivote uses today is said in plain words', () => {
 });
 
 test('typing filters the list by id, title and wiki', async () => {
-  renderField();
+  const {container} = renderField();
+  const status = () => container.querySelector('.policy-combobox [aria-live="polite"]');
   const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
 
   fireEvent.change(box, {target: {value: 'nl'}});
@@ -79,7 +80,45 @@ test('typing filters the list by id, title and wiki', async () => {
   expect(optionNames()).toEqual(['Not blocked anywhere in the movement meta-global · meta.wikimedia.org']);
   fireEvent.change(box, {target: {value: 'xyz'}});
   expect(screen.queryAllByRole('option')).toEqual([]);
-  expect(screen.getByText('No policy matches')).toBeVisible();
+  // An empty list has no option to announce: a live region says it instead.
+  expect(status()).toHaveTextContent('No policy matches');
+  fireEvent.change(box, {target: {value: 'nl'}});
+  expect(status()).toBeEmptyDOMElement();
+});
+
+test('the field\'s name is its label, and a click on the box opens the list', async () => {
+  renderField();
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
+
+  // A real <label>: clicking the name reaches the box.
+  const name = screen.getByText('Eligibility policy', {selector: 'label'});
+  expect(name).toHaveAttribute('for', box.id);
+  // The ▾ is a picture, not a second, unnamed control.
+  expect(screen.queryByRole('button')).toBeNull();
+
+  expect(box).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(box);
+  expect(box).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('listbox', {name: 'Eligibility policy'})).toBeVisible();
+});
+
+test('the highlighted option is scrolled into view as the arrow keys move', async () => {
+  const scrolled: string[] = [];
+  const scrollIntoView = vi.fn(function (this: HTMLElement) { scrolled.push(this.textContent ?? ''); });
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {value: scrollIntoView, configurable: true});
+  try {
+    renderField();
+    const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
+
+    fireEvent.keyDown(box, {key: 'ArrowDown'});
+    fireEvent.keyDown(box, {key: 'ArrowDown'});
+    fireEvent.keyDown(box, {key: 'ArrowDown'});
+
+    expect(scrollIntoView).toHaveBeenLastCalledWith({block: 'nearest'});
+    expect(scrolled.at(-1)).toMatch(/^Voting eligibility on German Wikipedia/);
+  } finally {
+    delete (HTMLElement.prototype as {scrollIntoView?: unknown}).scrollIntoView;
+  }
 });
 
 test('the arrow opens the whole list in canivote\'s order, with no check first', async () => {
@@ -101,7 +140,7 @@ test('the arrow opens the whole list in canivote\'s order, with no check first',
 test('the highlighted option is the one Enter chooses, whatever canivote\'s order', async () => {
   // canivote sorts by id, so policies of one wiki need not be next to each other.
   const policy = (id: string, wiki: string) => ({id, title: `Policy ${id}`, wiki, rules: [], sources: []});
-  server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: true, policies: [
+  server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: true, configured: true, policies: [
     policy('a', 'nl.wikipedia.org'), policy('b', 'de.wikipedia.org'), policy('c', 'nl.wikipedia.org'),
   ]}})));
   renderField({eventId: 'c', label: 'Policy c'});
@@ -207,7 +246,7 @@ test('a stored id canivote does not have is named and asks for a choice', async 
 });
 
 test('while canivote cannot be reached no policy can be chosen, but the check can be removed', async () => {
-  server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: false, policies: []}})));
+  server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: false, configured: true, policies: []}})));
   renderField({eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd'});
 
   const note = await screen.findByText('The list of eligibility policies cannot be loaded now.');
@@ -221,6 +260,15 @@ test('while canivote cannot be reached no policy can be chosen, but the check ca
   expect(optionNames()).toEqual(['No eligibility check']);
   fireEvent.keyDown(box, {key: 'Enter'});
   expect(current()).toEqual({eventId: '', label: ''});
+});
+
+test('without a canivote address the field says it is not configured, not "cannot be loaded now"', async () => {
+  server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: false, configured: false, policies: []}})));
+  renderAsQqx();
+  renderField({eventId: '', label: ''}, 'provider');
+
+  expect(await screen.findByText('(admin-access-policy-not-configured)')).toBeVisible();
+  expect(screen.queryByText('(admin-access-policy-unavailable)')).toBeNull();
 });
 
 test('under qqx, nothing in the field is English', async () => {
@@ -295,32 +343,42 @@ test('the policy can still be chosen once Explore has opened', async () => {
 });
 
 test('a refused policy is said at the field', async () => {
+  let listReads = 0;
   server.use(
+    http.get(POLICIES_URL, () => {
+      listReads += 1;
+      return HttpResponse.json({data: {available: true, configured: true, policies: testPolicies}});
+    }),
     http.get(SETTINGS_URL, () => HttpResponse.json({data: settingsFixture({}, true)})),
     http.put(SETTINGS_URL, () => HttpResponse.json({error: {
       code: 'validation_failed', message: 'Check the highlighted settings.',
-      details: {fields: {eligibilityEventId: ['Choose an eligibility policy from the list.']}},
+      details: {fields: {eligibilityEventId: ['SERVER field.']},
+        codes: {eligibilityEventId: 'eligibility_policy_unlisted'}},
     }}, {status: 400})),
   );
   renderSettings();
 
   const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}, {timeout: 10_000});
+  const readsBefore = listReads;
   fireEvent.change(box, {target: {value: 'meta'}});
   fireEvent.click(screen.getByRole('option', {name: /movement/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(box).toHaveAttribute('aria-invalid', 'true'));
-  const error = screen.getAllByText('Choose an eligibility policy from the list.')
-    .find((node) => node.classList.contains('access-field-error'))!;
-  expect(box.getAttribute('aria-describedby')).toContain(error.id);
+  // Said at the field, from the catalogue by its code (#454; the mapping is tested in
+  // server-labels.test.ts), never in the server's text.
+  const error = document.getElementById(box.getAttribute('aria-describedby')!.split(' ')[0]!)!;
+  expect(error).toHaveClass('access-field-error');
+  expect(error).not.toHaveTextContent('SERVER');
+  expect(document.body).not.toHaveTextContent('SERVER');
+  // The list is read again, so the refused policy is not offered from a stale copy.
+  await waitFor(() => expect(listReads).toBeGreaterThan(readsBefore));
 });
 
-test('a refused policy on New consultation is announced', async () => {
-  server.use(http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({error: {
-    code: 'validation_failed', message: 'Check the highlighted settings.',
-    details: {fields: {eligibilityEventId: ['Choose an eligibility policy from the list.']}},
-  }}, {status: 400})));
-  render(
+const CREATE_URL = new URL('/api/v1/admin/conversations', globalThis.location.origin).toString();
+
+function renderCatalog() {
+  return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/admin']}>
         <Suspense fallback={null}>
@@ -329,16 +387,90 @@ test('a refused policy on New consultation is announced', async () => {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
 
+async function openCreateForm() {
   const heading = await screen.findByRole('heading', {name: 'New consultation', level: 2}, {timeout: 10_000});
   fireEvent.click(heading.closest('summary')!);
   const form = heading.closest('details')!;
   fireEvent.change(within(form).getByLabelText(/Slug/), {target: {value: 'new-one'}});
   fireEvent.change(within(form).getByLabelText('Title'), {target: {value: 'New one'}});
-  fireEvent.click(within(form).getByRole('button', {name: /Create/}));
+  return form;
+}
 
-  expect(await within(form).findByRole('alert')).toHaveTextContent('Check the highlighted settings.');
-  expect(within(form).getByText('Choose an eligibility policy from the list.')).toBeVisible();
+test('a refused policy on New consultation is announced, in the catalogue\'s words, every time', async () => {
+  let listReads = 0;
+  server.use(
+    http.get(POLICIES_URL, () => {
+      listReads += 1;
+      return HttpResponse.json({data: {available: true, configured: true, policies: testPolicies}});
+    }),
+    http.post(CREATE_URL, () => HttpResponse.json({error: {
+      code: 'validation_failed', message: 'SERVER message.',
+      details: {fields: {eligibilityEventId: ['SERVER field.']},
+        codes: {eligibilityEventId: 'eligibility_policies_unavailable'}},
+    }}, {status: 400})),
+  );
+  renderCatalog();
+  const form = await openCreateForm();
+  await within(form).findByRole('combobox', {name: 'Eligibility policy'});
+  const readsBefore = listReads;
+
+  fireEvent.click(within(form).getByRole('button', {name: /Create/}));
+  const alert = await within(form).findByRole('alert');
+  // The alert line says what the field says, from the catalogue; the server's text is not
+  // shown anywhere.
+  const fieldError = form.querySelector('.access-field-error')!;
+  expect(fieldError.textContent).not.toBe('');
+  expect(alert).toHaveTextContent(fieldError.textContent!);
+  expect(form).not.toHaveTextContent('SERVER');
+  // The list is read again: canivote may have changed since the page loaded it.
+  await waitFor(() => expect(listReads).toBeGreaterThan(readsBefore));
+
+  // A second refusal puts a new alert in place, so it is announced again.
+  fireEvent.click(within(form).getByRole('button', {name: /Create/}));
+  await waitFor(() => expect(within(form).queryByRole('alert')).not.toBe(alert));
+  expect(await within(form).findByRole('alert')).not.toBe(alert);
+});
+
+test('a refusal is not said twice to a screen reader', async () => {
+  server.use(
+    http.get(POLICIES_URL, () => HttpResponse.json({data: {available: false, configured: true, policies: []}})),
+    http.post(CREATE_URL, () => HttpResponse.json({error: {
+      code: 'validation_failed', message: 'SERVER message.',
+      details: {fields: {eligibilityEventId: ['SERVER field.']},
+        codes: {eligibilityEventId: 'eligibility_policies_unavailable'}},
+    }}, {status: 400})),
+  );
+  renderCatalog();
+  const form = await openCreateForm();
+  const box = await within(form).findByRole('combobox', {name: 'Eligibility policy'});
+  expect(box.getAttribute('aria-describedby')!.split(' ')).toHaveLength(1);
+
+  fireEvent.click(within(form).getByRole('button', {name: /Create/}));
+  await waitFor(() => expect(box).toHaveAttribute('aria-invalid', 'true'));
+  // The refusal replaces the "cannot be loaded" note it would only repeat.
+  const described = box.getAttribute('aria-describedby')!.split(' ');
+  expect(described).toHaveLength(1);
+  expect(document.getElementById(described[0]!)).toHaveClass('access-field-error');
+});
+
+test('with the invitation list, New consultation offers no policy, and keeps the choice for later', async () => {
+  const {container} = renderCatalog();
+  const form = await openCreateForm();
+  const box = await within(form).findByRole('combobox', {name: 'Eligibility policy'});
+  // One field, one .admin-field: a nested one doubles the spacing and bolds the input text.
+  expect(container.querySelector('.admin-field .admin-field')).toBeNull();
+  fireEvent.change(box, {target: {value: 'nlwiki'}});
+  fireEvent.click(within(form).getByRole('option', {name: /Dutch/}));
+
+  const access = within(form).getByLabelText('Access') as HTMLSelectElement;
+  fireEvent.change(access, {target: {value: 'invite_only'}});
+  expect(within(form).queryByRole('combobox', {name: 'Eligibility policy'})).toBeNull();
+
+  fireEvent.change(access, {target: {value: 'public'}});
+  expect(within(form).getByRole('combobox', {name: 'Eligibility policy'}))
+    .toHaveValue('Voting eligibility on Dutch Wikipedia');
 });
 
 test('New consultation sends the chosen policy and its label', async () => {

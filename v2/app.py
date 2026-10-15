@@ -3892,10 +3892,16 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
         abort(400, description='Invalid conversation slug or phase route.')
     if not managed and not _valid_polis_id(body['polisId'] or ''):
         abort(400, description='A valid Polis conversation ID is required in manual mode.')
+    # The invitation list is the whole admission check, so the eligibility pair is cleared
+    # before it is checked, as a settings save does (`services/admin_settings.py`): a policy
+    # left in the form must not refuse a consultation that will never use it.
+    invited = body['accessPolicy'] == 'invite_only'
     # Only a policy on canivote's list (#530); raises EligibilityPolicyRefused.
     eligibility = resolve_policy_choice(
-        requested_id=body['eligibilityEventId'], requested_label=body['eligibilityLabel'],
+        requested_id='' if invited else body['eligibilityEventId'],
+        requested_label='' if invited else body['eligibilityLabel'],
         stored_id=None, policies=_eligibility_policies,
+        configured=_eligibility_configured(),
     )
 
     def new_conversation(polis_id):
@@ -4139,6 +4145,11 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     )
 
 
+def _eligibility_configured() -> bool:
+    """Whether this server has a canivote address to read the policy list from."""
+    return bool((current_app.config.get('ACCOUNT_ELIGIBILITY_URL') or '').strip())
+
+
 def _eligibility_policies() -> list[dict] | None:
     """canivote's policy list (#530), cached; None when it is not configured or down."""
     return POLICY_CACHE.get(
@@ -4165,7 +4176,10 @@ def _admin_eligibility_policies_api_payload() -> dict:
     if not (site_admin or organizer):
         _refuse_admin()
     policies = _eligibility_policies()
-    return {'available': policies is not None, 'policies': policies or []}
+    # `configured` false: no canivote address, so the list will never load and the console
+    # says so instead of "cannot be loaded now".
+    return {'available': policies is not None, 'configured': _eligibility_configured(),
+            'policies': policies or []}
 
 
 def _admin_settings_api_payload(conv_id: int) -> dict:
@@ -4677,6 +4691,7 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         access_request_text=body.get('accessRequestText'),
         may_switch_demo=_is_global_admin(),
         eligibility_policies=_eligibility_policies,
+        eligibility_configured=_eligibility_configured(),
     )
     return {
         'changed': result.changed,

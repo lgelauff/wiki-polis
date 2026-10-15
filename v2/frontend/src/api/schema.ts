@@ -1494,6 +1494,8 @@ export interface components {
         AdminEligibilityPoliciesResponse: {
             data: {
                 available: boolean;
+                /** @description False when this server has no canivote address (ACCOUNT_ELIGIBILITY_URL), so the list will never load. */
+                configured: boolean;
                 policies: components["schemas"]["EligibilityPolicy"][];
             };
         };

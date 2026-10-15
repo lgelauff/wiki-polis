@@ -560,6 +560,8 @@
     "admin-access-policy-none": "No eligibility check",
     "admin-access-policy-no-match": "No policy matches",
     "admin-access-policy-unavailable": "The list of eligibility policies cannot be loaded now.",
+    "admin-access-policy-not-configured": "No list of eligibility policies is configured on this server.",
+    "admin-access-policy-refused-unlisted": "Choose an eligibility policy from the list.",
     "admin-access-policy-unlisted": "\"$1\" is not one of canivote's policies. Choose one from the list.",
     "admin-access-policy-source": "Policy page",
     "admin-policy-rule-global-account": "Has a global account",

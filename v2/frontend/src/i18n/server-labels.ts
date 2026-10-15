@@ -255,3 +255,32 @@ export const workspaceErrorCopy = (msg: Message, error: unknown) =>
 
 export const joinErrorCopy = (msg: Message, error: unknown) =>
   resolve(JOIN_ERROR_MESSAGES, msg, apiErrorCode(error), msg(JOIN_ERROR_MESSAGES._fallback!));
+
+/** A field's refusal in a 400 `validation_failed`, by the code the server sends for it in
+ *  `details.codes` (#454). Only the eligibility policy sends one so far
+ *  (`services/eligibility_policies.py`); every other field keeps the server's text until it
+ *  does too. */
+const FIELD_REFUSAL_MESSAGES: Record<string, string> = {
+  eligibility_policy_unlisted: 'admin-access-policy-refused-unlisted',
+  eligibility_policies_unavailable: 'admin-access-policy-unavailable',
+  eligibility_policies_not_configured: 'admin-access-policy-not-configured',
+};
+
+/** '' for a code the table does not know, or a key the catalogue lacks. */
+export const fieldRefusal = (msg: Message, code: string | null | undefined) =>
+  resolve(FIELD_REFUSAL_MESSAGES, msg, code, '');
+
+/** The per-field messages of a 400 `validation_failed`, keyed by the request field: a field
+ *  whose code this table knows in the reader's language, any other in the server's text. */
+export function refusedFields(msg: Message, error: unknown): Record<string, string[]> {
+  if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return {};
+  const details = error.details as {
+    fields?: Record<string, string[]>; codes?: Record<string, string>;
+  } | undefined;
+  const fields = {...details?.fields};
+  for (const [field, code] of Object.entries(details?.codes ?? {})) {
+    const text = fieldRefusal(msg, code);
+    if (text) fields[field] = [text];
+  }
+  return fields;
+}

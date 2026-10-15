@@ -12,11 +12,11 @@ import {
 } from '../../api/queries';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
-import {EligibilityPolicyField} from './eligibility-policy-field';
+import {EligibilityPolicyField, refreshPoliciesAfterRefusal} from './eligibility-policy-field';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
-import {accessPolicyLabel} from '../../i18n/server-labels';
+import {accessPolicyLabel, refusedFields} from '../../i18n/server-labels';
 
 type Catalog = components['schemas']['AdminCatalog'];
 type CreateRequest = components['schemas']['AdminConversationCreateRequest'];
@@ -142,13 +142,16 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const creation = useMutation({
     mutationFn: () => postAdminConversation(draft, csrfToken),
     onSuccess: (result) => { navigate(result.links.manage); },
-    onError: (error: Error) => setCreateError(errorMessage(error) ?? msg('adminconv-command-failed')),
+    onError: (error: Error) => {
+      // A refused field is said in the reader's language, at the field and in the alert
+      // line; the server's own message is only for a refusal no field explains.
+      const said = Object.values(refusedFields(msg, error)).flat();
+      setCreateError(said.length ? said.join(' ')
+        : errorMessage(error) ?? msg('adminconv-command-failed'));
+      refreshPoliciesAfterRefusal(queryClient, error);
+    },
   });
-  // A refused policy (#530) is also said at the policy field, beside the alert line.
-  const createFields = creation.error instanceof ApiContractError
-    && creation.error.code === 'validation_failed'
-    ? (creation.error.details as {fields?: Record<string, string[]>} | undefined)?.fields ?? {}
-    : {};
+  const createFields = refusedFields(msg, creation.error);
   const grant = useMutation({
     mutationFn: () => postGlobalAdminGrant({username}, csrfToken),
     onSuccess: (result) => {
@@ -181,6 +184,8 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
 
   function submitConversation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Cleared first, so a second refusal puts the alert back and it is announced again.
+    setCreateError(null);
     creation.mutate();
   }
 
@@ -242,13 +247,16 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             <label className="admin-field">{msg('admin-label-title')}<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
             <label className="admin-field admin-field--medium">{msg('admin-label-access')}<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-common-policy-open')}</option><option value="invite_only">{msg('admin-common-policy-invited')}</option><option value="demo">{msg('admin-common-policy-practice')}</option></select></label>
             <label className="admin-field admin-field--medium">{msg('admin-label-route')}<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
-            {/* The policy is chosen from canivote's list, never typed (#530). */}
-            <div className="admin-field admin-field--medium">
+            {/* The policy is chosen from canivote's list, never typed (#530). Not offered
+                with the invitation list, which is the whole admission check then: the
+                server would drop it, as Settings does. The draft keeps it, so switching back
+                brings it back. */}
+            {draft.accessPolicy !== 'invite_only' && <div className="admin-field--medium">
               <EligibilityPolicyField labelClassName="admin-field"
                 value={{eventId: draft.eligibilityEventId, label: draft.eligibilityLabel}}
                 errors={{eventId: createFields.eligibilityEventId}}
                 onChange={(next) => setDraft({...draft, eligibilityEventId: next.eventId, eligibilityLabel: next.label})} />
-            </div>
+            </div>}
             <label className="admin-field">{msg('admin-label-intro')}<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
             <label className="admin-field">{msg('admin-label-outro')}<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
             <div className="admin-form__actions">
