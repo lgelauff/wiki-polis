@@ -9,14 +9,18 @@ python3 v2/tools/polis_report/polis_report.py my-study/config.json --fetch   # d
 cd v2 && python -m tools.polis_report ../my-study/config.json --no-pdf
 ```
 
-Start from `config.example.json`. All paths in the config are relative to the config file. Keep study data outside
+The reasoning behind every rule is in [METHODOLOGY.md](METHODOLOGY.md). Start from `config.example.json`. All paths in the config are relative to the config file. Keep study data outside
 this repository.
 
 | config key | meaning |
 |---|---|
 | `since` | UTC time; vote rows before it are dropped before taking each participant's latest vote |
 | `meta` | role/demographic statements, by exact text; left out of opinion totals, labels and the map |
-| `polls[].exclude_participants` | participant ids to leave out, e.g. the moderator, whose automatic passes are not opinions |
+| `timezone` | IANA zone for local times in the reports (default UTC) |
+| `polls[].exclude_participants` | optional manual override: participant ids left out entirely, with `exclude_reason` (automatic votes are already removed by rule) |
+| `statement_pairs` | optional `[[text in first poll, text in second poll], ...]` for statements edited between polls |
+| `min_participants_for_groups` | groups are shown only with at least this many participants (default 25) |
+| `include_unmoderated` | also count statements Polis has not moderated yet (default: accepted only) |
 | `polls[].dir` | folder with `comments.csv`, `votes.csv`, `participant-votes.csv` (pol.is's name) or `participants-votes.csv` |
 | `polls[].xid` | the conversation's `participant,xid` file (owner view); both polls need one for the comparison reports |
 | `polls[].report` | pol.is report id, used by `--fetch` |
@@ -32,7 +36,8 @@ Outputs in `out/`:
   movers per statement, an exact sign test with Holm correction, and how those who voted in one poll only voted.
 - CSVs of every table. Counts only: no xid or participant id is written.
 
-Rules:
+Rules (see METHODOLOGY.md for the reasons):
+- A vote by a statement's author on that statement at the second it was created is Polis's automatic vote and is not counted; all other votes count.
 - Current vote = the latest row per participant and statement; equal timestamps keep file order.
 - The second poll's statements are matched to the first by exact text, and shown with the first poll's numbers.
 - Every sentence is a template filled from the data, and the PCA is seeded, so the same input gives byte-identical HTML and CSV.
