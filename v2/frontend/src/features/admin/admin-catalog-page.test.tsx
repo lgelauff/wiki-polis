@@ -266,7 +266,7 @@ test('the two "Also coming" lines are muted English and nothing else', async () 
   expect(lines.map((line) => line.textContent)).toEqual([
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'
     + ' a consultation — not available yet (#473)',
-    'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
+    'Also coming: access code use, correct and wrong codes per consultation — not available yet (#473)',
   ]);
   for (const line of lines) {
     // The one "Also coming" component and class of the whole console, outside its frame too.
@@ -296,7 +296,7 @@ test('under a key-id catalogue the page is all keys and the two coming lines', a
     'Consultation 1', 'consultation-1', 'Config admin', 'adminuser', '— adminuser', 'Full consultation',
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'
     + ' a consultation — not available yet (#473)',
-    'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
+    'Also coming: access code use, correct and wrong codes per consultation — not available yet (#473)',
   ])).toEqual([]);
 });
 test('the dashboard sits in the console frame, with no consultation sections in it', async () => {

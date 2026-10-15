@@ -38,6 +38,7 @@
     "/admin": {
       "get": {"operationId": "getAdminCatalog", "summary": "Return site-wide conversation and administrator operations", "responses": {
         "200": {"description": "Admin catalog", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminCatalogResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
@@ -52,6 +53,7 @@
       "post": {"operationId": "postAdminConversation", "summary": "Create a local conversation and its managed voting conversation", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminConversationCreateRequest"}}}}, "responses": {
         "201": {"description": "Conversation creation receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminConversationCreateResponse"}}}},
         "400": {"description": "Invalid conversation fields", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Slug conflict or unknown creation outcome", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Voting service creation failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -63,6 +65,7 @@
         "200": {"description": "Existing grant receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
         "201": {"description": "New grant receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
         "400": {"description": "Invalid username", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Participant has not signed in", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "The username is already a site admin through the server configuration (already_configured_site_admin); nothing is granted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
@@ -73,6 +76,7 @@
       "put": {"operationId": "putGlobalAdmin", "summary": "Set desired site-wide administrator membership", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminSetRequest"}}}}, "responses": {
         "200": {"description": "Membership receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
         "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Refused, nothing changed: a site admin cannot remove their own site admin access (own_site_admin_protected); a site admin set in the server configuration cannot be removed here (configured_site_admin_protected); a username set in the server configuration cannot also be granted in the app (already_configured_site_admin)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
@@ -82,6 +86,7 @@
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "get": {"operationId": "getAdminConversationTermination", "summary": "Inspect live empty-conversation deletion eligibility", "responses": {
         "200": {"description": "Termination state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminTerminationResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -742,6 +747,10 @@
             "description": "Participant roster",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminParticipantRosterResponse"}}}
           },
+          "401": {
+            "description": "Sign-in required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
           "403": {
             "description": "Conversation moderation permission required",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
@@ -784,6 +793,10 @@
             "description": "Invalid desired access state",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
+          "401": {
+            "description": "Sign-in required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
           "403": {
             "description": "Conversation moderation permission required",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
@@ -807,6 +820,10 @@
           "200": {
             "description": "Moderation queue",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFlagQueueResponse"}}}
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "403": {
             "description": "Conversation moderation permission required",
@@ -833,6 +850,7 @@
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFlagResolutionResponse"}}}
           },
           "400": {"description": "Invalid resolution", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation or flag not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
@@ -844,6 +862,7 @@
         "operationId": "getAdminConversationInvitations", "summary": "Return the invitation roster and access policy",
         "responses": {
           "200": {"description": "Invitation roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationRosterResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       },
@@ -853,6 +872,7 @@
         "responses": {
           "200": {"description": "Batch outcome and refreshed roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationBatchResponse"}}}},
           "400": {"description": "Invalid usernames", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "503": {"description": "Invitations could not be saved atomically", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
@@ -867,6 +887,7 @@
         "operationId": "deleteAdminConversationInvitation", "summary": "Remove one invitation",
         "responses": {
           "200": {"description": "Removal receipt and refreshed roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationRemovalResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation or invitation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
@@ -878,6 +899,7 @@
         "operationId": "getAdminConversationRoles", "summary": "Return scoped role assignments and authorized candidates",
         "responses": {
           "200": {"description": "Role roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRoleRosterResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
@@ -893,6 +915,7 @@
         "responses": {
           "200": {"description": "Role replacement receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRoleSetResponse"}}}},
           "400": {"description": "Invalid role set", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation or participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
@@ -904,12 +927,14 @@
         "operationId": "getAdminConversationLifecycle", "summary": "Return lifecycle, phase readiness, capabilities, and management links",
         "responses": {
           "200": {"description": "Admin lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminLifecycleResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       },
       "delete": {"operationId": "deleteAdminConversation", "summary": "Delete a verified empty conversation after hiding it upstream", "responses": {
         "200": {"description": "Deletion receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminDeletionResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Votes block deletion or command outcome is unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -921,11 +946,13 @@
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "get": {"operationId": "getAdminConversationSettings", "summary": "Return editable conversation settings and tool-owned guidance", "responses": {
         "200": {"description": "Conversation settings", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSettingsResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }},
       "put": {"operationId": "putAdminConversationSettings", "summary": "Replace editable conversation settings", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSettingsRequest"}}}}, "responses": {
         "200": {"description": "Update receipt and refreshed settings", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSettingsUpdateResponse"}}}},
         "400": {"description": "Invalid settings", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
@@ -934,6 +961,7 @@
       "put": {"operationId": "putAdminConversationRecommendationTier", "summary": "Set the advisory recommendation tier", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRecommendationTierRequest"}}}}, "responses": {
         "200": {"description": "Update receipt and refreshed recommendations", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRecommendationTierResponse"}}}},
         "400": {"description": "Invalid recommendation tier", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
@@ -941,12 +969,14 @@
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "get": {"operationId": "getAdminConversationStatements", "summary": "Return the privacy-safe statement moderation workspace", "responses": {
         "200": {"description": "Statement workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementWorkspaceResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }},
       "post": {"operationId": "postAdminSeedStatement", "summary": "Add one approved seed statement with optional correction provenance", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSeedStatementRequest"}}}}, "responses": {
         "201": {"description": "Seed statement receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSeedStatementResponse"}}}},
         "400": {"description": "Invalid or locked seed statement", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Conversation or corrected statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Statement service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
@@ -957,6 +987,7 @@
       "put": {"operationId": "putAdminStatementModerationPolicy", "summary": "Set the default decision for future statements without reinterpreting existing statements", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationPolicyRequest"}}}}, "responses": {
         "200": {"description": "Policy receipt and refreshed statement workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationPolicyResponse"}}}},
         "400": {"description": "Invalid policy", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Upstream outcome may be unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Moderation baseline reconciliation failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -971,6 +1002,7 @@
       "put": {"operationId": "putAdminStatementModeration", "summary": "Replace one statement's moderation state", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationRequest"}}}}, "responses": {
         "200": {"description": "Moderation receipt and refreshed workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationResponse"}}}},
         "400": {"description": "Invalid moderation state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Conversation or statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Last featured statement is protected during argument mapping", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -982,6 +1014,7 @@
       "post": {"operationId": "postAdminStatementImport", "summary": "Import approved seed statements after validation and deduplication", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementImportRequest"}}}}, "responses": {
         "200": {"description": "Import outcome", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementImportResponse"}}}},
         "400": {"description": "Invalid import", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "503": {"description": "Existing statements could not be verified", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Statement service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
@@ -991,6 +1024,7 @@
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "get": {"operationId": "getAdminFeaturedStatements", "summary": "Return selected statements, transparent candidate metrics, and argument moderation state", "responses": {
         "200": {"description": "Featured workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedWorkspaceResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
@@ -1043,6 +1077,7 @@
         "responses": {
           "200": {"description": "Transition receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPhaseAdvanceResponse"}}}},
           "400": {"description": "Invalid confirmation payload", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "409": {"description": "Readiness, state, concurrency, or unknown-outcome conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "502": {"description": "The next phase could not be prepared upstream", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -1055,6 +1090,7 @@
       "put": {"operationId": "putAdminConversationPhases", "summary": "Replace the advanced route-valid phase set", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminAdvancedPhasesRequest"}}}}, "responses": {
         "200": {"description": "Phase-set receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminAdvancedPhasesResponse"}}}},
         "400": {"description": "Invalid or out-of-route phase key", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
@@ -1062,6 +1098,7 @@
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "post": {"operationId": "createAdminPhase6Initialization", "summary": "Initialize the dedicated informed-voting round", "responses": {
         "201": {"description": "Initialization receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPhase6InitializationResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "State, concurrency, or unknown-outcome conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "The informed-voting round could not be prepared upstream", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
@@ -1072,6 +1109,7 @@
       "put": {"operationId": "putAdminConversationPause", "summary": "Set the desired pause state", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPauseRequest"}}}}, "responses": {
         "200": {"description": "Pause receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPauseResponse"}}}},
         "400": {"description": "Invalid state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Conversation closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -1081,6 +1119,7 @@
       "put": {"operationId": "putAdminConversationArchive", "summary": "Set reversible archive state without publishing", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveRequest"}}}}, "responses": {
         "200": {"description": "Archive receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveResponse"}}}},
         "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Published conversations cannot be archived", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -1090,6 +1129,7 @@
       "put": {"operationId": "putAdminConversationSchedule", "summary": "Replace or cancel the pending phase schedule", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminScheduleRequest"}}}}, "responses": {
         "200": {"description": "Schedule receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminScheduleResponse"}}}},
         "400": {"description": "Invalid or past date-time", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "The current transition cannot be scheduled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -1099,6 +1139,7 @@
       "post": {"operationId": "createAdminConversationPublication", "summary": "Irreversibly publish the frozen final report", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPublicationRequest"}}}}, "responses": {
         "201": {"description": "Published lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPublicationResponse"}}}},
         "400": {"description": "Invalid confirmations", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "409": {"description": "Publication state or readiness conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}

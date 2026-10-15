@@ -167,12 +167,12 @@ test('an edit survives a switch to the other tab and back', async () => {
   fireEvent.change(await screen.findByRole('textbox', {name: 'Title'}, {timeout: 10_000}),
     {target: {value: 'Not saved yet'}});
   fireEvent.click(within(tabs()).getByRole('link', {name: 'Access'}));
-  fireEvent.click(await screen.findByRole('radio', {name: /Anyone with a voucher code/}));
+  fireEvent.click(await screen.findByRole('radio', {name: /Anyone with an access code/}));
   fireEvent.click(within(tabs()).getByRole('link', {name: 'Basics'}));
 
   expect(await screen.findByRole('textbox', {name: 'Title'})).toHaveValue('Not saved yet');
   fireEvent.click(within(tabs()).getByRole('link', {name: 'Access'}));
-  expect(await screen.findByRole('radio', {name: /Anyone with a voucher code/})).toBeChecked();
+  expect(await screen.findByRole('radio', {name: /Anyone with an access code/})).toBeChecked();
 });
 
 test('Basics saves only its own fields: an unsaved Access answer is neither sent nor asked about', async () => {
@@ -182,7 +182,7 @@ test('Basics saves only its own fields: an unsaved Access answer is neither sent
   renderTabs('access');
 
   // A narrowing answer on Access, not saved.
-  fireEvent.click(await screen.findByRole('radio', {name: /Anyone with a voucher code/}, {timeout: 10_000}));
+  fireEvent.click(await screen.findByRole('radio', {name: /Anyone with an access code/}, {timeout: 10_000}));
   fireEvent.click(within(tabs()).getByRole('link', {name: 'Basics'}));
   fireEvent.change(await screen.findByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
@@ -193,7 +193,7 @@ test('Basics saves only its own fields: an unsaved Access answer is neither sent
   expect(sent[0]).toMatchObject({title: 'A new title', gated: false, gatingType: null});
   // The Access answer is still there, unsaved, for its own Save.
   fireEvent.click(within(tabs()).getByRole('link', {name: 'Access'}));
-  expect(await screen.findByRole('radio', {name: /Anyone with a voucher code/})).toBeChecked();
+  expect(await screen.findByRole('radio', {name: /Anyone with an access code/})).toBeChecked();
 });
 
 test('"Settings saved." goes as soon as something is edited again', async () => {

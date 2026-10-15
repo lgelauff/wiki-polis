@@ -127,7 +127,7 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   expect(admission).toBeVisible();
   expect(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'})).toBeChecked();
   expect(screen.getByRole('radio', {name: /Only people on the invitation list/})).not.toBeChecked();
-  expect(screen.getByRole('radio', {name: /Anyone with a voucher code/})).not.toBeChecked();
+  expect(screen.getByRole('radio', {name: /Anyone with an access code/})).not.toBeChecked();
   // No internal value reaches the screen, and the combination the server refuses --
   // gated with no type -- cannot be expressed by a radio group.
   expect(screen.queryByText(/invite_only|gating type/i)).toBeNull();
@@ -359,7 +359,7 @@ test('shows the server refusal beside the admission answer and keeps the input',
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
+  fireEvent.click(screen.getByRole('radio', {name: /Anyone with an access code/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
 
@@ -367,7 +367,7 @@ test('shows the server refusal beside the admission answer and keeps the input',
   // The server's own sentence, not a second copy of it in the front end.
   expect(await screen.findByText('Gated access settings cannot change after Explore starts.'))
     .toBeVisible();
-  expect(screen.getByRole('radio', {name: /Anyone with a voucher code/})).toBeChecked();
+  expect(screen.getByRole('radio', {name: /Anyone with an access code/})).toBeChecked();
 });
 
 test('maps a field refusal to its field and keeps what was typed', async () => {
@@ -406,7 +406,7 @@ test('asks before swapping one gate for another, which also takes access away', 
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
+  fireEvent.click(screen.getByRole('radio', {name: /Anyone with an access code/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   // Everybody on the invitation list loses access when the gate becomes a voucher.
@@ -495,7 +495,7 @@ test('an organizer sees a practice item as a fact with its fixed answer', async 
     screen.getByRole('group', {name: 'Who can take part'}),
   ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // One fixed answer: nothing to choose, so no radio and no select.
-  expect(screen.queryAllByRole('radio', {name: /invitation list|voucher code/})).toHaveLength(0);
+  expect(screen.queryAllByRole('radio', {name: /invitation list|access code/})).toHaveLength(0);
   expect(screen.queryByRole('combobox', {name: /^Access$/})).toBeNull();
 
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));

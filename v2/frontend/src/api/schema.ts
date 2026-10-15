@@ -2869,6 +2869,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminCatalogResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -2942,6 +2951,15 @@ export interface operations {
             };
             /** @description Invalid conversation fields */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3027,6 +3045,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -3089,6 +3116,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -3136,6 +3172,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminTerminationResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Global admin permission required */
@@ -4432,6 +4477,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminParticipantRosterResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -4486,6 +4540,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -4524,6 +4587,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminFlagQueueResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Conversation moderation permission required */
@@ -4571,6 +4643,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -4611,6 +4692,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminInvitationRosterResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -4648,6 +4738,15 @@ export interface operations {
             };
             /** @description Invalid usernames */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4696,6 +4795,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminInvitationRemovalResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Organizer permission required */
             403: {
                 headers: {
@@ -4734,6 +4842,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminRoleRosterResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Conversation moderation permission required */
@@ -4781,6 +4898,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -4821,6 +4947,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminLifecycleResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -4859,6 +4994,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminDeletionResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Global admin permission required */
@@ -4928,6 +5072,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminSettingsResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -4965,6 +5118,15 @@ export interface operations {
             };
             /** @description Invalid settings */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5016,6 +5178,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Organizer permission required */
             403: {
                 headers: {
@@ -5045,6 +5216,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminStatementWorkspaceResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Conversation moderation permission required */
@@ -5093,6 +5273,15 @@ export interface operations {
             };
             /** @description Invalid or locked seed statement */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5155,6 +5344,15 @@ export interface operations {
             };
             /** @description Invalid policy */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5234,6 +5432,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -5305,6 +5512,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Conversation moderation permission required */
             403: {
                 headers: {
@@ -5352,6 +5568,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminFeaturedWorkspaceResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Conversation moderation permission required */
@@ -5597,6 +5822,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Organizer permission required */
             403: {
                 headers: {
@@ -5668,6 +5902,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -5697,6 +5940,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminPhase6InitializationResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Organizer permission required */
@@ -5761,6 +6013,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -5807,6 +6068,15 @@ export interface operations {
             };
             /** @description Invalid desired state */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5867,6 +6137,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Global admin permission required */
             403: {
                 headers: {
@@ -5913,6 +6192,15 @@ export interface operations {
             };
             /** @description Invalid confirmations */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

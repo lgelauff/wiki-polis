@@ -17,6 +17,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
+from typing import NoReturn
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urljoin
 
 import coolname
@@ -253,13 +254,13 @@ def _spa_shell_response():
 # Copy for the voucher entry page, each with the English it falls back to (same
 # discipline as _spa_bootstrap_text: a missing catalogue must not put ⧼key⧽ on the page).
 _VOUCHER_MESSAGES = {
-    'doc-title': ('voucher-page-doc-title', 'Voucher code — $1'),
-    'intro': ('voucher-page-intro', 'You need a voucher code to take part in this consultation.'),
-    'label': ('voucher-page-label', 'Voucher code'),
+    'doc-title': ('voucher-page-doc-title', 'Access code — $1'),
+    'intro': ('voucher-page-intro', 'You need an access code to take part in this consultation.'),
+    'label': ('voucher-page-label', 'Access code'),
     'hint': ('voucher-page-hint', 'Capitals, spaces and hyphens do not matter.'),
     'submit': ('voucher-page-submit', 'Continue'),
-    'empty': ('voucher-error-empty', 'Enter a voucher code.'),
-    'too-short': ('voucher-error-too-short', 'Voucher codes are at least $1 characters long.'),
+    'empty': ('voucher-error-empty', 'Enter an access code.'),
+    'too-short': ('voucher-error-too-short', 'Access codes are at least $1 characters long.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
     'throttled': ('voucher-throttled',
                   'That was too many wrong codes. Wait $1 seconds and try again.'),
@@ -267,7 +268,7 @@ _VOUCHER_MESSAGES = {
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
     'joined': ('voucher-already-joined',
-               'You already take part in this consultation with a voucher in this browser. '
+               'You already take part in this consultation with an access code in this browser. '
                'Log out first to use a different code.'),
     'switch-heading': ('voucher-switch-heading', 'Continue with this code?'),
     'switch-body': ('voucher-switch-body',
@@ -3689,19 +3690,43 @@ def _log_statement_post_failure(
     )
 
 
+def _admin_caller_signed_out() -> bool:
+    """Whether the admin console should treat the caller as signed out: no session username,
+    and no participant or only a practice session's demo participant. A practice session is
+    not a sign-in, here as on Admin home (`_admin_home_api_payload`) and in the workspace."""
+    if session.get('username') is not None:
+        return False
+    participant = _current_participant()
+    return participant is None or participant.is_demo
+
+
+def _refuse_admin() -> NoReturn:
+    """Refuse an admin API call: 401 when the caller is signed out, 403 otherwise.
+
+    The console's access boundary sends a 401 to the login and back (`?next=`), and shows
+    its access page for a 403, so a signed-out visitor who opens any admin page is asked to
+    log in instead of being told "Not allowed". Signed out includes a practice session
+    (`_admin_caller_signed_out`). A signed-in Wikimedia or single-consultation account
+    without the role gets 403.
+    """
+    if _admin_caller_signed_out():
+        abort(401)
+    abort(403)
+
+
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
-    """Return conversation or abort 403 if the current user can't moderate it."""
+    """Return conversation, or refuse (`_refuse_admin`) if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
     if not _can_moderate(conv):
-        abort(403)
+        _refuse_admin()
     return conv
 
 
 def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
-    """Return conversation or abort 403 if the current user can't organize it."""
+    """Return conversation, or refuse (`_refuse_admin`) if the current user can't organize it."""
     conv = Conversation.query.get_or_404(conv_id)
     if not _can_organize(conv):
-        abort(403)
+        _refuse_admin()
     return conv
 
 
@@ -3791,7 +3816,7 @@ def _managed_polis_creation() -> bool:
 
 def _admin_catalog_api_payload() -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     return build_admin_catalog(
         conversations=Conversation.query.order_by(Conversation.created_at.desc()).all(),
         global_admins=Participant.query.filter_by(is_global_admin=True).order_by(
@@ -3860,7 +3885,7 @@ def _admin_home_api_payload() -> dict:
 
 def _create_admin_conversation_api_payload(body: dict) -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     managed = _managed_polis_creation()
     if not _valid_slug(body['slug']) or body['phaseRoute'] not in PHASE_ROUTES:
         abort(400, description='Invalid conversation slug or phase route.')
@@ -3912,7 +3937,7 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
 
 def _grant_global_admin_api_payload(body: dict) -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     participant = Participant.query.filter_by(
         mw_username=body['username'].strip(),
     ).first()
@@ -3934,7 +3959,7 @@ def _grant_global_admin_api_payload(body: dict) -> dict:
 
 def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     participant = db.session.get(Participant, participant_id)
     actor = _current_participant()
     changed = set_global_admin(
@@ -4129,7 +4154,7 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
 def _admin_termination_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     return build_termination_state(
         conversation=conv,
         valid_vote_count=_polis_server_client().get_valid_vote_count(conv.polis_id),
@@ -4560,7 +4585,7 @@ def _delete_admin_featured_argument_api_payload(
 def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     client = _polis_server_client()
     result = delete_empty_conversation(
         conversation=conv,
@@ -4688,7 +4713,7 @@ def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
 def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     changed = set_conversation_paused(
         conversation=conv, paused=body['paused'],
         session=db.session, audit=record_audit,
@@ -4703,7 +4728,7 @@ def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
 def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     changed = set_conversation_archived(
         conversation=conv, archived=body['archived'],
         clear_schedule=_clear_scheduled_transition,
@@ -4719,7 +4744,7 @@ def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
 def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     scheduled_at = (
         _parse_utc_timestamp(body['scheduledAt'])
         if body['scheduledAt'] is not None else None
@@ -4743,7 +4768,7 @@ def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
 def _set_admin_phases_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     result = set_advanced_phases(
         conversation=conv, phase_definitions=_phase_sequence_for(conv),
         active_keys=set(body['activeKeys']),
@@ -4763,7 +4788,7 @@ def _set_admin_phases_api_payload(conv_id: int, body: dict) -> dict:
 def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     publish_final_report(
         conversation=conv,
         in_cleanup_window=_in_cleanup_window(conv),
@@ -4783,7 +4808,7 @@ def _replace_admin_roles_api_payload(
 ) -> dict:
     conv = _require_mod_for_conv(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     try:
         result = replace_conversation_roles(
             conversation=conv,

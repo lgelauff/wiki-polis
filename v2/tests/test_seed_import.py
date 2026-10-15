@@ -139,10 +139,11 @@ def _mock_polis(add_seed_side_effect=None, existing_statements=_UNSET):
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 def test_unauthenticated_is_refused(client, conv):
-    """The Jinja route redirected to /login; the API refuses outright."""
+    """The Jinja route redirected to /login; the API answers 401, and the console sends
+    the visitor to the login from that."""
     resp = _import(client, conv.id, ['hello'])
-    assert resp.status_code == 403
-    assert resp.get_json()['error']['code'] == 'forbidden'
+    assert resp.status_code == 401
+    assert resp.get_json()['error']['code'] == 'unauthorized'
 
 
 def test_non_admin_forbidden(auth_client, conv):
