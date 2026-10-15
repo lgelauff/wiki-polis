@@ -46,6 +46,7 @@ from services.admin_catalog import (
 from services.admin_settings import (
     AccessSettingsLocked, DemoSwitchForbidden, InvalidAccessSettings,
 )
+from services.eligibility_policies import EligibilityPolicyRefused
 
 
 def register_admin_routes(
@@ -71,6 +72,7 @@ def register_admin_routes(
     resolve_admin_lifecycle: Callable[[int], dict],
     resolve_admin_settings: Callable[[int], dict],
     update_admin_settings: Callable[[int, dict], dict],
+    resolve_admin_eligibility_policies: Callable[[], dict],
     update_admin_recommendation_tier: Callable[[int, dict], dict],
     resolve_admin_termination: Callable[[int], dict],
     delete_admin_conversation: Callable[[int], dict],
@@ -94,6 +96,12 @@ def register_admin_routes(
 ) -> None:
     """Register admin-only HTTP adapters on the shared API blueprint."""
     _no_store = no_store
+
+    def _policy_refused(exc: EligibilityPolicyRefused):
+        return error_response(
+            'validation_failed', 'Check the highlighted settings.', 400,
+            details={'fields': {exc.field: [exc.message]}},
+        )
 
     def _already_configured_site_admin():
         return error_response(
@@ -134,6 +142,8 @@ def register_admin_routes(
             )
         try:
             data = create_admin_conversation(body)
+        except EligibilityPolicyRefused as exc:
+            return _policy_refused(exc)
         except ConversationSlugConflict:
             return error_response(
                 'slug_conflict', 'That conversation slug is already in use.', 409,
@@ -378,6 +388,8 @@ def register_admin_routes(
             return error_response(
                 'validation_failed', str(exc), 400,
             )
+        except EligibilityPolicyRefused as exc:
+            return _policy_refused(exc)
         except DemoSwitchForbidden:
             return error_response(
                 'forbidden',
@@ -385,6 +397,10 @@ def register_admin_routes(
                 403,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.get('/admin/eligibility-policies')
+    def get_admin_eligibility_policies():
+        return _no_store(jsonify({'data': resolve_admin_eligibility_policies()}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/recommendation-tier')
     def put_admin_conversation_recommendation_tier(conversation_id: int):

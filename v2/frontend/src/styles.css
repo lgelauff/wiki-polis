@@ -762,10 +762,7 @@ h1[tabindex="-1"]:focus { outline: none; }
 .settings-form section > header p { margin: .4rem 0 0; color: var(--muted); font-size: .78rem; }
 .settings-form section > label { display: block; margin: 1rem 0; font-size: .72rem; font-weight: 650; }
 .settings-form input:not([type="radio"]), .settings-form textarea, .settings-form select { display: block; width: 100%; margin-top: .45rem; padding: .75rem; border: 1px solid var(--ink); background: white; font: .85rem/1.45 var(--mono); }
-.settings-hint, .settings-eligibility p { color: var(--muted); font-size: .7rem; }
-.settings-eligibility { display: grid; gap: .4rem; margin-top: 1.5rem; padding: 1rem; border-left: 4px solid var(--rule); background: white; }
-.settings-eligibility[data-configured="true"] { border-color: var(--signal); }
-.settings-eligibility span { color: var(--signal); font: .7rem var(--mono); }
+.settings-hint { color: var(--muted); font-size: .7rem; }
 .settings-form fieldset { margin: 0; padding: 0; border: 0; }
 .settings-form legend { margin-bottom: .7rem; font-size: .72rem; font-weight: 650; }
 .settings-tier { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--rule); cursor: pointer; }

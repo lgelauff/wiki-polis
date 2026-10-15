@@ -333,7 +333,7 @@
 }
 
 .admin-shell .settings-form :is(label, legend, .access-answer-legend, .access-answer-value,
-  .access-choice, .settings-hint, .settings-eligibility, .settings-eligibility p,
+  .access-choice, .settings-hint, .policy-rules, .access-field-note,
   .settings-tier span, .access-summary ul, .access-field-error, .access-confirm p),
 .admin-shell .settings-form > footer p {
   font-size: 13px;
@@ -961,7 +961,7 @@
 }
 
 /* The settings form's remaining site-stylesheet colours, in the console's tokens. */
-.admin-shell .settings-form :is(.settings-tier span, .settings-hint, .settings-eligibility p) {
+.admin-shell .settings-form :is(.settings-tier span, .settings-hint, .access-field-note) {
   color: var(--shell-muted);
   font-family: inherit;
 }
@@ -981,14 +981,102 @@
   background: none;
 }
 
-.admin-shell .settings-form .settings-eligibility {
-  border-inline-start-color: var(--shell-line);
-  background: none;
+/* ── Eligibility policy (#530) ────────────────────────────────────────────────
+   A text box with its drop-down list; the list is the one box, the rules under the field
+   are plain text. */
+
+.admin-shell .policy-field {
+  margin-block: 0 .75rem;
 }
 
-.admin-shell .settings-form .settings-eligibility span {
+.admin-shell .policy-combobox {
+  position: relative;
+  max-inline-size: var(--field-wide);
+}
+
+.admin-shell .policy-combobox__box {
+  display: flex;
+  align-items: stretch;
+}
+
+.admin-shell .policy-combobox__box input {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.admin-shell .policy-combobox__toggle {
+  padding: 0 .5rem;
+  border: 1px solid var(--shell-line);
+  border-inline-start: 0;
+  background: none;
+  color: var(--shell-muted);
+  cursor: pointer;
+}
+
+.admin-shell .policy-combobox__list {
+  position: absolute;
+  z-index: 10;
+  inset-inline: 0;
+  max-block-size: 16rem;
+  margin: .125rem 0 0;
+  padding: .25rem 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--shell-line);
+  background: var(--shell-surface);
+}
+
+.admin-shell .policy-combobox__list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-shell .policy-combobox__group {
+  padding: .375rem .75rem .125rem;
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+.admin-shell .policy-combobox__option {
+  padding: .25rem .75rem;
   color: var(--shell-body);
-  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-shell .policy-combobox__option[aria-selected="true"] {
+  background: var(--shell-line);
+  color: var(--shell-ink);
+}
+
+.admin-shell .policy-combobox__id,
+.admin-shell .policy-combobox__empty {
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+.admin-shell .policy-combobox__empty {
+  padding: .25rem .75rem;
+}
+
+.admin-shell .policy-rules {
+  margin-block: .375rem .75rem;
+  color: var(--shell-body);
+}
+
+.admin-shell .policy-rules ul {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.admin-shell .policy-rules p {
+  margin: .25rem 0 0;
+}
+
+.admin-shell .access-field-note {
+  margin: .25rem 0 0;
 }
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */

@@ -58,7 +58,9 @@ str(10)='en' (BCP-47) · `intro_text` / `outro_text` (sanitised HTML, nullable) 
 - `report_filter_snapshot` JSON nullable.
 - **Join-time eligibility gate (#146):** `eligibility_event_id` str(80) nullable ·
   `eligibility_label` str(255) nullable. Empty event id = open to any logged-in user
-  allowed by `access_policy`.
+  allowed by `access_policy`. Since #530 the id is a canivote policy id chosen from
+  canivote's `GET /policies`; a save refuses any other new value. The label names the
+  policy for participants: the policy's title unless the organizer rewords it.
 - **Phase 6 Polis mapping:** `phase6_polis_conversation_id` str(50) nullable — the
   dedicated Phase 6 Polis conversation id, set once Phase 6 is initialised by the admin.
   Unique (`uq_conversations_phase6_polis_conversation_id`) — enforces one Phase 6 Polis

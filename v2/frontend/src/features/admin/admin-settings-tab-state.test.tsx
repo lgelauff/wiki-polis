@@ -40,8 +40,7 @@ const settings: Settings = {
     {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
   ]},
   eligibility: {
-    configured: false, eventId: '', label: null, configurationMode: 'editable',
-    note: 'Leave the event ID blank when no external eligibility check applies.',
+    configured: false, eventId: '', label: null, status: 'none', policy: null,
   },
   capabilities: {edit: true, switchDemo: false},
   locks: {gated: false, gatingType: false, showUsernames: false},
@@ -147,15 +146,17 @@ test('an Access save does not write back a title older than the server\'s', asyn
   const sent = recordPuts();
   renderPage('access');
 
-  const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
+  const policy = await screen.findByRole('combobox', {name: 'Eligibility policy'}, {timeout: 10_000});
   serve({...settings, conversation: {...settings.conversation, title: 'Renamed elsewhere'},
     recommendations: {...settings.recommendations, tier: 'complex'}});
-  fireEvent.change(eventId, {target: {value: 'event-99'}});
+  fireEvent.change(policy, {target: {value: 'movement'}});
+  fireEvent.click(screen.getByRole('option', {name: /Not blocked anywhere in the movement/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({
-    eligibilityEventId: 'event-99', title: 'Renamed elsewhere', recommendationTier: 'complex',
+    eligibilityEventId: 'meta-global', eligibilityLabel: 'Not blocked anywhere in the movement',
+    title: 'Renamed elsewhere', recommendationTier: 'complex',
   });
 });
 

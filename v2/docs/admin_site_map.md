@@ -49,7 +49,7 @@ role.
 |---|---|---|---|---|---|
 | Overview | (none) | `…/<id>` | phase stepper and statistics; readiness and Move on; roles (list); configuration; no links to other pages | phase stepper and statistics; no phase controls, only "Only an organizer or site admin can change phases" and, when a transition is scheduled, when the next phase starts; roles (list) | as organizer, plus Pause, scheduling the next phase, the advanced phase controls, adding and removing roles, and "Ending the consultation" (publish the final report, delete) |
 | Settings | Basics | `…/settings` → `…/settings/basics` | edit, one Save | read-only (strict moderation as text) | edit, one Save; also the Practice Environment section |
-| | Access | `…/settings/access` | edit, one Save | read-only | edit, one Save |
+| | Access | `…/settings/access` | edit, one Save; the eligibility policy is chosen from canivote's list, with its rules in plain words under it | read-only (the policy, its label and its rules as text) | edit, one Save |
 | | Invitations | `…/settings/invitations` (always a tab) | the list, Remove, and adding. While access is not an invitation list the tab looks the same but its content is greyed: a "not in effect" note on top, adding disabled, the list muted; Remove still works | the list with usernames, read-only (greyed the same way when not in effect) | as organizer |
 | | Access codes | `…/settings/vouchers` (a tab only when access is by access code, next to Invitations; the address keeps the earlier word "voucher") | "Also coming" only | the same | the same |
 | | Roles | `…/settings/roles` | the list | the list | the list, and change roles |

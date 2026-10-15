@@ -717,6 +717,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/eligibility-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return canivote's eligibility policies an organizer may choose from */
+        get: operations["getAdminEligibilityPolicies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/settings": {
         parameters: {
             query?: never;
@@ -1474,6 +1491,33 @@ export interface components {
                 recommendations: components["schemas"]["AdminRecommendations"];
             };
         };
+        AdminEligibilityPoliciesResponse: {
+            data: {
+                available: boolean;
+                policies: components["schemas"]["EligibilityPolicy"][];
+            };
+        };
+        EligibilityPolicy: {
+            id: string;
+            title: string;
+            wiki: string | null;
+            /** @description The rules canivote evaluates, each once; null when the policy's detail could not be read. */
+            rules: components["schemas"]["EligibilityPolicyRule"][] | null;
+            /** @description The community's policy pages (https URLs). */
+            sources: string[];
+        };
+        EligibilityPolicyRule: {
+            metric: string;
+            operator: string;
+            value: unknown;
+            wiki?: string;
+            namespace?: string;
+            within?: components["schemas"]["EligibilityPolicySpan"];
+        };
+        EligibilityPolicySpan: {
+            amount: number;
+            unit: string;
+        };
         AdminSettings: {
             conversation: {
                 id: number;
@@ -1500,9 +1544,13 @@ export interface components {
                 configured: boolean;
                 eventId: string;
                 label: string | null;
-                /** @constant */
-                configurationMode: "editable";
-                note: string;
+                /**
+                 * @description The stored id checked against canivote's policy list: none stored, on the list, not on it, or the list cannot be read now.
+                 * @enum {string}
+                 */
+                status: "none" | "listed" | "unlisted" | "unavailable";
+                /** @description The stored policy, when it is on canivote's list. */
+                policy: components["schemas"]["EligibilityPolicy"] | null;
             };
             capabilities: {
                 edit: boolean;
@@ -5043,6 +5091,44 @@ export interface operations {
             };
             /** @description Vote verification unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminEligibilityPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Policy list; available is false and policies empty when canivote is not configured or cannot be reached */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEligibilityPoliciesResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organizer of a conversation or global admin permission required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

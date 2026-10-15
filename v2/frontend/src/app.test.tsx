@@ -248,8 +248,10 @@ test('edits settings and legacy eligibility through one typed command', async ()
   const access = render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings/access']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Access'})).toBeNull();
-  expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
-  fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
+  expect(screen.getByLabelText('Eligibility label')).toHaveValue('Stemgerechtigd op nl.wikipedia');
+  const policy = await screen.findByRole('combobox', {name: 'Eligibility policy'});
+  fireEvent.change(policy, {target: {value: 'movement'}});
+  fireEvent.click(screen.getByRole('option', {name: /Not blocked anywhere in the movement/}));
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved'));
@@ -412,7 +414,7 @@ function serveInvitationListSettings() {
       recommendations: {tier: 'medium', tiers: [
         {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
       ]},
-      eligibility: {configured: false, eventId: '', label: null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
+      eligibility: {configured: false, eventId: '', label: null, status: 'none', policy: null},
       capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}),
   ));

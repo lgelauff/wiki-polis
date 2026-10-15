@@ -2,8 +2,13 @@
 
 from dataclasses import dataclass
 
+from collections.abc import Callable
+
 from db import GATING_TYPES
 from services.access import conversation_gating_type, is_gated_conversation
+from services.eligibility_policies import (
+    find_policy, policy_status, resolve_policy_choice,
+)
 
 
 class AccessSettingsLocked(ValueError):
@@ -46,8 +51,9 @@ def apply_demo_access_settings(conversation) -> None:
 def build_admin_settings(
     *, conversation, recommendation_tiers: dict, recommendation_profile: dict,
     phase_route_label: str, can_edit: bool, self_link: str, lifecycle_link: str,
-    can_switch_demo: bool = False,
+    can_switch_demo: bool = False, eligibility_policies: list[dict] | None = None,
 ) -> dict:
+    event_id = conversation.eligibility_event_id or ''
     return {
         'conversation': {
             'id': conversation.id,
@@ -79,11 +85,13 @@ def build_admin_settings(
             } for key, values in recommendation_tiers.items()],
         },
         'eligibility': {
-            'configured': bool(conversation.eligibility_event_id),
-            'eventId': conversation.eligibility_event_id or '',
+            'configured': bool(event_id),
+            'eventId': event_id,
             'label': conversation.eligibility_label,
-            'configurationMode': 'editable',
-            'note': 'Leave the event ID blank when no external eligibility check applies.',
+            # The stored id checked against canivote's list (#530), and the policy itself
+            # when it is on it, so a viewer who may not change it still reads its rules.
+            'status': policy_status(event_id, eligibility_policies),
+            'policy': find_policy(eligibility_policies, event_id),
         },
         'capabilities': {'edit': can_edit, 'switchDemo': can_edit and can_switch_demo},
         'locks': {
@@ -123,6 +131,7 @@ def update_conversation_settings(
     results_shared: bool = False, show_usernames: bool = False,
     access_request_text: str | None = None,
     may_switch_demo: bool = False,
+    eligibility_policies: Callable[[], list[dict] | None] = lambda: None,
 ) -> SettingsUpdateResult:
     # The legacy access-policy representation remains accepted for old clients,
     # but every new write is normalised to the explicit gated settings.
@@ -165,6 +174,11 @@ def update_conversation_settings(
     if gating_type == 'invite_only':
         eligibility_event_id = ''
         eligibility_label = ''
+    # Only a policy on canivote's list is stored (#530); raises EligibilityPolicyRefused.
+    choice = resolve_policy_choice(
+        requested_id=eligibility_event_id, requested_label=eligibility_label,
+        stored_id=conversation.eligibility_event_id, policies=eligibility_policies,
+    )
 
     locked_fields = {
         'gated': gated,
@@ -199,8 +213,8 @@ def update_conversation_settings(
         'results_shared': bool(results_shared),
         'show_usernames': bool(show_usernames),
         'access_request_text': (access_request_text or '').strip() or None,
-        'eligibility_event_id': eligibility_event_id.strip() or None,
-        'eligibility_label': eligibility_label.strip() or None,
+        'eligibility_event_id': choice.event_id or None,
+        'eligibility_label': choice.label or None,
         'recommended_quantities': {'tier': tier},
     }
     changed_fields = sorted(

@@ -109,6 +109,7 @@ from services.admin_settings import (
     apply_demo_access_settings, build_admin_settings,
     update_conversation_settings, update_recommendation_tier,
 )
+from services.eligibility_policies import POLICY_CACHE, resolve_policy_choice
 from services.admin_termination import (
     build_termination_state,
     delete_empty_conversation,
@@ -3891,6 +3892,11 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
         abort(400, description='Invalid conversation slug or phase route.')
     if not managed and not _valid_polis_id(body['polisId'] or ''):
         abort(400, description='A valid Polis conversation ID is required in manual mode.')
+    # Only a policy on canivote's list (#530); raises EligibilityPolicyRefused.
+    eligibility = resolve_policy_choice(
+        requested_id=body['eligibilityEventId'], requested_label=body['eligibilityLabel'],
+        stored_id=None, policies=_eligibility_policies,
+    )
 
     def new_conversation(polis_id):
         conversation = Conversation(
@@ -3899,8 +3905,8 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
             phase_route=body['phaseRoute'],
             intro_text=_sanitise_text(body['introHtml']),
             outro_text=_sanitise_text(body['outroHtml']),
-            eligibility_event_id=body['eligibilityEventId'] or None,
-            eligibility_label=body['eligibilityLabel'] or None,
+            eligibility_event_id=eligibility.event_id or None,
+            eligibility_label=eligibility.label or None,
             statement_moderation_policy='moderate',
         )
         if conversation.access_policy == 'demo':
@@ -4133,6 +4139,35 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     )
 
 
+def _eligibility_policies() -> list[dict] | None:
+    """canivote's policy list (#530), cached; None when it is not configured or down."""
+    return POLICY_CACHE.get(
+        current_app.config.get('ACCOUNT_ELIGIBILITY_URL', ''),
+        user_agent=_MW_USER_AGENT, logger=current_app.logger,
+    )
+
+
+def _admin_eligibility_policies_api_payload() -> dict:
+    """The policies an organizer may choose from (#530): to a site admin, and to anyone
+    who organizes at least one consultation. A moderator reads the chosen policy from the
+    settings payload and never needs the list."""
+    participant = _current_participant()
+    # A practice session is not a sign-in (as on Admin home): decide site admin only for a
+    # real participant, since `_is_global_admin(None)` would resolve the demo one again.
+    if participant is not None and participant.is_demo:
+        participant = None
+        site_admin = False
+    else:
+        site_admin = _is_global_admin(participant)
+    organizer = participant is not None and AdminRole.query.filter_by(
+        participant_id=participant.id, role='organizer',
+    ).first() is not None
+    if not (site_admin or organizer):
+        _refuse_admin()
+    policies = _eligibility_policies()
+    return {'available': policies is not None, 'policies': policies or []}
+
+
 def _admin_settings_api_payload(conv_id: int) -> dict:
     conv = _require_mod_for_conv(conv_id)
     return build_admin_settings(
@@ -4148,6 +4183,11 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
             'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
         ),
         lifecycle_link=_admin_client_link(conv.id),
+        # Asked only when a policy is stored, so a consultation without one never waits on
+        # canivote.
+        eligibility_policies=(
+            _eligibility_policies() if conv.eligibility_event_id else None
+        ),
     )
 
 
@@ -4633,6 +4673,7 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         show_usernames=body.get('showUsernames', False),
         access_request_text=body.get('accessRequestText'),
         may_switch_demo=_is_global_admin(),
+        eligibility_policies=_eligibility_policies,
     )
     return {
         'changed': result.changed,
@@ -6246,6 +6287,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_lifecycle=_admin_lifecycle_api_payload,
         resolve_admin_settings=_admin_settings_api_payload,
         update_admin_settings=_update_admin_settings_api_payload,
+        resolve_admin_eligibility_policies=_admin_eligibility_policies_api_payload,
         update_admin_recommendation_tier=_update_admin_recommendation_tier_api_payload,
         resolve_admin_termination=_admin_termination_api_payload,
         delete_admin_conversation=_delete_admin_conversation_api_payload,

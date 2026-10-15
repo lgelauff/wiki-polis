@@ -94,7 +94,36 @@ export const testMessages: Record<string, string> = Object.fromEntries(
   Object.entries(catalogue).filter(([key]) => key !== '@metadata'),
 ) as Record<string, string>;
 
+/** canivote's policies as `GET /admin/eligibility-policies` serves them (#530). */
+export const testPolicies = [
+  {
+    id: 'nlwiki-stemprocedure', title: 'Voting eligibility on Dutch Wikipedia', wiki: 'nl.wikipedia.org',
+    rules: [
+      {metric: 'has_global_account', operator: 'is', value: true},
+      {metric: 'is_blocked', wiki: 'nl.wikipedia.org', operator: 'is', value: false},
+      {metric: 'time_since_first_edit', wiki: 'nl.wikipedia.org', operator: 'at_least', value: {amount: 2, unit: 'weeks'}},
+      {metric: 'edit_count', wiki: 'nl.wikipedia.org', operator: 'more_than', value: 100},
+    ],
+    sources: ['https://nl.wikipedia.org/wiki/Wikipedia:Stemprocedure'],
+  },
+  {
+    id: 'dewiki-stimmberechtigung', title: 'Voting eligibility on German Wikipedia', wiki: 'de.wikipedia.org',
+    rules: [
+      {metric: 'user_groups', wiki: 'de.wikipedia.org', operator: 'excludes', value: 'bot'},
+      {metric: 'edit_count', wiki: 'de.wikipedia.org', namespace: 'article', operator: 'at_least', value: 200},
+      {metric: 'edit_count', wiki: 'de.wikipedia.org', namespace: 'article', within: {amount: 12, unit: 'months'}, operator: 'at_least', value: 50},
+    ],
+    sources: [],
+  },
+  {
+    id: 'meta-global', title: 'Not blocked anywhere in the movement', wiki: 'meta.wikimedia.org',
+    rules: [{metric: 'is_globally_locked', operator: 'is', value: false}],
+    sources: [],
+  },
+] satisfies components['schemas']['EligibilityPolicy'][];
+
 export const handlers = [
+  http.get(new URL('/api/v1/admin/eligibility-policies', globalThis.location.origin).toString(), () => HttpResponse.json({data: {available: true, policies: testPolicies}})),
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
   http.get(new URL('/api/v1/admin/home', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversations: [{id: 7, title: 'Community strategy', role: 'Organizer', status: 'active', openFlags: 1, pendingStatements: 2, links: {overview: '/admin/conversations/7'}}],
@@ -155,7 +184,7 @@ export const handlers = [
       {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
       {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12, featured_statements: 24}},
     ]},
-    eligibility: {configured: true, eventId: 'extended-confirmed', label: 'Extended-confirmed editors', configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
+    eligibility: {configured: true, eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd op nl.wikipedia', status: 'listed', policy: testPolicies[0]},
     capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), async ({request}) => {
@@ -163,7 +192,7 @@ export const handlers = [
     return HttpResponse.json({data: {changed: true, changedFields: ['title'], settings: {
       conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, gated: body.gated, gatingType: body.gatingType, announce: body.announce, information: body.information, resultsShared: body.resultsShared, showUsernames: body.showUsernames, accessRequestText: body.accessRequestText, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
       recommendations: {tier: body.recommendationTier, tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}]},
-      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, status: body.eligibilityEventId ? 'listed' : 'none', policy: testPolicies.find((policy) => policy.id === body.eligibilityEventId) ?? null}, capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(), async ({request}) => {

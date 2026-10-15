@@ -39,8 +39,7 @@ const settings: Settings = {
     {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
   ]},
   eligibility: {
-    configured: false, eventId: '', label: null, configurationMode: 'editable',
-    note: 'Leave the event ID blank when no external eligibility check applies.',
+    configured: false, eventId: '', label: null, status: 'none', policy: null,
   },
   capabilities: {edit: true, switchDemo: false},
   locks: {gated: false, gatingType: false, showUsernames: false},
@@ -294,19 +293,19 @@ test('the eligibility fields are not shown while the invitation list is the answ
   // The server clears the eligibility pair whenever the invitation list is chosen
   // (services/admin_settings.py), so a field that save would empty is not offered.
   serve({...settings, eligibility: {
-    ...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors',
+    ...settings.eligibility, configured: true, eventId: 'meta-global', label: 'Active editors',
   }});
   renderPage('access');
 
-  const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
-  expect(eventId).toHaveValue('event-42');
+  const policy = await screen.findByRole('combobox', {name: 'Eligibility policy'}, {timeout: 10_000});
+  expect(policy).toHaveValue('Not blocked anywhere in the movement');
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
-  expect(screen.queryByLabelText('Eligibility event ID')).toBeNull();
+  expect(screen.queryByRole('combobox', {name: 'Eligibility policy'})).toBeNull();
   expect(screen.queryByLabelText('Eligibility label')).toBeNull();
-  expect(screen.queryByText(/^Eligibility (not )?configured$/)).toBeNull();
   // Back to an answer that keeps them, and they are there again, as they were.
   fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
-  expect(screen.getByLabelText('Eligibility event ID')).toHaveValue('event-42');
+  expect(await screen.findByRole('combobox', {name: 'Eligibility policy'}))
+    .toHaveValue('Not blocked anywhere in the movement');
 });
 
 test('a stored invitation list shows no eligibility fields', async () => {
@@ -314,7 +313,7 @@ test('a stored invitation list shows no eligibility fields', async () => {
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.queryByLabelText('Eligibility event ID')).toBeNull();
+  expect(screen.queryByText('Eligibility policy')).toBeNull();
   expect(screen.queryByLabelText('Eligibility label')).toBeNull();
 });
 
@@ -544,7 +543,7 @@ test('no Practice switch while Explore locks access', async () => {
 
 test('on Access a role that may not edit sees the values as text and no Save', async () => {
   serve({...settings, capabilities: {edit: false, switchDemo: false},
-    eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
+    eligibility: {...settings.eligibility, configured: true, eventId: 'meta-global', label: 'Active editors'}});
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
@@ -554,7 +553,7 @@ test('on Access a role that may not edit sees the values as text and no Save', a
   expect(screen.queryByRole('radio')).toBeNull();
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.getByText('Anyone with a Wikimedia account')).toBeVisible();
-  expect(screen.getByText('event-42')).toBeVisible();
+  expect(screen.getByText('meta-global')).toBeVisible();
   expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
 });
 
@@ -663,11 +662,11 @@ test('renders its labels from the catalogue, not from source literals', async ()
 });
 
 test('the eligibility fields live on Access, and Basics says nothing about them', async () => {
-  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42'}});
+  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'meta-global'}});
   renderPage('basics');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.queryByLabelText('Eligibility event ID')).toBeNull();
+  expect(screen.queryByText('Eligibility policy')).toBeNull();
 });
 
 test('Basics carries the texts, the topic size and the CC0 line', async () => {
@@ -928,11 +927,11 @@ test('the Access tab has no Approval control and no Practice switch', async () =
 
 test('a practice item keeps its eligibility fields on Access, without the admission group', async () => {
   serve({...settings, conversation: {...settings.conversation, accessPolicy: 'demo'},
-    eligibility: {...settings.eligibility, configured: true, eventId: 'event-42'}});
+    eligibility: {...settings.eligibility, configured: true, eventId: 'meta-global'}});
   renderPage('access');
 
-  const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
-  expect(eventId).toHaveValue('event-42');
+  const policy = await screen.findByRole('combobox', {name: 'Eligibility policy'}, {timeout: 10_000});
+  expect(policy).toHaveValue('Not blocked anywhere in the movement');
   expect(screen.getByLabelText('Eligibility label')).toBeVisible();
   // The fixed answer is stated on Basics; here there is no question to offer.
   expect(screen.queryByRole('group', {name: 'Who can take part'})).toBeNull();
@@ -943,7 +942,7 @@ test('a practice item keeps its eligibility fields on Access, without the admiss
 test('saving Basics sends the Access fields back as they were loaded', async () => {
   // The endpoint takes one of three complete key sets, so a save from either tab has to
   // carry the fields the other tab owns. Last write wins, so they go back untouched.
-  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
+  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'meta-global', label: 'Active editors'}});
   const sent = recordPuts();
   renderPage('basics');
 
@@ -954,7 +953,7 @@ test('saving Basics sends the Access fields back as they were loaded', async () 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({
     title: 'A new title',
-    eligibilityEventId: 'event-42',
+    eligibilityEventId: 'meta-global',
     eligibilityLabel: 'Active editors',
     gated: false,
     gatingType: null,
@@ -965,17 +964,21 @@ test('saving Basics sends the Access fields back as they were loaded', async () 
 });
 
 test('saving Access sends the Basics fields back as they were loaded', async () => {
-  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
+  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'meta-global', label: 'Active editors'}});
   const sent = recordPuts();
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'event-99'}});
+  const policy = await screen.findByRole('combobox', {name: 'Eligibility policy'});
+  fireEvent.change(policy, {target: {value: 'dutch'}});
+  fireEvent.click(screen.getByRole('option', {name: /Voting eligibility on Dutch Wikipedia/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({
-    eligibilityEventId: 'event-99',
+    eligibilityEventId: 'nlwiki-stemprocedure',
+    // The organizer's own label stays when another policy is chosen.
+    eligibilityLabel: 'Active editors',
     title: 'Community strategy',
     introHtml: '<p>Shape the future.</p>',
     outroHtml: '',
