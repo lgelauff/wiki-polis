@@ -724,7 +724,7 @@ def compare_reports(PA, PB, cfg, out, repro):
         if n == 0:
             return 'No observed movement.'
         if minp[c] > 0.05:
-            return f'Too few people changed their vote to tell ({up} toward agree, {down} toward disagree).'
+            return f'Too few people changed their response to tell ({up} toward agree, {down} toward disagree).'
         if holm[c] < 0.05:
             return f'More moved toward {side} than the other way; unlikely to be chance (p = {pv[c]:.3f}; {holm[c]:.3f} after correcting for {m} statements).'
         if pv[c] < 0.05:

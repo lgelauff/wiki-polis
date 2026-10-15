@@ -7,40 +7,40 @@ What the reports count, how they describe it, and why. The rules themselves are 
 
 1. **Show significance wherever a valid test exists; otherwise describe in words.** If a test can answer the
    question, the report gives its result. Where it can't, the report describes the pattern in words.
-   Examples: too few people moved; the groups were formed from the same votes. The description always comes
+   Examples: too few people moved; the groups were formed from the same responses. The description always comes
    with the counts it rests on.
-2. **Never causal, never more certain than the numbers.** Reports say what was observed among these voters.
+2. **Never causal, never more certain than the numbers.** Reports say what was observed among these participants.
    They don't say why it happened, and they don't speak for a wider population. Every number names its
    population ("among the 34 matched participants") and its count.
 3. **Deterministic.** Every sentence is a fixed template filled from the data, chosen by a stated rule. The
    same inputs and code give byte-identical HTML and CSV. A reproducibility block on every page lists the
    script's git hash, the config and input hashes, the export times and the Python version.
-4. **Self-selected participants.** Counts describe the people who voted. Each page says so.
+4. **Self-selected participants.** Counts describe the people who responded. Each page says so.
 5. **Privacy at a small event.** Counts only; no xid or participant id is ever written. Small cells are
    suppressed where they could identify someone (§7).
 
 **Planned (language review):** a semantic check of the report templates for overclaiming, run when templates
 change and before a report goes out. It covers implied causation, more certainty than the test supports,
-generalising beyond these voters, and qualitative words without sizes. A language-model reviewer applies this
+generalising beyond these participants, and qualitative words without sizes. A language-model reviewer applies this
 rubric and records the flagged sentences with reasons. It is a review step, not a word list, and not part of
 the deterministic test suite.
 
-## 2. Which votes count
+## 2. Which responses count
 
-- **Time window (`since`).** Vote rows before the window are dropped, e.g. test votes before a live session.
-  The report gives the number of rows removed, and how many participants voted only before the window.
-- **Automatic votes.** When a statement is created, Polis records a vote by its author at that exact second.
-  That vote is the platform's, not an opinion, so it is not counted. The rule is procedural: it is about
-  *which vote*, not *which person*. All other votes count, including those of statement authors and the
+- **Time window (`since`).** Response rows before the window are dropped, e.g. test responses before a live session.
+  The report gives the number of rows removed, and how many participants responded only before the window.
+- **Automatic responses.** When a statement is created, Polis records a response (a pass) by its author at that exact second.
+  That response is the platform's, not an opinion, so it is not counted. The rule is procedural: it is about
+  *which response*, not *which person*. All other responses count, including those of statement authors and the
   conversation owner, who can also take part as ordinary participants.
   `exclude_participants` remains as a manual override and must come with a stated reason.
   - On the Europeana data this rule removes exactly the 20 (Poll A) and 19 (Poll B) passes recorded at
-    statement creation. No other votes by the author exist there.
-- **Current vote.** The latest row per participant and statement in `votes.csv`. Rows with equal timestamps keep
-  file order, and the report counts them. `participant-votes.csv` is not used for votes: Polis builds it by id
-  order with last-write-wins, so after re-votes it can differ from the latest vote by time. The report counts
+    statement creation. No other responses by the author exist there.
+- **Current response.** The latest row per participant and statement in `votes.csv`. Rows with equal timestamps keep
+  file order, and the report counts them. `participant-votes.csv` is not used for responses: Polis builds it by id
+  order with last-write-wins, so after changed responses it can differ from the latest response by time. The report counts
   those differences.
-- **Participants** are people with at least one counted opinion vote.
+- **Participants** are people with at least one counted response to an opinion statement.
 
 ## 3. Statements, including statements that change
 
@@ -50,10 +50,10 @@ the deterministic test suite.
   in the report.
 - **Moderation.** Rejected statements are left out. Unmoderated ones are left out unless `include_unmoderated`
   is set. The report gives both counts.
-- **Statements added while voting was under way.** Someone who finished before a statement existed could not
-  vote on it. For every statement created after the first counted vote, the report gives its creation time and
-  how many participants had already cast their last vote. Every statement is reported with its own number of
-  votes, never as a share of all participants.
+- **Statements added while the poll was open.** Someone who finished before a statement existed could not
+  respond to it. For every statement created after the first counted response, the report gives its creation time and
+  how many participants had already given their last response. Every statement is reported with its own number of
+  responses, never as a share of all participants.
 - **The same statement in two polls.** Statements are matched by text, ignoring spacing and apostrophe style,
   never by number. Conversations number the same texts differently (Poll B #0 = Poll A #2). The second poll is
   shown with the first poll's numbers.
@@ -76,11 +76,11 @@ the deterministic test suite.
   `min_participants_for_groups` people took part. The interim value is **25**. Below it the report says "not
   computed" and gives the count.
   - Groups under 5 members are merged into "Other".
-  - The groups are a snapshot at export time, computed by Polis over all votes, including votes before the
-    window and automatic votes. The report names the Polis group of participants who cast only automatic votes.
-- **Descriptive only.** Testing differences between groups formed from these same votes would be circular, so
+  - The groups are a snapshot at export time, computed by Polis over all responses, including responses before the
+    window and automatic responses. The report names the Polis group of participants with only automatic responses.
+- **Descriptive only.** Testing differences between groups formed from these same responses would be circular, so
   no test is applied. The "largest difference between groups" chart uses this report's own measure: the range
-  across groups of (agree − disagree) / all votes, over groups of 5 or more. It is named as such on the page.
+  across groups of (agree − disagree) / all responses, over groups of 5 or more. It is named as such on the page.
 - **Planned:** show k-means and Leiden community detection side by side, so readers see how much the grouping
   depends on the method. Replace the fixed minimum with a robustness measure: re-cluster on resampled
   participants, and show groups only when assignments stay stable above a stated threshold. Leiden needs an
@@ -89,21 +89,21 @@ the deterministic test suite.
 ## 6. Before and after (two polls)
 
 - **Same people only.** The comparison uses only participants whose xid appears in both conversations' xid
-  files and who cast a counted opinion vote in both. Each conversation has its own xid file.
+  files and who gave a counted response to an opinion statement in both. Each conversation has its own xid file.
   - Comparing the two rooms' totals mixes change with who turned up. On the Europeana data, #4 looked like a
     22-point drop in agreement, but among the 34 matched people the number agreeing was 4 in both polls.
-  - The report shows how the one-poll-only voters voted, but keeps them out of the comparison.
+  - The report shows how the one-poll-only participants responded, but keeps them out of the comparison.
   - Each single-poll page lists where its labels differ from those of the matched group.
 - **Movement in both directions, never only the net.**
-  - Per statement: a table of each person's vote in A against their vote in B (agree / disagree / pass /
-    no vote).
+  - Per statement: a table of each person's response in A against their response in B (agree / disagree / pass /
+    no response).
   - Counts of movers toward agree and toward disagree, on the order agree · pass · disagree.
   - Direct agree↔disagree switches, reported separately.
 - **Significance where it can exist.**
   - Test: an exact two-sided sign test per statement on the direction of movement, Holm-corrected for the
     number of statements. Each statement gets a reading chosen by rule:
     - no movers: "No observed movement";
-    - too few movers for any split to reach p < 0.05: "Too few people changed their vote to tell", with the
+    - too few movers for any split to reach p < 0.05: "Too few people changed their response to tell", with the
       counts;
     - significant after correction: the direction and both p-values;
     - significant only before correction: said explicitly;
@@ -112,7 +112,7 @@ the deterministic test suite.
   - The report also counts how many statements could not reach significance with the movers they had.
 - **Noise baselines.** The report counts how many matched participants answered a factual role question
   differently in the two polls, and how many statements' net movement went toward the middle. Changes in
-  opinion votes can be read against these. Rows are in statement order, not ranked by change, so the top rows
+  responses to opinion statements can be read against these. Rows are in statement order, not ranked by change, so the top rows
   don't read as findings.
 - **Planned:** a paired effect size per statement with a confidence interval (Newcombe), so the size and
   uncertainty of a shift are visible together. A pre-specified person-level test across statements, if a pooled
@@ -130,7 +130,7 @@ the deterministic test suite.
 
 ## 8. Known limits
 
-- Groups are weak and change between exports while voting is open: Polis re-clusters on new votes.
+- Groups are weak and change between exports while the poll is open: Polis re-clusters on new responses.
 - With a few dozen people, most per-statement shifts cannot reach significance. The report says so instead of
   reporting "no change".
 - Pass is treated as the middle of agree · pass · disagree. People also pass when unsure or uninterested.
