@@ -169,8 +169,9 @@ a username named there is a site admin regardless of the database, and the app c
 | `/api/v1/admin/conversations/<id>/phases` | PUT | **global admin only** | `_set_admin_phases_api_payload` (app.py:4387) |
 | `/api/v1/admin/conversations/<id>/publication` | POST | **global admin only** | `_publish_admin_report_api_payload` (app.py:4407) |
 | `/api/v1/admin/conversations/<id>/phase` | PUT | conversation **organizer** or global admin | `_advance_admin_phase_api_payload` (app.py:4295) |
+| `/api/v1/admin/eligibility-policies` | GET | global admin, or **organizer** of at least one conversation (401 signed out, 403 otherwise); a moderator reads the chosen policy from the settings GET instead | `_admin_eligibility_policies_api_payload` (app.py) |
 | `/api/v1/admin/conversations/<id>/recommendation-tier` | PUT | conversation **organizer** or global admin | `_update_admin_recommendation_tier_api_payload` (app.py:4264) |
-| `/api/v1/admin/conversations/<id>/settings` | PUT | conversation **organizer** or global admin; moving a consultation into or out of the Practice Environment (`demo`) is global-admin only | `_update_admin_settings_api_payload` (app.py:4230) |
+| `/api/v1/admin/conversations/<id>/settings` | PUT | conversation **organizer** or global admin; moving a consultation into or out of the Practice Environment (`demo`) is global-admin only ; `eligibilityEventId` must be on canivote's policy list or be the stored id unchanged (#530) | `_update_admin_settings_api_payload` (app.py:4230) |
 | `/api/v1/admin/conversations/<id>/settings` | GET | moderator or global admin | `_admin_settings_api_payload` (app.py:3758) |
 | `/api/v1/admin/conversations/<id>` | GET | moderator or global admin | `_admin_lifecycle_api_payload` (app.py:3622) |
 | `/api/v1/admin/conversations/<id>/roles` | GET | moderator or global admin; role grant/revoke is global-admin only | `_admin_role_roster_api_payload` (app.py:3600) |

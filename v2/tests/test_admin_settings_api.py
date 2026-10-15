@@ -25,7 +25,8 @@ def test_settings_contract_exposes_editable_eligibility_configuration(
     assert data['conversation']['polisId'] == conversation.polis_id
     assert data['recommendations']['tiers'][0]['quantities']['featured_statements'] == 8
     assert data['eligibility']['configured'] is True
-    assert data['eligibility']['configurationMode'] == 'editable'
+    # An editor reads canivote's list from its own endpoint, so Settings carries no policy.
+    assert data['eligibility']['policy'] is None
     assert data['eligibility']['eventId'] == 'private-checker-event'
     assert data['conversation']['gated'] is False
     assert data['conversation']['gatingType'] is None
@@ -205,7 +206,7 @@ def test_gated_settings_lock_after_explore_starts(
 
 
 def test_migrated_unconfigured_gate_can_choose_provider_after_explore(
-    admin_client, conversation,
+    admin_client, conversation, canivote_policies,
 ):
     conversation.gated = True
     conversation.gating_type = None
@@ -226,7 +227,7 @@ def test_migrated_unconfigured_gate_can_choose_provider_after_explore(
             'resultsShared': False,
             'showUsernames': False,
             'accessRequestText': None,
-            'eligibilityEventId': 'legacy-event',
+            'eligibilityEventId': 'nlwiki-stemprocedure',
             'eligibilityLabel': 'Legacy eligibility',
             'recommendationTier': 'medium',
         },
@@ -271,7 +272,7 @@ def test_a_new_gate_is_refused_without_a_type(admin_client, conversation):
 
 
 def test_a_legacy_gate_without_a_type_may_be_saved_unchanged(
-    admin_client, conversation,
+    admin_client, conversation, canivote_policies,
 ):
     """The exception that keeps a migrated row editable.
 
@@ -296,7 +297,7 @@ def test_a_legacy_gate_without_a_type_may_be_saved_unchanged(
             'resultsShared': False,
             'showUsernames': False,
             'accessRequestText': None,
-            'eligibilityEventId': 'legacy-event',
+            'eligibilityEventId': 'nlwiki-stemprocedure',
             'eligibilityLabel': 'Legacy eligibility',
             'recommendationTier': 'medium',
         },

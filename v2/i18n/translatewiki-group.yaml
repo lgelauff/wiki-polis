@@ -80,6 +80,12 @@ TAGS:
     - admin-access-locked-note
     - admin-access-narrowing-confirm
     - admin-access-narrowing-continue
+    - admin-access-policy-label
+    - admin-access-policy-no-match
+    - admin-access-policy-none
+    - admin-access-policy-source
+    - admin-access-policy-unavailable
+    - admin-access-policy-unlisted
     - admin-access-practice
     - admin-btn-create-conv
     - admin-btn-grant
@@ -95,8 +101,6 @@ TAGS:
     - admin-content-tabs-aria
     - admin-convs-heading
     - admin-crumb-aria
-    - admin-elig-event-ph
-    - admin-elig-label-ph
     - admin-globals-empty
     - admin-globals-heading
     - admin-home-empty
@@ -111,7 +115,6 @@ TAGS:
     - admin-invitations-skipped
     - admin-invitations-unavailable
     - admin-label-access
-    - admin-label-elig-event
     - admin-label-elig-label
     - admin-label-intro
     - admin-label-outro
@@ -146,6 +149,24 @@ TAGS:
     - admin-moderation-unmoderate-statement
     - admin-new-conv-heading
     - admin-overview-card-settings
+    - admin-policy-rule-article-edits-at-least
+    - admin-policy-rule-article-edits-more-than
+    - admin-policy-rule-edits-at-least
+    - admin-policy-rule-edits-more-than
+    - admin-policy-rule-first-edit
+    - admin-policy-rule-global-account
+    - admin-policy-rule-in-group
+    - admin-policy-rule-not-blocked
+    - admin-policy-rule-not-globally-blocked
+    - admin-policy-rule-not-globally-locked
+    - admin-policy-rule-not-in-group
+    - admin-policy-rule-recent-article-edits-at-least
+    - admin-policy-rule-recent-edits-at-least
+    - admin-policy-rule-registered
+    - admin-policy-span-days
+    - admin-policy-span-months
+    - admin-policy-span-weeks
+    - admin-policy-span-years
     - admin-provenance-aria
     - admin-provenance-title
     - admin-roles-assigned

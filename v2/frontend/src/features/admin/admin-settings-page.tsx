@@ -14,6 +14,7 @@ import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import type {Announcer} from './admin-announcer';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
+import {EligibilityPolicyField, EligibilityPolicyValue} from './eligibility-policy-field';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useMessage, type Message} from '../../i18n/messages';
 
@@ -698,22 +699,15 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             </fieldset>)}
             {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
             {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
-            {eligibilityShown && <>
-              {canEdit ? <>
-                <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => edit({eligibilityEventId: event.target.value})} /></label>
-                <FieldError field="eligibilityEventId" />
-                <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => edit({eligibilityLabel: event.target.value})} /></label>
-                <FieldError field="eligibilityLabel" />
-              </> : <>
-                <SettingValue label={msg('admin-label-elig-event')} value={data.eligibility.eventId} />
-                <SettingValue label={msg('admin-label-elig-label')} value={data.eligibility.label ?? ''} />
-              </>}
-              <div className="settings-eligibility" data-configured={data.eligibility.configured}>
-                <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
-                {data.eligibility.label && <span>{data.eligibility.label}</span>}
-                <p>{data.eligibility.note}</p>
-              </div>
-            </>}
+            {/* The policy is chosen from canivote's list, never typed (#530). It is not
+                locked once Explore opens (owner, 2026-10-15; #408). */}
+            {eligibilityShown && (canEdit
+              ? <EligibilityPolicyField
+                value={{eventId: eligibilityEventId, label: eligibilityLabel}}
+                errors={{eventId: fields.eligibilityEventId, label: fields.eligibilityLabel}}
+                onChange={(next) => edit({eligibilityEventId: next.eventId, eligibilityLabel: next.label})} />
+              : <EligibilityPolicyValue eventId={data.eligibility.eventId}
+                label={data.eligibility.label} policy={data.eligibility.policy} />)}
           </section>}
           {/* One Save, at the bottom of the tab, with one status line beside it. */}
           {canSave && <footer>

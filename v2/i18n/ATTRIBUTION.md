@@ -38,6 +38,10 @@ Chosen from MediaWiki's catalogue to replace wording of our own.
 | `participants-btn-unban` | `Unblock` | MediaWiki core | [`unblocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
 | `admin-settings-value-yes` | `Yes` | MediaWiki core | [`htmlform-yes`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `admin-settings-value-no` | `No` | MediaWiki core | [`htmlform-no`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `admin-policy-span-days` | `{{PLURAL:$1\|$1 day\|$1 days}}` | MediaWiki core | [`days`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/datetime/en.json) | GPL-2.0-or-later | en |
+| `admin-policy-span-weeks` | `{{PLURAL:$1\|$1 week\|$1 weeks}}` | MediaWiki core | [`weeks`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/datetime/en.json) | GPL-2.0-or-later | en |
+| `admin-policy-span-months` | `{{PLURAL:$1\|$1 month\|$1 months}}` | MediaWiki core | [`months`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/datetime/en.json) | GPL-2.0-or-later | en |
+| `admin-policy-span-years` | `{{PLURAL:$1\|$1 year\|$1 years}}` | MediaWiki core | [`years`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/datetime/en.json) | GPL-2.0-or-later | en |
 
 `adminconv-countdown-*` has no Dutch: the admin console is not translated into Dutch yet, and
 MediaWiki core has Dutch only for `hours-abbrev` ("$1 u"). `days-abbrev` and

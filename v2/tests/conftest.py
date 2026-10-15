@@ -42,6 +42,60 @@ def _disable_phase6_results_cache():
     _app._p6_bootstrap_locks.clear()
 
 
+@pytest.fixture(autouse=True)
+def _clear_eligibility_policy_cache():
+    """canivote's policy list is cached per process (#530); no test sees another's."""
+    from services.eligibility_policies import POLICY_CACHE
+    POLICY_CACHE.clear()
+    yield
+    POLICY_CACHE.clear()
+
+
+# canivote's policies as a fake `GET /policies` (+ details) serves them, after
+# `fetch_policies` has normalised them (#530).
+CANIVOTE_POLICIES = [
+    {
+        'id': 'nlwiki-stemprocedure',
+        'title': 'Voting eligibility on Dutch Wikipedia',
+        'wiki': 'nl.wikipedia.org',
+        'rules': [
+            {'metric': 'has_global_account', 'operator': 'is', 'value': True},
+            {'metric': 'is_blocked', 'wiki': 'nl.wikipedia.org', 'operator': 'is', 'value': False},
+            {'metric': 'time_since_first_edit', 'wiki': 'nl.wikipedia.org',
+             'operator': 'at_least', 'value': {'amount': 2, 'unit': 'weeks'}},
+            {'metric': 'edit_count', 'wiki': 'nl.wikipedia.org',
+             'operator': 'more_than', 'value': 100},
+        ],
+        'sources': ['https://nl.wikipedia.org/wiki/Wikipedia:Stemprocedure'],
+    },
+    {
+        'id': 'meta-global',
+        'title': 'Not blocked anywhere in the movement',
+        'wiki': 'meta.wikimedia.org',
+        'rules': [
+            {'metric': 'is_globally_locked', 'operator': 'is', 'value': False},
+        ],
+        'sources': [],
+    },
+]
+
+
+@pytest.fixture
+def canivote_policies(app, monkeypatch):
+    """canivote configured and answering with `CANIVOTE_POLICIES`; returns a list that
+    records each fetch, so a test can tell the cache from a new request."""
+    from services import eligibility_policies
+    fetches = []
+
+    def fake_fetch(base_url, *, user_agent, get=None):
+        fetches.append(base_url)
+        return [dict(policy) for policy in CANIVOTE_POLICIES]
+
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    monkeypatch.setattr(eligibility_policies, 'fetch_policies', fake_fetch)
+    return fetches
+
+
 @pytest.fixture
 def app(tmp_path):
     """Fresh Flask app with isolated SQLite DB and filesystem sessions per test.

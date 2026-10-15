@@ -125,7 +125,7 @@ test('edits no setting itself: Settings is reached from the sidebar', async () =
   // Nothing on this page writes a setting any more. Queried by accessible name, so a
   // control that merely moved elsewhere on the page would still fail this.
   for (const name of ['Title', 'Introduction (HTML, optional)', 'Closing text (HTML, optional)',
-    'Eligibility event ID', 'Eligibility label']) {
+    'Eligibility policy', 'Eligibility label']) {
     expect(screen.queryByLabelText(name)).toBeNull();
   }
   expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();

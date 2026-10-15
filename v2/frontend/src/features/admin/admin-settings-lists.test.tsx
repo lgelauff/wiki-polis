@@ -35,7 +35,7 @@ const settings: Settings = {
   recommendations: {tier: 'medium', tiers: [
     {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}},
   ]},
-  eligibility: {configured: false, eventId: '', label: null, configurationMode: 'editable', note: ''},
+  eligibility: {configured: false, eventId: '', label: null, policy: null},
   capabilities: {edit: true, switchDemo: false},
   locks: {gated: false, gatingType: false, showUsernames: false},
   links: {self: SETTINGS_URL, lifecycle: '/admin/conversations/7'},
