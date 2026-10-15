@@ -164,5 +164,5 @@ def test_groups_need_the_minimum_number_of_participants(tmp_path):
 def test_shift_readings_are_rule_based(tmp_path):
     out = build(tmp_path)
     m = {r['statement']: r for r in rows(out / 'movers.csv')}
-    assert m['0']['reading'].startswith('Too few people changed their vote to tell')
+    assert m['0']['reading'].startswith('Too few people changed their response to tell')
     assert m['2']['reading'] == 'No observed movement.' or m['2']['reading'].startswith('Too few')
