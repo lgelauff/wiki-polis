@@ -1027,18 +1027,6 @@
   background: var(--shell-surface);
 }
 
-.admin-shell .policy-combobox__list ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-shell .policy-combobox__group {
-  padding: .375rem .75rem .125rem;
-  color: var(--shell-muted);
-  font-size: 12px;
-}
-
 .admin-shell .policy-combobox__option {
   padding: .25rem .75rem;
   color: var(--shell-body);

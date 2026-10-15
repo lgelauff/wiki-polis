@@ -25,8 +25,7 @@ def test_settings_contract_exposes_editable_eligibility_configuration(
     assert data['conversation']['polisId'] == conversation.polis_id
     assert data['recommendations']['tiers'][0]['quantities']['featured_statements'] == 8
     assert data['eligibility']['configured'] is True
-    # canivote is not configured in tests, so whether the stored id is a policy is unknown.
-    assert data['eligibility']['status'] == 'unavailable'
+    # An editor reads canivote's list from its own endpoint, so Settings carries no policy.
     assert data['eligibility']['policy'] is None
     assert data['eligibility']['eventId'] == 'private-checker-event'
     assert data['conversation']['gated'] is False

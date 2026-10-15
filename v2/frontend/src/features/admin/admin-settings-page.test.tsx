@@ -39,7 +39,7 @@ const settings: Settings = {
     {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
   ]},
   eligibility: {
-    configured: false, eventId: '', label: null, status: 'none', policy: null,
+    configured: false, eventId: '', label: null, policy: null,
   },
   capabilities: {edit: true, switchDemo: false},
   locks: {gated: false, gatingType: false, showUsernames: false},

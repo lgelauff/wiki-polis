@@ -7,7 +7,9 @@ it, so a typo can no longer refuse everyone. Each entry carries its rules
 
 The list changes when canivote's ``policies.yaml`` is edited and redeployed, so it is
 cached for ten minutes; a failure is cached for one, so a page that asks while canivote is
-down does not wait for the timeout on every request.
+down does not wait for the timeout on every request. One read of the list and its details
+together never takes longer than ``DEADLINE_SECONDS``, and while one request reads it, any
+other request for it waits for that answer instead of asking canivote again.
 """
 
 import threading
@@ -15,11 +17,16 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from urllib.parse import quote
+
 import requests
 
 CACHE_SECONDS = 600
 FAILURE_CACHE_SECONDS = 60
 TIMEOUT_SECONDS = 5
+# The whole read: the list, then each policy's detail. Details not reached by then are
+# listed without their rules, which the console already handles.
+DEADLINE_SECONDS = 8
 
 # The parts of a canivote rule the console renders. Anything else canivote adds later is
 # dropped here rather than passed through to a page that does not know it.
@@ -75,13 +82,19 @@ def _sources(detail) -> list[str]:
             if isinstance(url, str) and url.startswith('https://')]
 
 
-def fetch_policies(base_url: str, *, user_agent: str, get: Callable | None = None) -> list[dict]:
+def fetch_policies(
+    base_url: str, *, user_agent: str, get: Callable | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> list[dict]:
     """canivote's policies with their rules, or raise when the list cannot be read.
 
-    A policy whose detail cannot be read is still listed, with ``rules`` null: it can be
-    chosen, only its rules cannot be shown.
+    A policy whose detail cannot be read, or is not reached within ``DEADLINE_SECONDS``, is
+    still listed, with ``rules`` null: it can be chosen, only its rules cannot be shown.
     """
-    get = get or requests.get
+    if get is None:
+        with requests.Session() as session:
+            return fetch_policies(base_url, user_agent=user_agent, get=session.get, clock=clock)
+    deadline = clock() + DEADLINE_SECONDS
     base = base_url.rstrip('/')
     headers = {'User-Agent': user_agent}
     response = get(f'{base}/policies', headers=headers, timeout=TIMEOUT_SECONDS)
@@ -96,13 +109,16 @@ def fetch_policies(base_url: str, *, user_agent: str, get: Callable | None = Non
             continue
         policy_id = entry['id']
         detail = None
-        try:
-            detail_response = get(f'{base}/policies/{policy_id}', headers=headers,
-                                  timeout=TIMEOUT_SECONDS)
-            if detail_response.status_code == 200:
-                detail = detail_response.json()
-        except (requests.RequestException, ValueError):
-            detail = None
+        remaining = deadline - clock()
+        if remaining > 0:
+            try:
+                detail_response = get(f'{base}/policies/{quote(policy_id, safe="")}',
+                                      headers=headers,
+                                      timeout=min(TIMEOUT_SECONDS, remaining))
+                if detail_response.status_code == 200:
+                    detail = detail_response.json()
+            except (requests.RequestException, ValueError):
+                detail = None
         policies.append({
             'id': policy_id,
             'title': entry.get('title') if isinstance(entry.get('title'), str) else policy_id,
@@ -120,6 +136,8 @@ class PolicyCache:
         self._clock = clock
         self._lock = threading.Lock()
         self._entries: dict[str, tuple[float, list[dict] | None]] = {}
+        # One read of canivote at a time per base URL (single flight).
+        self._reading: dict[str, threading.Lock] = {}
 
     def clear(self) -> None:
         with self._lock:
@@ -130,22 +148,32 @@ class PolicyCache:
         base_url = (base_url or '').strip()
         if not base_url:
             return None
-        now = self._clock()
+        cached = self._fresh(base_url)
+        if cached is not None:
+            return cached[1]
+        with self._lock:
+            reading = self._reading.setdefault(base_url, threading.Lock())
+        with reading:
+            # Another request may have read it while this one waited.
+            cached = self._fresh(base_url)
+            if cached is not None:
+                return cached[1]
+            try:
+                policies = fetch_policies(base_url, user_agent=user_agent)
+                expires = self._clock() + CACHE_SECONDS
+            except (requests.RequestException, ValueError) as exc:
+                if logger is not None:
+                    logger.warning('canivote policy list unavailable: %s', type(exc).__name__)
+                policies = None
+                expires = self._clock() + FAILURE_CACHE_SECONDS
+            with self._lock:
+                self._entries[base_url] = (expires, policies)
+            return policies
+
+    def _fresh(self, base_url: str) -> tuple[float, list[dict] | None] | None:
         with self._lock:
             cached = self._entries.get(base_url)
-        if cached is not None and cached[0] > now:
-            return cached[1]
-        try:
-            policies = fetch_policies(base_url, user_agent=user_agent)
-            expires = now + CACHE_SECONDS
-        except (requests.RequestException, ValueError) as exc:
-            if logger is not None:
-                logger.warning('canivote policy list unavailable: %s', type(exc).__name__)
-            policies = None
-            expires = now + FAILURE_CACHE_SECONDS
-        with self._lock:
-            self._entries[base_url] = (expires, policies)
-        return policies
+        return cached if cached is not None and cached[0] > self._clock() else None
 
 
 POLICY_CACHE = PolicyCache()
@@ -187,12 +215,3 @@ def resolve_policy_choice(
         raise EligibilityPolicyRefused('Choose an eligibility policy from the list.')
     return PolicyChoice(event_id, label or policy['title'])
 
-
-def policy_status(event_id: str | None, policies: list[dict] | None) -> str:
-    """``none``, ``listed``, ``unlisted`` (a stored id canivote does not have), or
-    ``unavailable`` (canivote's list cannot be read, so it is not known which)."""
-    if not event_id:
-        return 'none'
-    if policies is None:
-        return 'unavailable'
-    return 'listed' if find_policy(policies, event_id) else 'unlisted'

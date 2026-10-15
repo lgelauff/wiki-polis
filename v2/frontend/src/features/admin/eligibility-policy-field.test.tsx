@@ -72,27 +72,59 @@ test('typing filters the list by id, title and wiki', async () => {
 
   fireEvent.change(box, {target: {value: 'nl'}});
   expect(box).toHaveAttribute('aria-expanded', 'true');
-  expect(optionNames()).toEqual(['Voting eligibility on Dutch Wikipedia nlwiki-stemprocedure']);
+  expect(optionNames()).toEqual(['Voting eligibility on Dutch Wikipedia nlwiki-stemprocedure · nl.wikipedia.org']);
   fireEvent.change(box, {target: {value: 'GERMAN'}});
-  expect(optionNames()).toEqual(['Voting eligibility on German Wikipedia dewiki-stimmberechtigung']);
+  expect(optionNames()).toEqual(['Voting eligibility on German Wikipedia dewiki-stimmberechtigung · de.wikipedia.org']);
   fireEvent.change(box, {target: {value: 'meta.wikimedia'}});
-  expect(optionNames()).toEqual(['Not blocked anywhere in the movement meta-global']);
+  expect(optionNames()).toEqual(['Not blocked anywhere in the movement meta-global · meta.wikimedia.org']);
   fireEvent.change(box, {target: {value: 'xyz'}});
   expect(screen.queryAllByRole('option')).toEqual([]);
   expect(screen.getByText('No policy matches')).toBeVisible();
 });
 
-test('the arrow opens the whole list, grouped by wiki, with no check first', async () => {
+test('the arrow opens the whole list in canivote\'s order, with no check first', async () => {
   renderField();
   const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
 
   fireEvent.keyDown(box, {key: 'ArrowDown'});
   const list = screen.getByRole('listbox', {name: 'Eligibility policy'});
   expect(list).toBeVisible();
-  expect(within(list).getAllByRole('option')[0]).toHaveTextContent('No eligibility check');
-  expect(within(list).getByRole('group', {name: 'nl.wikipedia.org'})).toBeVisible();
-  expect(within(list).getByRole('group', {name: 'de.wikipedia.org'})).toBeVisible();
-  expect(within(list).getAllByRole('option')).toHaveLength(4);
+  expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual([
+    'No eligibility check',
+    'Voting eligibility on Dutch Wikipedia nlwiki-stemprocedure · nl.wikipedia.org',
+    'Voting eligibility on German Wikipedia dewiki-stimmberechtigung · de.wikipedia.org',
+    'Not blocked anywhere in the movement meta-global · meta.wikimedia.org',
+  ]);
+  expect(within(list).queryByRole('group')).toBeNull();
+});
+
+test('the highlighted option is the one Enter chooses, whatever canivote\'s order', async () => {
+  // canivote sorts by id, so policies of one wiki need not be next to each other.
+  const policy = (id: string, wiki: string) => ({id, title: `Policy ${id}`, wiki, rules: [], sources: []});
+  server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: true, policies: [
+    policy('a', 'nl.wikipedia.org'), policy('b', 'de.wikipedia.org'), policy('c', 'nl.wikipedia.org'),
+  ]}})));
+  renderField({eventId: 'c', label: 'Policy c'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
+
+  // Reopening highlights the stored choice.
+  fireEvent.keyDown(box, {key: 'ArrowDown'});
+  const highlighted = () => document.getElementById(box.getAttribute('aria-activedescendant')!)!;
+  expect(highlighted()).toHaveTextContent('Policy c');
+  expect(highlighted()).toHaveAttribute('aria-selected', 'true');
+
+  for (const [moves, id] of [[-1, 'b'], [-1, 'a']] as const) {
+    fireEvent.keyDown(box, {key: moves < 0 ? 'ArrowUp' : 'ArrowDown'});
+    expect(highlighted()).toHaveTextContent(`Policy ${id}`);
+  }
+  fireEvent.keyDown(box, {key: 'Enter'});
+  expect(current().eventId).toBe('a');
+
+  fireEvent.keyDown(box, {key: 'ArrowDown'});
+  fireEvent.keyDown(box, {key: 'ArrowDown'});
+  expect(highlighted()).toHaveTextContent('Policy b');
+  fireEvent.keyDown(box, {key: 'Enter'});
+  expect(current().eventId).toBe('b');
 });
 
 test('the keyboard chooses, and choosing fills the label with the policy title', async () => {
@@ -153,6 +185,18 @@ test('the label follows the policy until the organizer writes their own', async 
   expect(box).toHaveAttribute('placeholder', 'No eligibility check');
 });
 
+test('a removed policy\'s title is not kept as the organizer\'s label', async () => {
+  // The stored policy is no longer on canivote's list, so its title cannot be told apart
+  // from a label the organizer wrote: choosing another policy takes that policy's title.
+  renderField({eventId: 'gone', label: 'Voting eligibility on a closed wiki'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
+
+  fireEvent.change(box, {target: {value: 'dutch'}});
+  fireEvent.click(screen.getByRole('option', {name: /Dutch/}));
+
+  expect(current()).toEqual({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+});
+
 test('a stored id canivote does not have is named and asks for a choice', async () => {
   renderField({eventId: 'typed-by-hand', label: 'Old'});
   const box = await screen.findByRole('combobox', {name: 'Eligibility policy'});
@@ -162,15 +206,21 @@ test('a stored id canivote does not have is named and asks for a choice', async 
   expect(box.getAttribute('aria-describedby')).toContain(note.id);
 });
 
-test('while canivote cannot be reached the choice is text and cannot change', async () => {
+test('while canivote cannot be reached no policy can be chosen, but the check can be removed', async () => {
   server.use(http.get(POLICIES_URL, () => HttpResponse.json({data: {available: false, policies: []}})));
   renderField({eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd'});
 
-  expect(await screen.findByText('The list of eligibility policies cannot be loaded now.')).toBeVisible();
-  expect(screen.queryByRole('combobox')).toBeNull();
-  expect(screen.getByText('nlwiki-stemprocedure')).toBeVisible();
+  const note = await screen.findByText('The list of eligibility policies cannot be loaded now.');
+  const box = screen.getByRole('combobox', {name: 'Eligibility policy'});
+  expect(box).toHaveValue('nlwiki-stemprocedure');
+  expect(box.getAttribute('aria-describedby')).toContain(note.id);
   // The label stays editable: it is the organizer's text, not canivote's.
   expect(screen.getByLabelText('Eligibility label')).toHaveValue('Stemgerechtigd');
+
+  fireEvent.keyDown(box, {key: 'ArrowDown'});
+  expect(optionNames()).toEqual(['No eligibility check']);
+  fireEvent.keyDown(box, {key: 'Enter'});
+  expect(current()).toEqual({eventId: '', label: ''});
 });
 
 test('under qqx, nothing in the field is English', async () => {
@@ -197,7 +247,7 @@ function settingsFixture(overrides: Partial<Settings['eligibility']>, edit: bool
       phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy',
     },
     recommendations: {tier: 'medium', tiers: [{key: 'medium', label: 'Medium topic', quantities: {}}]},
-    eligibility: {configured: false, eventId: '', label: null, status: 'none', policy: null, ...overrides},
+    eligibility: {configured: false, eventId: '', label: null, policy: null, ...overrides},
     capabilities: {edit, switchDemo: false},
     locks: {gated: true, gatingType: true, showUsernames: true},
     links: {self: SETTINGS_URL, lifecycle: '/admin/conversations/7'},
@@ -221,7 +271,7 @@ function renderSettings() {
 test('a moderator reads the policy, its rules and its label as text', async () => {
   server.use(http.get(SETTINGS_URL, () => HttpResponse.json({data: settingsFixture({
     configured: true, eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd',
-    status: 'listed', policy: testPolicies[0]!,
+    policy: testPolicies[0]!,
   }, false)})));
   renderSettings();
 
@@ -263,6 +313,32 @@ test('a refused policy is said at the field', async () => {
   const error = screen.getAllByText('Choose an eligibility policy from the list.')
     .find((node) => node.classList.contains('access-field-error'))!;
   expect(box.getAttribute('aria-describedby')).toContain(error.id);
+});
+
+test('a refused policy on New consultation is announced', async () => {
+  server.use(http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({error: {
+    code: 'validation_failed', message: 'Check the highlighted settings.',
+    details: {fields: {eligibilityEventId: ['Choose an eligibility policy from the list.']}},
+  }}, {status: 400})));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin']}>
+        <Suspense fallback={null}>
+          <MessageProvider locale="en"><AdminCatalogPage csrfToken="test-csrf-token" /></MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const heading = await screen.findByRole('heading', {name: 'New consultation', level: 2}, {timeout: 10_000});
+  fireEvent.click(heading.closest('summary')!);
+  const form = heading.closest('details')!;
+  fireEvent.change(within(form).getByLabelText(/Slug/), {target: {value: 'new-one'}});
+  fireEvent.change(within(form).getByLabelText('Title'), {target: {value: 'New one'}});
+  fireEvent.click(within(form).getByRole('button', {name: /Create/}));
+
+  expect(await within(form).findByRole('alert')).toHaveTextContent('Check the highlighted settings.');
+  expect(within(form).getByText('Choose an eligibility policy from the list.')).toBeVisible();
 });
 
 test('New consultation sends the chosen policy and its label', async () => {

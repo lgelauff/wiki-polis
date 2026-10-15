@@ -414,7 +414,7 @@ function serveInvitationListSettings() {
       recommendations: {tier: 'medium', tiers: [
         {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
       ]},
-      eligibility: {configured: false, eventId: '', label: null, status: 'none', policy: null},
+      eligibility: {configured: false, eventId: '', label: null, policy: null},
       capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}),
   ));

@@ -113,16 +113,6 @@ function matches(policy: EligibilityPolicy, query: string): boolean {
   );
 }
 
-/** The policies grouped by wiki, in the order canivote lists them. */
-function byWiki(policies: EligibilityPolicy[]): [string, EligibilityPolicy[]][] {
-  const groups = new Map<string, EligibilityPolicy[]>();
-  for (const policy of policies) {
-    const wiki = policy.wiki ?? '';
-    groups.set(wiki, [...(groups.get(wiki) ?? []), policy]);
-  }
-  return [...groups.entries()];
-}
-
 /**
  * The policy field: a text box with a drop-down list (the ARIA editable combobox with list
  * autocomplete), no library.
@@ -152,6 +142,8 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
   const filtered = policies.filter((policy) => matches(policy, query ?? ''));
   // Option 0 is "No eligibility check"; it is offered whenever nothing has been typed.
   const offerNone = !query?.trim();
+  // One list, in canivote's order, is both what is shown and what the keys move through, so
+  // the option that is highlighted and announced is always the one Enter chooses.
   const options: (EligibilityPolicy | null)[] = [...(offerNone ? [null] : []), ...filtered];
   const optionId = (index: number) => `${ids}-option-${index}`;
 
@@ -176,7 +168,7 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
       case 'ArrowDown':
         event.preventDefault();
         if (!open) openList();
-        else setActive((index) => Math.min(index + 1, options.length - 1));
+        else setActive((index) => Math.max(0, Math.min(index + 1, options.length - 1)));
         break;
       case 'ArrowUp':
         event.preventDefault();
@@ -199,7 +191,6 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
     }
   }
 
-  let index = offerNone ? 1 : 0;
   return (
     <div className="policy-combobox">
       <div className="policy-combobox__box">
@@ -238,28 +229,16 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
       </div>
       <ul className="policy-combobox__list" id={`${ids}-list`} role="listbox"
         aria-labelledby={labelledBy} hidden={!open}>
-        {offerNone && <li id={optionId(0)} role="option" aria-selected={active === 0}
-          className="policy-combobox__option"
-          onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)}>
-          {msg('admin-access-policy-none')}
-        </li>}
-        {byWiki(filtered).map(([wiki, group]) => (
-          <li key={wiki} role="presentation">
-            <ul role="group" aria-labelledby={`${ids}-group-${wiki}`}>
-              <li role="presentation" id={`${ids}-group-${wiki}`} className="policy-combobox__group">{wiki}</li>
-              {group.map((policy) => {
-                const at = index++;
-                return (
-                  <li key={policy.id} id={optionId(at)} role="option" aria-selected={active === at}
-                    className="policy-combobox__option"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onMouseEnter={() => setActive(at)}
-                    onClick={() => choose(policy)}>
-                    {policy.title} <span className="policy-combobox__id">{policy.id}</span>
-                  </li>
-                );
-              })}
-            </ul>
+        {options.map((option, at) => (
+          <li key={option?.id ?? ''} id={optionId(at)} role="option" aria-selected={active === at}
+            className="policy-combobox__option"
+            onMouseDown={(event) => event.preventDefault()}
+            onMouseEnter={() => setActive(at)}
+            onClick={() => choose(option)}>
+            {option === null ? msg('admin-access-policy-none') : <>
+              {option.title}{' '}
+              <span className="policy-combobox__id">{option.wiki ? `${option.id} · ${option.wiki}` : option.id}</span>
+            </>}
           </li>
         ))}
         {options.length === 0 && <li role="presentation" className="policy-combobox__empty">
@@ -277,8 +256,8 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
  * The policy comes from canivote's list only. Choosing one fills the label with its title
  * when the label is empty or still the previous policy's title; a label the organizer wrote
  * themselves is kept (owner, 2026-10-15). Choosing none empties the label, which only ever
- * names the policy. While canivote's list cannot be loaded the current choice is shown as
- * text and cannot be changed.
+ * names the policy. While canivote's list cannot be loaded no policy can be chosen, but
+ * "No eligibility check" still can: removing a policy must not wait on canivote.
  */
 export function EligibilityPolicyField({value, onChange, errors = {}, labelClassName}: {
   value: EligibilityChoice;
@@ -300,8 +279,12 @@ export function EligibilityPolicyField({value, onChange, errors = {}, labelClass
       onChange({eventId: '', label: ''});
       return;
     }
+    // Kept only when it is not the previous policy's title. A previous policy canivote no
+    // longer lists has no title to compare with, so its label cannot be told apart from
+    // one the organizer wrote, and it would name a policy that is no longer chosen.
     const previous = policies.find((option) => option.id === value.eventId);
-    const keepLabel = value.label.trim() !== '' && value.label !== previous?.title;
+    const keepLabel = previous !== undefined && value.label.trim() !== ''
+      && value.label !== previous.title;
     onChange({eventId: policy.id, label: keepLabel ? value.label : policy.title});
   }
 
@@ -318,12 +301,11 @@ export function EligibilityPolicyField({value, onChange, errors = {}, labelClass
     <div className="policy-field">
       <p className="access-answer-legend" id={`${ids}-legend`}>{msg('admin-access-policy-label')}</p>
       {isPending ? <p className="access-answer-value">{value.eventId || msg('admin-access-policy-none')}</p>
-        : available ? <PolicyCombobox policies={policies} value={value.eventId}
-          onChoose={onChoose} invalid={invalid} labelledBy={`${ids}-legend`} />
-          : <>
-            <p className="access-answer-value">{value.eventId || msg('admin-access-policy-none')}</p>
-            <p className="access-field-note" id={`${ids}-policy-note`}>{msg('admin-access-policy-unavailable')}</p>
-          </>}
+        : <>
+          <PolicyCombobox policies={available ? policies : []} value={value.eventId}
+            onChoose={onChoose} invalid={invalid} labelledBy={`${ids}-legend`} />
+          {!available && <p className="access-field-note" id={`${ids}-policy-note`}>{msg('admin-access-policy-unavailable')}</p>}
+        </>}
       {unlisted && <p className="access-field-error" id={`${ids}-policy-note`}>
         {msg('admin-access-policy-unlisted', value.eventId)}
       </p>}

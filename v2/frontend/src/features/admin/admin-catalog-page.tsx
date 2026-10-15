@@ -144,7 +144,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     onSuccess: (result) => { navigate(result.links.manage); },
     onError: (error: Error) => setCreateError(errorMessage(error) ?? msg('adminconv-command-failed')),
   });
-  // A refused policy (#530) is said at the policy field, not as the form's general error.
+  // A refused policy (#530) is also said at the policy field, beside the alert line.
   const createFields = creation.error instanceof ApiContractError
     && creation.error.code === 'validation_failed'
     ? (creation.error.details as {fields?: Record<string, string[]>} | undefined)?.fields ?? {}
@@ -254,7 +254,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             <div className="admin-form__actions">
               <button type="submit" className="admin-button admin-button--primary" disabled={creation.isPending}>{msg('admin-btn-create-conv')}</button>
             </div>
-            {createError && !createFields.eligibilityEventId && <p className="admin-error" role="alert">{createError}</p>}
+            {createError && <p className="admin-error" role="alert">{createError}</p>}
           </form>
         </details>
 

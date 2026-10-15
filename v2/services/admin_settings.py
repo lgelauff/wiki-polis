@@ -6,9 +6,7 @@ from collections.abc import Callable
 
 from db import GATING_TYPES
 from services.access import conversation_gating_type, is_gated_conversation
-from services.eligibility_policies import (
-    find_policy, policy_status, resolve_policy_choice,
-)
+from services.eligibility_policies import find_policy, resolve_policy_choice
 
 
 class AccessSettingsLocked(ValueError):
@@ -88,9 +86,9 @@ def build_admin_settings(
             'configured': bool(event_id),
             'eventId': event_id,
             'label': conversation.eligibility_label,
-            # The stored id checked against canivote's list (#530), and the policy itself
-            # when it is on it, so a viewer who may not change it still reads its rules.
-            'status': policy_status(event_id, eligibility_policies),
+            # The stored policy when it is on canivote's list (#530), so a viewer who may not
+            # change it still reads its rules. Only filled for such a viewer: an editor reads
+            # the list from GET /admin/eligibility-policies instead.
             'policy': find_policy(eligibility_policies, event_id),
         },
         'capabilities': {'edit': can_edit, 'switchDemo': can_edit and can_switch_demo},

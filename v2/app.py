@@ -4170,6 +4170,7 @@ def _admin_eligibility_policies_api_payload() -> dict:
 
 def _admin_settings_api_payload(conv_id: int) -> dict:
     conv = _require_mod_for_conv(conv_id)
+    can_edit = _can_organize(conv)
     return build_admin_settings(
         conversation=conv,
         recommendation_tiers=_RECOMMENDATION_TIERS,
@@ -4177,16 +4178,18 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
         phase_route_label=PHASE_ROUTES.get(
             conv.phase_route, PHASE_ROUTES['default_7'],
         )['label'],
-        can_edit=_can_organize(conv),
+        can_edit=can_edit,
         can_switch_demo=_is_global_admin(),
         self_link=url_for(
             'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
         ),
         lifecycle_link=_admin_client_link(conv.id),
-        # Asked only when a policy is stored, so a consultation without one never waits on
-        # canivote.
+        # Asked only for a viewer who may not edit, and only when a policy is stored: an
+        # editor reads the list from its own endpoint, so Settings never waits on canivote
+        # for them, and a consultation without a policy never does for anyone.
         eligibility_policies=(
-            _eligibility_policies() if conv.eligibility_event_id else None
+            _eligibility_policies()
+            if conv.eligibility_event_id and not can_edit else None
         ),
     )
 

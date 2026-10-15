@@ -1,5 +1,7 @@
 """Choosing a consultation's eligibility policy from canivote's list (#530)."""
 
+from urllib.parse import unquote
+
 import pytest
 import requests
 
@@ -37,7 +39,7 @@ def _canivote(details, *, listed=None):
                 {'id': policy_id, 'title': f'Title of {policy_id}', 'wiki': 'nl.wikipedia.org'}
                 for policy_id in ids
             ]})
-        policy_id = url.rsplit('/', 1)[1]
+        policy_id = unquote(url.rsplit('/', 1)[1])
         detail = details.get(policy_id)
         if isinstance(detail, Exception):
             raise detail
@@ -117,6 +119,64 @@ def test_cache_keeps_the_list_ten_minutes_and_a_failure_one(monkeypatch):
     assert len(fetches) == 2
     now[0] += 2
     assert cache.get('https://canivote.example', user_agent='ua') == [{'id': 'later'}]
+
+
+def test_one_read_stops_at_the_deadline():
+    """A slow canivote costs at most DEADLINE_SECONDS; the rest is listed without rules."""
+    now = [0.0]
+    timeouts = []
+
+    def slow_get(url, *, headers, timeout):
+        timeouts.append(timeout)
+        now[0] += 3  # every request takes three seconds
+        if url.endswith('/policies'):
+            return _Response({'policies': [{'id': f'p{index}'} for index in range(5)]})
+        return _Response({'rules': [{'metric': 'is_globally_locked', 'operator': 'is',
+                                     'value': False}], 'sources': []})
+
+    policies = fetch_policies('https://canivote.example', user_agent='test-agent',
+                              get=slow_get, clock=lambda: now[0])
+
+    assert now[0] <= eligibility_policies.DEADLINE_SECONDS + eligibility_policies.TIMEOUT_SECONDS
+    assert [policy['rules'] is not None for policy in policies] == [True, True, False, False, False]
+    # The last detail request is given only the time left, not a full timeout.
+    assert timeouts[-1] == 2
+
+
+def test_concurrent_misses_read_canivote_once(monkeypatch):
+    import threading
+    started, release = threading.Event(), threading.Event()
+    fetches = []
+
+    def slow_fetch(base_url, *, user_agent):
+        fetches.append(base_url)
+        started.set()
+        release.wait(5)
+        return [{'id': 'meta-global'}]
+
+    monkeypatch.setattr(eligibility_policies, 'fetch_policies', slow_fetch)
+    cache = PolicyCache()
+    answers = []
+    threads = [threading.Thread(target=lambda: answers.append(
+        cache.get('https://canivote.example', user_agent='ua'))) for _ in range(3)]
+    threads[0].start()
+    started.wait(5)
+    for thread in threads[1:]:
+        thread.start()
+    release.set()
+    for thread in threads:
+        thread.join(5)
+
+    assert fetches == ['https://canivote.example']
+    assert answers == [[{'id': 'meta-global'}]] * 3
+
+
+def test_a_policy_id_is_quoted_in_the_detail_url():
+    get = _canivote({'odd/../id?x': {'rules': [], 'sources': []}})
+
+    fetch_policies('https://canivote.example', user_agent='test-agent', get=get)
+
+    assert get.calls[1] == 'https://canivote.example/policies/odd%2F..%2Fid%3Fx'
 
 
 # ── What a save stores ────────────────────────────────────────────────────────
@@ -240,39 +300,63 @@ def _settings_body(conversation, **overrides):
     return body
 
 
-def test_settings_without_a_policy_do_not_ask_canivote(
-    admin_client, conversation, canivote_policies,
-):
-    eligibility = admin_client.get(_settings_url(conversation)).get_json()['data']['eligibility']
+def _moderator_client(client, conversation, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conversation.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+    return client
 
-    assert eligibility['status'] == 'none'
+
+def test_settings_without_a_policy_do_not_ask_canivote(
+    client, conversation, participant, canivote_policies,
+):
+    moderator = _moderator_client(client, conversation, participant)
+
+    eligibility = moderator.get(_settings_url(conversation)).get_json()['data']['eligibility']
+
     assert eligibility['policy'] is None
     assert canivote_policies == []
 
 
-def test_settings_carry_the_stored_policy_and_its_rules(
+def test_an_editor_s_settings_never_wait_on_canivote(
     admin_client, conversation, canivote_policies,
+):
+    """An editor reads the list from its own endpoint; Settings itself does not ask."""
+    conversation.eligibility_event_id = 'nlwiki-stemprocedure'
+    db.session.commit()
+
+    eligibility = admin_client.get(_settings_url(conversation)).get_json()['data']['eligibility']
+
+    assert eligibility['eventId'] == 'nlwiki-stemprocedure'
+    assert eligibility['policy'] is None
+    assert canivote_policies == []
+
+
+def test_a_moderator_reads_the_stored_policy_and_its_rules(
+    client, conversation, participant, canivote_policies,
 ):
     conversation.eligibility_event_id = 'nlwiki-stemprocedure'
     conversation.eligibility_label = 'Stemgerechtigd'
     db.session.commit()
+    moderator = _moderator_client(client, conversation, participant)
 
-    eligibility = admin_client.get(_settings_url(conversation)).get_json()['data']['eligibility']
+    eligibility = moderator.get(_settings_url(conversation)).get_json()['data']['eligibility']
 
-    assert eligibility['status'] == 'listed'
     assert eligibility['label'] == 'Stemgerechtigd'
     assert eligibility['policy'] == CANIVOTE_POLICIES[0]
 
 
-def test_settings_flag_a_stored_id_canivote_does_not_have(
-    admin_client, conversation, canivote_policies,
+def test_a_moderator_gets_no_policy_for_a_stored_id_canivote_does_not_have(
+    client, conversation, participant, canivote_policies,
 ):
     conversation.eligibility_event_id = 'typed-by-hand'
     db.session.commit()
+    moderator = _moderator_client(client, conversation, participant)
 
-    eligibility = admin_client.get(_settings_url(conversation)).get_json()['data']['eligibility']
+    eligibility = moderator.get(_settings_url(conversation)).get_json()['data']['eligibility']
 
-    assert eligibility['status'] == 'unlisted'
+    assert eligibility['eventId'] == 'typed-by-hand'
     assert eligibility['policy'] is None
 
 
@@ -286,7 +370,6 @@ def test_choosing_a_policy_stores_it_with_its_title_as_label(
     assert response.status_code == 200
     assert conversation.eligibility_event_id == 'nlwiki-stemprocedure'
     assert conversation.eligibility_label == 'Voting eligibility on Dutch Wikipedia'
-    assert response.get_json()['data']['settings']['eligibility']['status'] == 'listed'
 
 
 def test_the_organizers_own_label_is_kept(admin_client, conversation, canivote_policies):

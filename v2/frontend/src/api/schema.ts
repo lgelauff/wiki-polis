@@ -1544,12 +1544,7 @@ export interface components {
                 configured: boolean;
                 eventId: string;
                 label: string | null;
-                /**
-                 * @description The stored id checked against canivote's policy list: none stored, on the list, not on it, or the list cannot be read now.
-                 * @enum {string}
-                 */
-                status: "none" | "listed" | "unlisted" | "unavailable";
-                /** @description The stored policy, when it is on canivote's list. */
+                /** @description The stored policy, when it is on canivote's list; filled only for a viewer who may not edit the settings (an editor reads GET /admin/eligibility-policies). */
                 policy: components["schemas"]["EligibilityPolicy"] | null;
             };
             capabilities: {

@@ -184,7 +184,7 @@ export const handlers = [
       {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
       {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12, featured_statements: 24}},
     ]},
-    eligibility: {configured: true, eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd op nl.wikipedia', status: 'listed', policy: testPolicies[0]},
+    eligibility: {configured: true, eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd op nl.wikipedia', policy: null},
     capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), async ({request}) => {
@@ -192,7 +192,7 @@ export const handlers = [
     return HttpResponse.json({data: {changed: true, changedFields: ['title'], settings: {
       conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, gated: body.gated, gatingType: body.gatingType, announce: body.announce, information: body.information, resultsShared: body.resultsShared, showUsernames: body.showUsernames, accessRequestText: body.accessRequestText, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
       recommendations: {tier: body.recommendationTier, tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}]},
-      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, status: body.eligibilityEventId ? 'listed' : 'none', policy: testPolicies.find((policy) => policy.id === body.eligibilityEventId) ?? null}, capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, policy: null}, capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(), async ({request}) => {
