@@ -221,6 +221,8 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
             setActive(0);
           }}
           onKeyDown={onKeyDown}
+          // The shown title is selected, so typing replaces it instead of adding to it.
+          onFocus={(event) => event.currentTarget.select()}
           onClick={() => { if (!open) openList(); }}
           onBlur={close}
         />
@@ -255,12 +257,12 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
 
 /**
  * After a save the server refused because of the policy, read canivote's list again: it
- * may have dropped the policy, or come back, since this page loaded it, and the list is
- * otherwise kept for ten minutes.
+ * may have dropped the policy, or come back, since this page loaded it, and a list that
+ * loaded is otherwise kept for ten minutes.
  */
 export function refreshPoliciesAfterRefusal(queryClient: QueryClient, error: unknown) {
   if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return;
-  const codes = (error.details as {codes?: Record<string, string>} | undefined)?.codes;
+  const codes = (error.details as components['schemas']['ValidationFailedDetails'] | undefined)?.codes;
   if (codes?.eligibilityEventId) {
     void queryClient.invalidateQueries({queryKey: adminEligibilityPoliciesQuery().queryKey});
   }

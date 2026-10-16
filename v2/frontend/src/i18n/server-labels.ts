@@ -1,4 +1,5 @@
 import {ApiContractError} from '../api/client';
+import type {components} from '../api/schema';
 import type {Message} from './messages';
 
 /** Rule 6 of `plan_i18n.md`: a UI label is never shipped from the server as English.
@@ -274,9 +275,7 @@ export const fieldRefusal = (msg: Message, code: string | null | undefined) =>
  *  whose code this table knows in the reader's language, any other in the server's text. */
 export function refusedFields(msg: Message, error: unknown): Record<string, string[]> {
   if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return {};
-  const details = error.details as {
-    fields?: Record<string, string[]>; codes?: Record<string, string>;
-  } | undefined;
+  const details = error.details as components['schemas']['ValidationFailedDetails'] | undefined;
   const fields = {...details?.fields};
   for (const [field, code] of Object.entries(details?.codes ?? {})) {
     const text = fieldRefusal(msg, code);

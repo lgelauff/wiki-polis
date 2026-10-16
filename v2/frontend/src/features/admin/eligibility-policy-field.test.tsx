@@ -1,6 +1,6 @@
 import {Suspense, useState} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
@@ -271,6 +271,48 @@ test('without a canivote address the field says it is not configured, not "canno
   expect(screen.queryByText('(admin-access-policy-unavailable)')).toBeNull();
 });
 
+test('focusing the box selects the shown title, so typing replaces it', async () => {
+  renderField({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+
+  act(() => box.focus());
+  expect(box.selectionStart).toBe(0);
+  expect(box.selectionEnd).toBe(box.value.length);
+  expect(box.value).not.toBe('');
+});
+
+/** The field in a page that is left and visited again, with one query client throughout. */
+async function visitTwice(available: boolean) {
+  let listReads = 0;
+  server.use(http.get(POLICIES_URL, () => {
+    listReads += 1;
+    return HttpResponse.json({data: {available, configured: true, policies: available ? testPolicies : []}});
+  }));
+  const client = createQueryClient();
+  const page = () => (
+    <QueryClientProvider client={client}>
+      <MessageProvider locale="en"><Harness initial={{eventId: '', label: ''}} /></MessageProvider>
+    </QueryClientProvider>
+  );
+  const first = render(page());
+  await screen.findByRole('combobox', {name: 'Eligibility policy'});
+  await waitFor(() => expect(listReads).toBe(1));
+  first.unmount();
+  render(page());
+  await screen.findByRole('combobox', {name: 'Eligibility policy'});
+  // Give a second read the chance to happen before counting.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return listReads;
+}
+
+test('a list that loaded is kept when the page is visited again', async () => {
+  expect(await visitTwice(true)).toBe(1);
+});
+
+test('"cannot be loaded" is not kept: the next visit asks again', async () => {
+  expect(await visitTwice(false)).toBe(2);
+});
+
 test('under qqx, nothing in the field is English', async () => {
   renderAsQqx();
   const {container} = renderField({eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd'}, 'provider');
@@ -397,6 +439,22 @@ async function openCreateForm() {
   fireEvent.change(within(form).getByLabelText('Title'), {target: {value: 'New one'}});
   return form;
 }
+
+test('Site admin reads canivote\'s list only once New consultation is opened', async () => {
+  let listReads = 0;
+  server.use(http.get(POLICIES_URL, () => {
+    listReads += 1;
+    return HttpResponse.json({data: {available: true, configured: true, policies: testPolicies}});
+  }));
+  renderCatalog();
+  const heading = await screen.findByRole('heading', {name: 'New consultation', level: 2}, {timeout: 10_000});
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(listReads).toBe(0);
+
+  fireEvent.click(heading.closest('summary')!);
+  await within(heading.closest('details')!).findByRole('combobox', {name: 'Eligibility policy'});
+  expect(listReads).toBe(1);
+});
 
 test('a refused policy on New consultation is announced, in the catalogue\'s words, every time', async () => {
   let listReads = 0;
