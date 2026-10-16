@@ -14,9 +14,10 @@ import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import type {Announcer} from './admin-announcer';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
-import {EligibilityPolicyField, EligibilityPolicyValue} from './eligibility-policy-field';
+import {EligibilityPolicyField, EligibilityPolicyValue, refreshPoliciesAfterRefusal} from './eligibility-policy-field';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useMessage, type Message} from '../../i18n/messages';
+import {refusedFields} from '../../i18n/server-labels';
 
 type Settings = components['schemas']['AdminSettings'];
 type Policy = Settings['conversation']['accessPolicy'];
@@ -151,13 +152,6 @@ function storedBody(settings: Settings) {
     showUsernames: conversation.showUsernames,
     accessRequestText: conversation.accessRequestText,
   };
-}
-
-/** The per-field messages of a 400 `validation_failed`, keyed by the request field. */
-function fieldErrors(error: unknown): Record<string, string[]> {
-  if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return {};
-  const details = error.details as {fields?: Record<string, string[]>} | undefined;
-  return details?.fields ?? {};
 }
 
 /** The field named by a 409 `access_settings_locked` (`gated`, `gating_type` or
@@ -515,6 +509,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
       }
       return {changed};
     },
+    onError: (error) => refreshPoliciesAfterRefusal(queryClient, error),
   });
 
   // Narrowing is measured against what the server last told us, not against the first
@@ -531,7 +526,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // the settings request.
   const policyFailure = mutation.error instanceof PolicySaveError ? mutation.error : null;
   const settingsError = policyFailure ? null : mutation.error;
-  const fields = fieldErrors(settingsError);
+  const fields = refusedFields(msg, settingsError);
   const fieldMessages = Object.values(fields).flat();
   // The admission radio group answers both wire fields, so a refusal of either is shown
   // once, under the group, and linked from every live choice in it.

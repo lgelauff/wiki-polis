@@ -1,7 +1,8 @@
-import {useId, useRef, useState, type KeyboardEvent} from 'react';
-import {useQuery} from '@tanstack/react-query';
+import {useEffect, useId, useState, type KeyboardEvent} from 'react';
+import {useQuery, type QueryClient} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
+import {ApiContractError} from '../../api/client';
 import {adminEligibilityPoliciesQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -118,12 +119,15 @@ function matches(policy: EligibilityPolicy, query: string): boolean {
  * autocomplete), no library.
  *
  * Typing filters canivote's policies by id, title and wiki; arrow keys move through the list,
- * Enter chooses, Escape closes it. Only a choice from the list counts (owner, 2026-10-15):
- * typed text is never saved, and leaving the field without choosing puts the last choice
- * back. "No eligibility check" is the first option, so clearing is a choice like any other.
+ * Enter chooses, Escape closes it; a click on the box opens it. Only a choice from the list
+ * counts (owner, 2026-10-15): typed text is never saved, and leaving the field without
+ * choosing puts the last choice back. "No eligibility check" is the first option, so clearing is a choice like any other.
  */
-function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
+function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy}: {
   policies: EligibilityPolicy[];
+  /** The text box's id, which the field's own <label> names it by. */
+  inputId: string;
+  /** The label's id, which names the list. */
   labelledBy: string;
   value: string;
   onChoose: (policy: EligibilityPolicy | null) => void;
@@ -131,7 +135,6 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
 }) {
   const msg = useMessage();
   const ids = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
   const chosen = policies.find((policy) => policy.id === value) ?? null;
   const shown = chosen ? chosen.title : value;
   // The typed text while the reader is filtering; null when the box shows the choice.
@@ -146,6 +149,12 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
   // the option that is highlighted and announced is always the one Enter chooses.
   const options: (EligibilityPolicy | null)[] = [...(offerNone ? [null] : []), ...filtered];
   const optionId = (index: number) => `${ids}-option-${index}`;
+  const noMatch = open && options.length === 0;
+
+  // The highlighted option stays in view while the arrow keys move through a long list.
+  useEffect(() => {
+    if (open) document.getElementById(optionId(active))?.scrollIntoView?.({block: 'nearest'});
+  }, [open, active]);
 
   function openList(at?: number) {
     setOpen(true);
@@ -195,12 +204,10 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
     <div className="policy-combobox">
       <div className="policy-combobox__box">
         <input
-          ref={inputRef}
-          id={`${ids}-input`}
+          id={inputId}
           type="text"
           role="combobox"
           autoComplete="off"
-          aria-labelledby={labelledBy}
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls={`${ids}-list`}
@@ -214,18 +221,12 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
             setActive(0);
           }}
           onKeyDown={onKeyDown}
+          onClick={() => { if (!open) openList(); }}
           onBlur={close}
         />
-        {/* The pointer's way to the whole list; the keyboard has the arrow keys. */}
-        <button type="button" className="policy-combobox__toggle" tabIndex={-1} aria-hidden="true"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            if (open) close();
-            else {
-              inputRef.current?.focus();
-              openList();
-            }
-          }}>▾</button>
+        {/* Only a picture: a click anywhere on the box opens the list, the keyboard has the
+            arrow keys, so there is no second control to name. */}
+        <span className="policy-combobox__arrow" aria-hidden="true">▾</span>
       </div>
       <ul className="policy-combobox__list" id={`${ids}-list`} role="listbox"
         aria-labelledby={labelledBy} hidden={!open}>
@@ -241,12 +242,28 @@ function PolicyCombobox({policies, value, onChoose, invalid, labelledBy}: {
             </>}
           </li>
         ))}
-        {options.length === 0 && <li role="presentation" className="policy-combobox__empty">
+        {noMatch && <li role="presentation" className="policy-combobox__empty" aria-hidden="true">
           {msg('admin-access-policy-no-match')}
         </li>}
       </ul>
+      {/* An empty list has no option to announce, so it is said here. A live region rather
+          than role=status: the page's own status line (the Save notice) stays the only one. */}
+      <p className="sr-only" aria-live="polite">{noMatch ? msg('admin-access-policy-no-match') : ''}</p>
     </div>
   );
+}
+
+/**
+ * After a save the server refused because of the policy, read canivote's list again: it
+ * may have dropped the policy, or come back, since this page loaded it, and the list is
+ * otherwise kept for ten minutes.
+ */
+export function refreshPoliciesAfterRefusal(queryClient: QueryClient, error: unknown) {
+  if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return;
+  const codes = (error.details as {codes?: Record<string, string>} | undefined)?.codes;
+  if (codes?.eligibilityEventId) {
+    void queryClient.invalidateQueries({queryKey: adminEligibilityPoliciesQuery().queryKey});
+  }
 }
 
 /**
@@ -271,8 +288,12 @@ export function EligibilityPolicyField({value, onChange, errors = {}, labelClass
   const {data, isPending} = useQuery(adminEligibilityPoliciesQuery());
   const policies = data?.policies ?? [];
   const available = data?.available ?? false;
+  // No canivote address on this server: the list will never load, so it is not "now".
+  const configured = data?.configured ?? true;
   const chosen = policies.find((policy) => policy.id === value.eventId) ?? null;
   const unlisted = available && value.eventId !== '' && chosen === null;
+  // While a refusal is shown it says what is wrong; the note would only repeat it.
+  const unavailableNote = !isPending && !available && !errors.eventId;
 
   function onChoose(policy: EligibilityPolicy | null) {
     if (policy === null) {
@@ -290,7 +311,7 @@ export function EligibilityPolicyField({value, onChange, errors = {}, labelClass
 
   const describedBy = [
     errors.eventId ? `${ids}-policy-error` : null,
-    unlisted || (!isPending && !available) ? `${ids}-policy-note` : null,
+    unlisted || unavailableNote ? `${ids}-policy-note` : null,
   ].filter(Boolean).join(' ');
   const invalid = {
     ...(errors.eventId ? {'aria-invalid': true} : {}),
@@ -299,12 +320,15 @@ export function EligibilityPolicyField({value, onChange, errors = {}, labelClass
 
   return (
     <div className="policy-field">
-      <p className="access-answer-legend" id={`${ids}-legend`}>{msg('admin-access-policy-label')}</p>
+      <label className="access-answer-legend" id={`${ids}-legend`}
+        htmlFor={isPending ? undefined : `${ids}-input`}>{msg('admin-access-policy-label')}</label>
       {isPending ? <p className="access-answer-value">{value.eventId || msg('admin-access-policy-none')}</p>
         : <>
           <PolicyCombobox policies={available ? policies : []} value={value.eventId}
-            onChoose={onChoose} invalid={invalid} labelledBy={`${ids}-legend`} />
-          {!available && <p className="access-field-note" id={`${ids}-policy-note`}>{msg('admin-access-policy-unavailable')}</p>}
+            onChoose={onChoose} invalid={invalid} inputId={`${ids}-input`} labelledBy={`${ids}-legend`} />
+          {unavailableNote && <p className="access-field-note" id={`${ids}-policy-note`}>
+            {msg(configured ? 'admin-access-policy-unavailable' : 'admin-access-policy-not-configured')}
+          </p>}
         </>}
       {unlisted && <p className="access-field-error" id={`${ids}-policy-note`}>
         {msg('admin-access-policy-unlisted', value.eventId)}

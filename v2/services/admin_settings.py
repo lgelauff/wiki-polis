@@ -130,6 +130,7 @@ def update_conversation_settings(
     access_request_text: str | None = None,
     may_switch_demo: bool = False,
     eligibility_policies: Callable[[], list[dict] | None] = lambda: None,
+    eligibility_configured: bool = True,
 ) -> SettingsUpdateResult:
     # The legacy access-policy representation remains accepted for old clients,
     # but every new write is normalised to the explicit gated settings.
@@ -176,6 +177,7 @@ def update_conversation_settings(
     choice = resolve_policy_choice(
         requested_id=eligibility_event_id, requested_label=eligibility_label,
         stored_id=conversation.eligibility_event_id, policies=eligibility_policies,
+        configured=eligibility_configured,
     )
 
     locked_fields = {

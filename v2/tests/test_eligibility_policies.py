@@ -26,6 +26,11 @@ class _Response:
             raise requests.HTTPError(str(self.status_code))
 
 
+def _unreachable(base_url, *, user_agent, get=None):
+    """`fetch_policies` while canivote is configured but cannot be reached."""
+    raise requests.ConnectionError('canivote is down')
+
+
 def _canivote(details, *, listed=None):
     """A fake `requests.get` for canivote: `/policies` and `/policies/<id>`."""
     calls = []
@@ -210,18 +215,20 @@ def test_resolve_policy_choice_stores(requested, label, stored, policies, expect
     assert (choice.event_id, choice.label) == expected
 
 
-@pytest.mark.parametrize('requested, stored, policies, message', [
-    ('nlwiki-stemprocdure', None, _listed, 'Choose an eligibility policy from the list.'),
-    ('nlwiki-stemprocedure', 'meta-global', _down,
-     'The list of eligibility policies cannot be loaded now. Try again later.'),
+@pytest.mark.parametrize('requested, stored, policies, configured, code', [
+    ('nlwiki-stemprocdure', None, _listed, True, 'eligibility_policy_unlisted'),
+    ('nlwiki-stemprocedure', 'meta-global', _down, True, 'eligibility_policies_unavailable'),
+    ('nlwiki-stemprocedure', None, _down, False, 'eligibility_policies_not_configured'),
 ])
-def test_resolve_policy_choice_refuses(requested, stored, policies, message):
+def test_resolve_policy_choice_refuses(requested, stored, policies, configured, code):
     with pytest.raises(EligibilityPolicyRefused) as refused:
         resolve_policy_choice(
             requested_id=requested, requested_label='', stored_id=stored, policies=policies,
+            configured=configured,
         )
     assert refused.value.field == 'eligibilityEventId'
-    assert refused.value.message == message
+    # The code is what the console puts in words (#454).
+    assert refused.value.code == code
 
 
 # ── GET /admin/eligibility-policies ───────────────────────────────────────────
@@ -270,7 +277,16 @@ def test_policy_list_says_when_canivote_is_not_configured(admin_client, app):
 
     data = admin_client.get(POLICIES_URL).get_json()['data']
 
-    assert data == {'available': False, 'policies': []}
+    assert data == {'available': False, 'configured': False, 'policies': []}
+
+
+def test_policy_list_says_when_canivote_is_down(admin_client, app, monkeypatch):
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    monkeypatch.setattr(eligibility_policies, 'fetch_policies', _unreachable)
+
+    data = admin_client.get(POLICIES_URL).get_json()['data']
+
+    assert data == {'available': False, 'configured': True, 'policies': []}
 
 
 def test_openapi_documents_the_policy_list(client):
@@ -392,15 +408,16 @@ def test_an_id_not_on_the_list_is_refused_and_nothing_changes(
     assert response.status_code == 400
     error = response.get_json()['error']
     assert error['code'] == 'validation_failed'
-    assert error['details']['fields'] == {
-        'eligibilityEventId': ['Choose an eligibility policy from the list.'],
-    }
+    assert error['details']['codes'] == {'eligibilityEventId': 'eligibility_policy_unlisted'}
+    assert set(error['details']['fields']) == {'eligibilityEventId'}
     db.session.refresh(conversation)
     assert conversation.eligibility_event_id is None
     assert conversation.title == 'Test Conversation'
 
 
-def test_a_new_policy_is_refused_while_canivote_is_down(admin_client, app, conversation):
+def test_a_new_policy_is_refused_when_canivote_is_not_configured(
+    admin_client, app, conversation,
+):
     app.config['ACCOUNT_ELIGIBILITY_URL'] = ''
 
     response = admin_client.put(_settings_url(conversation), json=_settings_body(
@@ -408,9 +425,9 @@ def test_a_new_policy_is_refused_while_canivote_is_down(admin_client, app, conve
     ))
 
     assert response.status_code == 400
-    assert response.get_json()['error']['details']['fields'] == {'eligibilityEventId': [
-        'The list of eligibility policies cannot be loaded now. Try again later.',
-    ]}
+    assert response.get_json()['error']['details']['codes'] == {
+        'eligibilityEventId': 'eligibility_policies_not_configured',
+    }
 
 
 def test_the_stored_policy_does_not_block_other_changes_while_canivote_is_down(
@@ -504,8 +521,39 @@ def test_a_new_consultation_refuses_an_unlisted_policy(admin_client, canivote_po
     ))
 
     assert response.status_code == 400
-    assert response.get_json()['error']['details']['fields'] == {
-        'eligibilityEventId': ['Choose an eligibility policy from the list.'],
+    assert response.get_json()['error']['details']['codes'] == {
+        'eligibilityEventId': 'eligibility_policy_unlisted',
     }
     assert Conversation.query.filter_by(slug='with-a-policy').first() is None
     assert Participant.query.count() == 1
+
+
+def test_the_invitation_list_clears_the_policy_before_it_is_checked(
+    admin_client, canivote_policies,
+):
+    """As a settings save does: a policy left in the form is not checked, and not stored,
+    for a consultation the invitation list admits to."""
+    response = admin_client.post('/api/v1/admin/conversations', json=_creation_body(
+        accessPolicy='invite_only', eligibilityEventId='typed-by-hand',
+        eligibilityLabel='Anything',
+    ))
+
+    assert response.status_code == 201
+    conversation = Conversation.query.filter_by(slug='with-a-policy').one()
+    assert conversation.eligibility_event_id is None
+    assert conversation.eligibility_label is None
+    assert canivote_policies == []
+
+
+def test_a_new_consultation_says_when_canivote_is_not_configured(admin_client, app):
+    """The create path passes the server's configuration to the check, as Settings does."""
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = ''
+
+    response = admin_client.post('/api/v1/admin/conversations', json=_creation_body(
+        eligibilityEventId='meta-global',
+    ))
+
+    assert response.status_code == 400
+    assert response.get_json()['error']['details']['codes'] == {
+        'eligibilityEventId': 'eligibility_policies_not_configured',
+    }

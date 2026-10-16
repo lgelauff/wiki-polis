@@ -86,3 +86,54 @@ def test_the_toast_height_is_capped_inside_the_clearance():
                     body = tinycss2.serialize(rule.content)
                     assert 'max-block-size' not in body and 'overflow' not in body, (
                         'the toast cap is not overridden at a narrower width')
+
+
+_ACTIVE_OPTION = '.admin-shell .policy-combobox__option[aria-selected="true"]'
+
+
+def test_the_highlighted_policy_is_outlined_not_only_shaded():
+    """The highlighted option of the policy list (#530): its background alone is 1.36:1
+    against the list, too faint to find, so it carries an outline as well (WCAG 1.4.11)."""
+    active = _declarations(_ACTIVE_OPTION)
+
+    assert active.get('outline', 'none') not in ('none', '0')
+
+
+def test_the_highlighted_policy_keeps_its_mark_in_forced_colours():
+    """Forced colours drop author backgrounds: the highlight takes the system's own."""
+    rules = [
+        rule
+        for at_rule in tinycss2.parse_stylesheet(
+            CONSOLE_CSS.read_text(encoding='utf-8'), skip_comments=True, skip_whitespace=True,
+        )
+        if at_rule.type == 'at-rule' and at_rule.lower_at_keyword == 'media'
+        and 'forced-colors' in tinycss2.serialize(at_rule.prelude)
+        for rule in tinycss2.parse_rule_list(at_rule.content, skip_comments=True,
+                                             skip_whitespace=True)
+        if rule.type == 'qualified-rule'
+        and tinycss2.serialize(rule.prelude).strip() == _ACTIVE_OPTION
+    ]
+
+    assert len(rules) == 1
+    declarations = tinycss2.serialize(rules[0].content)
+    assert 'Highlight' in declarations and 'HighlightText' in declarations
+
+
+def _rule_position(selector: str) -> int:
+    for index, rule in enumerate(_top_level_rules()):
+        if tinycss2.serialize(rule.prelude).strip() == selector:
+            return index
+    raise AssertionError(f'no top-level rule for {selector!r} in {CONSOLE_CSS.name}')
+
+
+def test_the_policy_box_keeps_room_for_its_arrow():
+    """The ▾ sits inside the policy box, so the box keeps room for it at its end. The
+    console's general input rule sets every input's padding; the box's own rule has to be at
+    least as specific (`.admin-shell .admin-page` plus a class and the element) and come
+    after it, or that room is reset and a long title runs under the ▾."""
+    general = ('.admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], '
+               '[type="hidden"]), select, textarea)')
+    box = '.admin-shell .admin-page .policy-combobox__box input'
+
+    assert _declarations(box).get('padding-inline-end')
+    assert _rule_position(box) > _rule_position(general)

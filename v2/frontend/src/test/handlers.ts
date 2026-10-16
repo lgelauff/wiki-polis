@@ -123,7 +123,7 @@ export const testPolicies = [
 ] satisfies components['schemas']['EligibilityPolicy'][];
 
 export const handlers = [
-  http.get(new URL('/api/v1/admin/eligibility-policies', globalThis.location.origin).toString(), () => HttpResponse.json({data: {available: true, policies: testPolicies}})),
+  http.get(new URL('/api/v1/admin/eligibility-policies', globalThis.location.origin).toString(), () => HttpResponse.json({data: {available: true, configured: true, policies: testPolicies}})),
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
   http.get(new URL('/api/v1/admin/home', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversations: [{id: 7, title: 'Community strategy', role: 'Organizer', status: 'active', openFlags: 1, pendingStatements: 2, links: {overview: '/admin/conversations/7'}}],

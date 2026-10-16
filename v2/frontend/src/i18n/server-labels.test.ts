@@ -1,7 +1,8 @@
 import {describe, expect, test} from 'vitest';
 
 import type {Message} from './messages';
-import {accessPolicyLabel, outputLabel, outputPending, outputTooltip, phaseLabel, roleLabel, routeLabel, tabLabel} from './server-labels';
+import {ApiContractError} from '../api/client';
+import {accessPolicyLabel, outputLabel, outputPending, outputTooltip, phaseLabel, refusedFields, roleLabel, routeLabel, tabLabel} from './server-labels';
 
 /** A catalogue whose values are deliberately UNLIKE the server's English. Every assertion
  *  below distinguishes "read the catalogue" from "echoed the server label" -- which the
@@ -19,6 +20,9 @@ const CATALOGUE: Record<string, string> = {
   'admin-common-policy-invited': 'CATALOGUE only people given access',
   'admin-shell-role-site-admin': 'CATALOGUE site admin',
   'admin-shell-role-organizer': 'CATALOGUE organizer',
+  'admin-access-policy-refused-unlisted': 'CATALOGUE choose from the list',
+  'admin-access-policy-unavailable': 'CATALOGUE list cannot be loaded',
+  'admin-access-policy-not-configured': 'CATALOGUE list not configured',
 };
 
 /** Stands in for banana: returns the key itself for a message it does not hold, which is
@@ -115,5 +119,33 @@ describe('server identifier -> message', () => {
     // implementation would render the bare key 'admin-common-policy-practice'.
     expect(accessPolicyLabel(msg, 'demo')).toBe('demo');
     expect(accessPolicyLabel(msg, null)).toBe('');
+  });
+});
+
+describe('a refused field, by its code (#454)', () => {
+  const refusal = (details: unknown) => new ApiContractError('Check the highlighted settings.', 'validation_failed', details);
+
+  test('each eligibility policy code is said from the catalogue, not in the server\'s English', () => {
+    for (const [code, text] of [
+      ['eligibility_policy_unlisted', 'CATALOGUE choose from the list'],
+      ['eligibility_policies_unavailable', 'CATALOGUE list cannot be loaded'],
+      ['eligibility_policies_not_configured', 'CATALOGUE list not configured'],
+    ] as const) {
+      expect(refusedFields(msg, refusal({
+        fields: {eligibilityEventId: ['SERVER english'], title: ['SERVER title']},
+        codes: {eligibilityEventId: code},
+      }))).toEqual({eligibilityEventId: [text], title: ['SERVER title']});
+    }
+  });
+
+  test('a code the console does not know, or none, keeps the server\'s text', () => {
+    expect(refusedFields(msg, refusal({fields: {eligibilityEventId: ['SERVER english']},
+      codes: {eligibilityEventId: 'something_new'}}))).toEqual({eligibilityEventId: ['SERVER english']});
+    expect(refusedFields(msg, refusal({fields: {title: ['SERVER title']}}))).toEqual({title: ['SERVER title']});
+  });
+
+  test('anything but a validation refusal has no field messages', () => {
+    expect(refusedFields(msg, new ApiContractError('x', 'slug_conflict', {codes: {slug: 'eligibility_policy_unlisted'}}))).toEqual({});
+    expect(refusedFields(msg, new Error('network'))).toEqual({});
   });
 });

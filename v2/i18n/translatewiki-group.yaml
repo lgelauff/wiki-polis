@@ -83,6 +83,8 @@ TAGS:
     - admin-access-policy-label
     - admin-access-policy-no-match
     - admin-access-policy-none
+    - admin-access-policy-not-configured
+    - admin-access-policy-refused-unlisted
     - admin-access-policy-source
     - admin-access-policy-unavailable
     - admin-access-policy-unlisted
