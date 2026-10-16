@@ -117,6 +117,9 @@ def test_the_highlighted_policy_keeps_its_mark_in_forced_colours():
     assert len(rules) == 1
     declarations = tinycss2.serialize(rules[0].content)
     assert 'Highlight' in declarations and 'HighlightText' in declarations
+    # Without it the browser paints its page-coloured backplate behind the text, and
+    # HighlightText on that backplate cannot be read (seen on staging, 2026-10-16).
+    assert 'forced-color-adjust: none' in declarations
 
 
 def _rule_position(selector: str) -> int:

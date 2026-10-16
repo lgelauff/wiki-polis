@@ -1058,9 +1058,12 @@
   outline-offset: -2px;
 }
 
-/* Forced colours drop the background: the highlight is the system's own. */
+/* Forced colours drop the background: the highlight is the system's own. Without
+   forced-color-adjust the browser still paints its page-coloured backplate behind the text,
+   so HighlightText on it is unreadable (white on white, seen on staging 2026-10-16). */
 @media (forced-colors: active) {
   .admin-shell .policy-combobox__option[aria-selected="true"] {
+    forced-color-adjust: none;
     outline-color: Highlight;
     background: Highlight;
     color: HighlightText;
