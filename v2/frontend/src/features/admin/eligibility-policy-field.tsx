@@ -1,4 +1,4 @@
-import {useEffect, useId, useState, type KeyboardEvent} from 'react';
+import {useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {useQuery, type QueryClient} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -162,9 +162,20 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
     setActive(at ?? Math.max(current, 0));
   }
 
+  // After a choice or Escape the box keeps the focus and shows the choice again; its text
+  // is selected once that render is on screen, so typing replaces it here too.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const reselect = useRef(false);
+  useLayoutEffect(() => {
+    if (!reselect.current) return;
+    reselect.current = false;
+    inputRef.current?.select();
+  });
+
   function close() {
     setOpen(false);
     setQuery(null);
+    if (document.activeElement === inputRef.current) reselect.current = true;
   }
 
   function choose(option: EligibilityPolicy | null) {
@@ -204,6 +215,7 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
     <div className="policy-combobox">
       <div className="policy-combobox__box">
         <input
+          ref={inputRef}
           id={inputId}
           type="text"
           role="combobox"
@@ -221,9 +233,15 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
             setActive(0);
           }}
           onKeyDown={onKeyDown}
-          // The shown title is selected, so typing replaces it instead of adding to it.
+          // The shown title is selected, so typing replaces it instead of adding to it. Also on
+          // a click: the mouseup of the click that focused the box can put the caret back.
           onFocus={(event) => event.currentTarget.select()}
-          onClick={() => { if (!open) openList(); }}
+          onClick={(event) => {
+            if (!open) {
+              openList();
+              event.currentTarget.select();
+            }
+          }}
           onBlur={close}
         />
         {/* Only a picture: a click anywhere on the box opens the list, the keyboard has the

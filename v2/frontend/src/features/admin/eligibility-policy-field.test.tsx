@@ -10,6 +10,7 @@ import {AdminCatalogPage} from './admin-catalog-page';
 import {AdminSettingsPage} from './admin-settings-page';
 import {EligibilityPolicyField, ruleText, type EligibilityChoice} from './eligibility-policy-field';
 import {createMessage, MessageProvider} from '../../i18n/messages';
+import {adminEligibilityPoliciesQuery} from '../../api/queries';
 import {createQueryClient} from '../../query-client';
 import {testMessages, testPolicies} from '../../test/handlers';
 import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
@@ -276,9 +277,44 @@ test('focusing the box selects the shown title, so typing replaces it', async ()
   const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
 
   act(() => box.focus());
+  expectAllSelected(box);
+});
+
+function expectAllSelected(box: HTMLInputElement) {
+  expect(box.value).not.toBe('');
   expect(box.selectionStart).toBe(0);
   expect(box.selectionEnd).toBe(box.value.length);
-  expect(box.value).not.toBe('');
+}
+
+test('a click on the box selects the shown title', async () => {
+  renderField({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+  act(() => box.focus());
+  box.setSelectionRange(box.value.length, box.value.length);
+
+  fireEvent.click(box);
+  expectAllSelected(box);
+});
+
+test('after a choice or Escape the box still has focus and its title is selected again', async () => {
+  renderField({eventId: 'meta-global', label: 'Good standing'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+  act(() => box.focus());
+
+  fireEvent.change(box, {target: {value: 'nlwiki'}});
+  fireEvent.keyDown(box, {key: 'Enter'});
+  expect(box).toHaveValue('Voting eligibility on Dutch Wikipedia');
+  expectAllSelected(box);
+
+  fireEvent.change(box, {target: {value: 'meta'}});
+  fireEvent.click(screen.getByRole('option', {name: /movement/}));
+  expect(box).toHaveValue('Not blocked anywhere in the movement');
+  expectAllSelected(box);
+
+  fireEvent.change(box, {target: {value: 'nlw'}});
+  fireEvent.keyDown(box, {key: 'Escape'});
+  expect(box).toHaveValue('Not blocked anywhere in the movement');
+  expectAllSelected(box);
 });
 
 /** The field in a page that is left and visited again, with one query client throughout. */
@@ -300,17 +336,19 @@ async function visitTwice(available: boolean) {
   first.unmount();
   render(page());
   await screen.findByRole('combobox', {name: 'Eligibility policy'});
-  // Give a second read the chance to happen before counting.
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  return listReads;
+  return {client, reads: () => listReads};
 }
 
 test('a list that loaded is kept when the page is visited again', async () => {
-  expect(await visitTwice(true)).toBe(1);
+  const {client, reads} = await visitTwice(true);
+  // A read would start as the field mounts; none is in flight and none happened.
+  expect(client.isFetching()).toBe(0);
+  expect(reads()).toBe(1);
 });
 
 test('"cannot be loaded" is not kept: the next visit asks again', async () => {
-  expect(await visitTwice(false)).toBe(2);
+  const {reads} = await visitTwice(false);
+  await waitFor(() => expect(reads()).toBe(2));
 });
 
 test('under qqx, nothing in the field is English', async () => {
@@ -419,9 +457,9 @@ test('a refused policy is said at the field', async () => {
 
 const CREATE_URL = new URL('/api/v1/admin/conversations', globalThis.location.origin).toString();
 
-function renderCatalog() {
+function renderCatalog(client = createQueryClient()) {
   return render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/admin']}>
         <Suspense fallback={null}>
           <MessageProvider locale="en"><AdminCatalogPage csrfToken="test-csrf-token" /></MessageProvider>
@@ -446,9 +484,12 @@ test('Site admin reads canivote\'s list only once New consultation is opened', a
     listReads += 1;
     return HttpResponse.json({data: {available: true, configured: true, policies: testPolicies}});
   }));
-  renderCatalog();
+  const client = createQueryClient();
+  renderCatalog(client);
   const heading = await screen.findByRole('heading', {name: 'New consultation', level: 2}, {timeout: 10_000});
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // Nothing has asked for the list: no query for it exists yet, not even a pending one.
+  expect(screen.queryByRole('combobox', {name: 'Eligibility policy'})).toBeNull();
+  expect(client.getQueryState(adminEligibilityPoliciesQuery().queryKey)).toBeUndefined();
   expect(listReads).toBe(0);
 
   fireEvent.click(heading.closest('summary')!);

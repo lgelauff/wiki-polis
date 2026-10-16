@@ -257,11 +257,14 @@ export const workspaceErrorCopy = (msg: Message, error: unknown) =>
 export const joinErrorCopy = (msg: Message, error: unknown) =>
   resolve(JOIN_ERROR_MESSAGES, msg, apiErrorCode(error), msg(JOIN_ERROR_MESSAGES._fallback!));
 
+type FieldRefusalCode = NonNullable<components['schemas']['ValidationFailedDetails']['codes']>[string];
+
 /** A field's refusal in a 400 `validation_failed`, by the code the server sends for it in
  *  `details.codes` (#454). Only the eligibility policy sends one so far
  *  (`services/eligibility_policies.py`); every other field keeps the server's text until it
- *  does too. */
-const FIELD_REFUSAL_MESSAGES: Record<string, string> = {
+ *  does too. Keyed by the codes openapi.json lists, so a code added there without a message
+ *  here fails the type check. */
+const FIELD_REFUSAL_MESSAGES: Record<FieldRefusalCode, string> = {
   eligibility_policy_unlisted: 'admin-access-policy-refused-unlisted',
   eligibility_policies_unavailable: 'admin-access-policy-unavailable',
   eligibility_policies_not_configured: 'admin-access-policy-not-configured',
