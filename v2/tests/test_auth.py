@@ -379,3 +379,53 @@ def test_login_does_not_take_over_an_invite_already_bound_to_another_account(
     db.session.commit()
     _oauth_login(client, app, username='Samename', sub=222)
     assert ConversationInvite.query.one().mw_user_id == 111
+
+
+def _race_the_session_fetch(client, app):
+    """The SPA's GET /api/v1/session, overtaken by a request that read the session before
+    it and is written back after it. Flask-Session saves every request's whole session
+    (SESSION_REFRESH_EACH_REQUEST), so the slower one decides what is stored. Returns the
+    csrfToken the SPA was handed."""
+    from flask import g, request
+    cookie = client.get_cookie(app.config['SESSION_COOKIE_NAME'])
+    headers = {'Cookie': f'{cookie.key}={cookie.value}'}
+    with app.test_request_context('/api/v1/conversations/test-conv/participation-entry',
+                                  headers=headers):
+        slower = app.session_interface.open_session(app, request)
+    # The app fixture keeps one app context open, so g still holds the token an earlier
+    # request signed; drop it so /session signs the stored secret, as in production.
+    g.pop(app.config['WTF_CSRF_FIELD_NAME'], None)
+    token = client.get('/api/v1/session').get_json()['data']['csrfToken']
+    with app.test_request_context('/api/v1/conversations/test-conv/participation-entry',
+                                  headers=headers):
+        app.session_interface.save_session(app, slower, app.response_class())
+    return token
+
+
+def test_the_join_form_token_survives_a_racing_request_after_login(client, app, conversation):
+    """Staging 2026-10-16: right after a Wikimedia login the join form failed twice with
+    the generic error, a 400 csrf_failed. The login cleared the session, CSRF secret and
+    all; the first page load then fetched /session alongside other requests, and one of
+    those wrote back its token-less copy of the session after /session had stored a new
+    secret. The token the SPA held matched nothing until the page was reloaded."""
+    _oauth_login(client, app, username='RaceUser', sub=4242)
+    app.config['WTF_CSRF_ENABLED'] = True
+    token = _race_the_session_fetch(client, app)
+    resp = client.post('/api/v1/conversations/test-conv/participation',
+                       json={'consent': True, 'pseudonym': 'calm-otter'},
+                       headers={'X-CSRFToken': token})
+    assert resp.status_code == 201, resp.get_json()
+
+
+def test_the_csrf_token_survives_a_racing_request_after_logout(app, auth_client):
+    """Logging out leaves a session behind (the one-time logout note), so the next page
+    load races the same way as after a login."""
+    from flask_wtf.csrf import validate_csrf
+    auth_client.post('/logout')
+    with auth_client.session_transaction() as sess:
+        assert sess.get('logout_notice') == 'logged-out'
+    app.config['WTF_CSRF_ENABLED'] = True
+    token = _race_the_session_fetch(auth_client, app)
+    cookie = auth_client.get_cookie(app.config['SESSION_COOKIE_NAME'])
+    with app.test_request_context(headers={'Cookie': f'{cookie.key}={cookie.value}'}):
+        validate_csrf(token)  # raises ValidationError when the stored secret is gone

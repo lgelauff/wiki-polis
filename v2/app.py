@@ -526,10 +526,26 @@ LOGOUT_NOTICE_KEY = 'logout_notice'
 LOGOUT_NOTICES = ('logged-out', 'voucher', 'revoked')
 
 
+def _reset_session() -> None:
+    """Empty the session for a new identity, with a new CSRF secret already in it.
+
+    Flask-Session writes back every request's whole session, so requests that run side by
+    side race: the last one to finish decides what is stored. A session left without a
+    CSRF secret gets one from the SPA's GET /api/v1/session, and a request that read the
+    session before that and finishes after it erases it again; every form then fails with
+    csrf_failed until a reload (staging 2026-10-16, the join form after a Wikimedia login).
+    With the secret written here, in the request that clears the session, every later
+    copy of the session carries it. The session is never empty after this, so at logout
+    Flask-Session keeps the stored session and its cookie instead of deleting them."""
+    session.clear()
+    g.pop(current_app.config['WTF_CSRF_FIELD_NAME'], None)  # this request's signed token
+    generate_csrf()
+
+
 def _start_voucher_session(participant) -> None:
     """One identity per browser session (#368): nothing from a previous login,
     demo guest or voucher account survives into the voucher session."""
-    session.clear()
+    _reset_session()
     session['xid'] = participant.xid
     session['emailable'] = False
     g.pop('participant', None)  # resolved earlier in this request, before the switch
@@ -4970,7 +4986,7 @@ def _conversation_access_decision(conversation, participant):
     if decision.reason == 'access-voucher-revoked':
         current = _signed_in_voucher_account()
         if current is not None and participant is not None and current.id == participant.id:
-            session.clear()
+            _reset_session()
             g.pop('participant', None)
             _leave_logout_notice('revoked')
     return decision
@@ -6628,7 +6644,7 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
 
         next_url = session.pop('next', None)
-        session.clear()
+        _reset_session()
         session['username']   = username
         session['xid']        = participant.xid
         session['emailable']  = _is_emailable(username)
@@ -6653,7 +6669,7 @@ def _register_routes(app: Flask) -> None:
             kind = 'logged-out'
         else:
             kind = None  # nobody was logged in (a demo guest, an expired session)
-        session.clear()
+        _reset_session()
         if kind is not None:
             _leave_logout_notice(kind)
         return redirect(next_url)
