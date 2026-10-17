@@ -166,6 +166,9 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
   // is selected once that render is on screen, so typing replaces it here too.
   const inputRef = useRef<HTMLInputElement>(null);
   const reselect = useRef(false);
+  // Set by the mousedown that focuses the box. WebKit places the caret on that click's
+  // mouseup, after every handler has run, which would undo the selection.
+  const focusingClick = useRef(false);
   useLayoutEffect(() => {
     if (!reselect.current) return;
     reselect.current = false;
@@ -234,15 +237,28 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
           }}
           onKeyDown={onKeyDown}
           // The shown title is selected, so typing replaces it instead of adding to it. Also on
-          // a click: the mouseup of the click that focused the box can put the caret back.
+          // a click, where the mouseup of the click that focuses the box would put the caret
+          // back; a click in a box that already has focus still places the caret.
           onFocus={(event) => event.currentTarget.select()}
+          onMouseDown={(event) => {
+            focusingClick.current = document.activeElement !== event.currentTarget;
+          }}
+          onMouseUp={(event) => {
+            if (focusingClick.current) event.preventDefault();
+            focusingClick.current = false;
+          }}
           onClick={(event) => {
             if (!open) {
               openList();
               event.currentTarget.select();
             }
           }}
-          onBlur={close}
+          // Not close(): a window blur keeps the box the active element, and a selection
+          // waiting for the next render would swallow the first key typed on return.
+          onBlur={() => {
+            setOpen(false);
+            setQuery(null);
+          }}
         />
         {/* Only a picture: a click anywhere on the box opens the list, the keyboard has the
             arrow keys, so there is no second control to name. */}

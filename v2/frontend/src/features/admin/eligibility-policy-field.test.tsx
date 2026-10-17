@@ -296,6 +296,20 @@ test('a click on the box selects the shown title', async () => {
   expectAllSelected(box);
 });
 
+test('the click that focuses the box keeps its selection; a later click places the caret', async () => {
+  renderField({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+
+  // fireEvent returns false when a handler prevented the default action, which for a
+  // mouseup is where WebKit would collapse the selection to the click point.
+  fireEvent.mouseDown(box);
+  act(() => box.focus());
+  expect(fireEvent.mouseUp(box)).toBe(false);
+
+  fireEvent.mouseDown(box);
+  expect(fireEvent.mouseUp(box)).toBe(true);
+});
+
 test('after a choice or Escape the box still has focus and its title is selected again', async () => {
   renderField({eventId: 'meta-global', label: 'Good standing'});
   const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
@@ -315,6 +329,19 @@ test('after a choice or Escape the box still has focus and its title is selected
   fireEvent.keyDown(box, {key: 'Escape'});
   expect(box).toHaveValue('Not blocked anywhere in the movement');
   expectAllSelected(box);
+});
+
+test('leaving the window does not leave a pending selection for the next key', async () => {
+  renderField({eventId: 'meta-global', label: 'Good standing'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+  act(() => box.focus());
+
+  // A window blur: the box gets blur, but stays the active element.
+  fireEvent.blur(box);
+  expect(document.activeElement).toBe(box);
+  fireEvent.change(box, {target: {value: 'n'}});
+  expect(box).toHaveValue('n');
+  expect(box.selectionStart).toBe(box.selectionEnd);
 });
 
 /** The field in a page that is left and visited again, with one query client throughout. */
