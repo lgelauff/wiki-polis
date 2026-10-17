@@ -297,6 +297,18 @@ def test_openapi_documents_the_policy_list(client):
     assert set(policy['required']) == set(CANIVOTE_POLICIES[0])
 
 
+def test_openapi_documents_the_validation_failed_details(client):
+    spec = client.get('/api/v1/openapi.json').get_json()
+    details = spec['components']['schemas']['ValidationFailedDetails']['properties']
+    assert details['fields']['additionalProperties'] == {
+        'type': 'array', 'items': {'type': 'string'},
+    }
+    # Every code the server may send, and no other, so a client can map each one.
+    assert set(details['codes']['additionalProperties']['enum']) == set(
+        EligibilityPolicyRefused.MESSAGES,
+    )
+
+
 # ── Settings: read and save ───────────────────────────────────────────────────
 
 def _settings_url(conversation):
