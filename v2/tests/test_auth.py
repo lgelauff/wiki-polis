@@ -386,12 +386,15 @@ def _race_the_session_fetch(client, app):
     it and is written back after it. Flask-Session saves every request's whole session
     (SESSION_REFRESH_EACH_REQUEST), so the slower one decides what is stored. Returns the
     csrfToken the SPA was handed."""
-    from flask import request
+    from flask import g, request
     cookie = client.get_cookie(app.config['SESSION_COOKIE_NAME'])
     headers = {'Cookie': f'{cookie.key}={cookie.value}'}
     with app.test_request_context('/api/v1/conversations/test-conv/participation-entry',
                                   headers=headers):
         slower = app.session_interface.open_session(app, request)
+    # The app fixture keeps one app context open, so g still holds the token an earlier
+    # request signed; drop it so /session signs the stored secret, as in production.
+    g.pop(app.config['WTF_CSRF_FIELD_NAME'], None)
     token = client.get('/api/v1/session').get_json()['data']['csrfToken']
     with app.test_request_context('/api/v1/conversations/test-conv/participation-entry',
                                   headers=headers):
@@ -418,8 +421,6 @@ def test_the_csrf_token_survives_a_racing_request_after_logout(app, auth_client)
     """Logging out leaves a session behind (the one-time logout note), so the next page
     load races the same way as after a login."""
     from flask_wtf.csrf import validate_csrf
-    # Log out before CSRF is on: the test client shares one app context, so a token
-    # fetched first would sit in g for the requests below and hide what they store.
     auth_client.post('/logout')
     with auth_client.session_transaction() as sess:
         assert sess.get('logout_notice') == 'logged-out'

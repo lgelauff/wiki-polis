@@ -535,7 +535,8 @@ def _reset_session() -> None:
     session before that and finishes after it erases it again; every form then fails with
     csrf_failed until a reload (staging 2026-10-16, the join form after a Wikimedia login).
     With the secret written here, in the request that clears the session, every later
-    copy of the session carries it."""
+    copy of the session carries it. The session is never empty after this, so at logout
+    Flask-Session keeps the stored session and its cookie instead of deleting them."""
     session.clear()
     g.pop(current_app.config['WTF_CSRF_FIELD_NAME'], None)  # this request's signed token
     generate_csrf()
