@@ -10,7 +10,8 @@ wiki_polis_require_tool_account() {
   fi
 
   case "$active_account" in
-    tools.wiki-polis|tools.wiki-polis-dev)
+    # proto: the tool the app moves to (#440).
+    tools.wiki-polis|tools.wiki-polis-dev|tools.proto)
       return 0
       ;;
   esac

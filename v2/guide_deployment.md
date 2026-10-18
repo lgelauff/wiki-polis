@@ -553,7 +553,8 @@ bash ~/wiki-polis/deploy.sh
 ```
 
 Before fetching or changing the checkout, `deploy.sh` checks `whoami` and allows only
-`tools.wiki-polis` and `tools.wiki-polis-dev`. Any other account aborts with its name and
+`tools.wiki-polis`, `tools.wiki-polis-dev` and `tools.proto` (the tool the app moves to,
+#440). Any other account aborts with its name and
 a warning about the active `become` context. For a deliberately new Toolforge account,
 set the one-command override `ALLOW_UNKNOWN_TOOL=1`; it prints a prominent warning and
 leaves the revision-pinning checks intact. Do not export this override globally.

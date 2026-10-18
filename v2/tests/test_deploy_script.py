@@ -94,8 +94,8 @@ def test_deploy_rejects_an_unknown_tool_account_before_git_fetch(tmp_path):
     assert not log.exists()
 
 
-@pytest.mark.parametrize('account', ['tools.wiki-polis', 'tools.wiki-polis-dev'])
-def test_deploy_allows_the_two_known_tool_accounts(tmp_path, account):
+@pytest.mark.parametrize('account', ['tools.wiki-polis', 'tools.wiki-polis-dev', 'tools.proto'])
+def test_deploy_allows_the_known_tool_accounts(tmp_path, account):
     result, log = _run_deploy_with_account(tmp_path, account)
 
     assert result.returncode == 91
