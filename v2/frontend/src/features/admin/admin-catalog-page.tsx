@@ -250,8 +250,9 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             {/* The policy is chosen from canivote's list, never typed (#530). Not offered
                 with the invitation list, which is the whole admission check then: the
                 server would drop it, as Settings does. The draft keeps it, so switching back
-                brings it back. */}
-            {draft.accessPolicy !== 'invite_only' && <div className="admin-field--medium">
+                brings it back. Only while the fold is open, so canivote's list is read
+                when someone may choose from it, not on every visit to this page. */}
+            {newOpen && draft.accessPolicy !== 'invite_only' && <div className="admin-field--medium">
               <EligibilityPolicyField labelClassName="admin-field"
                 value={{eventId: draft.eligibilityEventId, label: draft.eligibilityLabel}}
                 errors={{eventId: createFields.eligibilityEventId}}

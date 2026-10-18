@@ -2842,7 +2842,19 @@ export interface components {
             error: {
                 code: string;
                 message: string;
+                /** @description Depends on the code. For validation_failed it is ValidationFailedDetails. */
                 details?: unknown;
+            };
+        };
+        /** @description The details of a 400 validation_failed: what is wrong with each refused request field. */
+        ValidationFailedDetails: {
+            /** @description For each refused request field, keyed by its name, the reasons in English. */
+            fields?: {
+                [key: string]: string[];
+            };
+            /** @description For a field refused for a reason a client may put in its reader's language, keyed by the field's name, that reason; the field is in fields too. Sent for eligibilityEventId when a save names a policy that cannot be stored. */
+            codes?: {
+                [key: string]: "eligibility_policy_unlisted" | "eligibility_policies_unavailable" | "eligibility_policies_not_configured";
             };
         };
     };
