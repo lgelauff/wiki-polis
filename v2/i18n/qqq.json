@@ -746,7 +746,7 @@
     "adminconv-managing": "Label in the role bar before the (bold) conversation title.",
     "adminconv-view-as": "Link to view the consultation as a participant. Arrow decorative.",
     "adminconv-status-closed": "Status pill: the consultation is closed.\n{{Identical|Closed}}",
-    "adminconv-status-archived": "Status pill: the consultation is archived.\n{{Identical|Archived}}",
+    "adminconv-status-archived": "Status pill: the consultation is archived. Text copied from CentralNotice's {{msg-mw|centralnotice-archived}} (GPL-2.0-or-later; see i18n/ATTRIBUTION.md); use that message's translation.\n{{Identical|Archived}}",
     "adminconv-status-paused": "Status pill: the consultation is paused.",
     "adminconv-status-scheduled": "Status pill: a phase transition is scheduled.",
     "adminconv-status-active": "Status pill: the consultation is active.\n{{Identical|Active}}",
