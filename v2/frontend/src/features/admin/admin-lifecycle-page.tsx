@@ -1,4 +1,4 @@
-import {Fragment, useCallback, useLayoutEffect, useState} from 'react';
+import {Fragment, useCallback, useId, useLayoutEffect, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -21,6 +21,7 @@ import {
   putAdminSchedule,
 } from '../../api/queries';
 import {AdminShell} from './admin-shell';
+import {useAnnouncer} from './admin-announcer';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -243,6 +244,7 @@ function DangerSection({conversationId, csrfToken, lifecycle, fail, onArchive, a
     onError: fail,
   });
   const [confirmed, setConfirmed] = useState<string[]>([]);
+  const ids = useId();
   const closed = lifecycle.conversation.status === 'closed';
   const archived = lifecycle.conversation.status === 'archived';
   const cleanup = lifecycle.publicationReadiness.windowOpen;
@@ -256,9 +258,9 @@ function DangerSection({conversationId, csrfToken, lifecycle, fail, onArchive, a
           ? msg('adminconv-delete-published', data.deletion.validVoteCount ?? 0)
           : msg('adminconv-delete-hasvotes', data.deletion.validVoteCount ?? 0);
   return <div className="console-section"><div className="console-section-label" style={{color: 'var(--disagree)'}}>{msg('adminconv-danger-label')}</div><div className="danger-zone">
-    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-perm-closed')} · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>{msg('adminconv-view-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-publish-report')}</div>{cleanup ? <div className="danger-row-desc" dangerouslySetInnerHTML={richHtml(msg('adminconv-publish-irrev', escapeHtml(`/c/${lifecycle.conversation.slug}/report`)))} /> : <div className="danger-row-desc">{msg('adminconv-publish-unavailable')}</div>}</div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-publish'))) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">({msg('adminconv-met')})</span> : <span className="phase-check-unmet">{msg('adminconv-not-met')}</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">{msg('adminconv-publish-report')}</button></form> : <button type="button" className="btn-small btn-danger" disabled>{msg('adminconv-publish-report')}</button>}</div>}
+    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-perm-closed')} · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>{msg('adminconv-view-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : archived ? null : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-publish-report')}</div>{cleanup ? <div className="danger-row-desc" dangerouslySetInnerHTML={richHtml(msg('adminconv-publish-irrev', escapeHtml(`/c/${lifecycle.conversation.slug}/report`)))} /> : <div className="danger-row-desc">{msg('adminconv-publish-unavailable')}</div>}</div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-publish'))) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">({msg('adminconv-met')})</span> : <span className="phase-check-unmet">{msg('adminconv-not-met')}</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">{msg('adminconv-publish-report')}</button></form> : <button type="button" className="btn-small btn-danger" disabled>{msg('adminconv-publish-report')}</button>}</div>}
     <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-delete-title')}</div><div className="danger-row-desc">{msg('adminconv-delete-desc')} {deletionReason}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-delete'))) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>{msg('adminconv-delete-btn')}</button></form></div>
-    {archived && lifecycle.capabilities.archive ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-reopen-title')}</div><div className="danger-row-desc">{msg('adminconv-reopen-desc')}</div></div><button type="button" className="btn-small" disabled={archivePending} onClick={() => {if (globalThis.confirm(msg('adminconv-confirm-reopen'))) onArchive(false);}}>{msg('adminconv-reopen-btn')}</button></div> : data.deletion.state === 'blocked_by_votes' && lifecycle.capabilities.archive ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-archive-title')}</div><div className="danger-row-desc">{msg('adminconv-archive-desc')}</div></div><button type="button" className="btn-small" disabled={archivePending} onClick={() => {if (globalThis.confirm(msg('adminconv-confirm-archive'))) onArchive(true);}}>{msg('adminconv-archive-btn')}</button></div> : null}
+    {archived && lifecycle.capabilities.archive ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-reopen-title')}</div><div className="danger-row-desc" id={`${ids}-reopen`}>{msg('adminconv-reopen-desc')}</div></div><button type="button" className="btn-small" aria-describedby={`${ids}-reopen`} disabled={archivePending} onClick={() => {if (globalThis.confirm(msg('adminconv-confirm-reopen'))) onArchive(false);}}>{msg('adminconv-reopen-btn')}</button></div> : data.deletion.state === 'blocked_by_votes' && lifecycle.capabilities.archive ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-archive-title')}</div><div className="danger-row-desc" id={`${ids}-archive`}>{msg('adminconv-archive-desc')}</div></div><button type="button" className="btn-small" aria-describedby={`${ids}-archive`} disabled={archivePending} onClick={() => {if (globalThis.confirm(msg('adminconv-confirm-archive'))) onArchive(true);}}>{msg('adminconv-archive-btn')}</button></div> : null}
   </div></div>;
 }
 
@@ -293,6 +295,9 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const [advancedKeys, setAdvancedKeys] = useState(data.phase.advancedControls.filter((row) => row.active).map((row) => row.key));
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  // Archive and reopen change only a status word and a row, so a screen reader hears the
+  // new status; no toast, the page stays quiet.
+  const announcer = useAnnouncer();
   function notify(category: LegacyToastMessage['category'], text: string) {setToast({id: Date.now(), category, message: text});}
   function fail(error: Error) {notify('error', message(msg, error));}
   function setLifecycle(lifecycle: Lifecycle) {queryClient.setQueryData(lifecycleOptions.queryKey, lifecycle);}
@@ -302,14 +307,20 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
   const archiveMutation = useMutation({
     mutationFn: (archived: boolean) => putAdminArchive(conversationId, {archived}, csrfToken),
-    onSuccess: (result) => {
+    onSuccess: (result, archived) => {
       setLifecycle(result.lifecycle);
       setScheduleAt(utcInput(result.lifecycle.schedule.scheduledAt));
+      // Archiving turns phases off on the server (public results among them): the
+      // checkboxes follow, or the next "Save phases" would turn them back on.
+      setAdvancedKeys(result.lifecycle.phase.advancedControls.filter((row) => row.active).map((row) => row.key));
+      setPhaseChecks([]);
+      announcer.announce(msg(archived ? 'admin-status-archived' : 'adminconv-status-active'));
       void queryClient.invalidateQueries({queryKey: adminCatalogQuery().queryKey});
       void queryClient.invalidateQueries({queryKey: conversationLaneQuery('real').queryKey});
       void queryClient.invalidateQueries({queryKey: conversationLaneQuery('demo').queryKey});
     },
-    onError: fail,
+    // A refusal (409: closed in the meantime) re-reads what the server holds.
+    onError: (error) => {fail(error); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});},
   });
   const scheduleMutation = useMutation({mutationFn: (body: components['schemas']['AdminScheduleRequest']) => putAdminSchedule(conversationId, body, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
   const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); if (!result.visibilitySynced) notify('error', msg('flash-phases-saved-sync-failed'));}, onError: fail});
@@ -325,6 +336,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const allChecked = Boolean(transition) && transition!.preconditions.every((row) => phaseChecks.includes(row.id));
 
   return <AdminShell
+    announcer={announcer}
     title={msg('adminconv-doc-title', data.conversation.title)}
     data={data}
     gatingType={settings.conversation.gatingType}
@@ -332,7 +344,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
     toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
   >
     <div className="console">
-      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{isArchived ? msg('adminconv-status-archived') : !isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
+      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{isArchived ? msg('admin-status-archived') : !isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
       <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {accessPolicyLabel(msg, data.conversation.accessPolicy)} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
 
       <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">{msg('adminconv-phase-control')}</span></div>
