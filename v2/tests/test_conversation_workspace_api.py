@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from db import AdminRole, ConversationInvite, Participation, db
 
@@ -73,6 +74,25 @@ def test_workspace_contract_owns_legacy_tab_composition(
 
     repeated = auth_client.get('/api/v1/conversations/test-conv/workspace')
     assert repeated.get_json()['data']['spaceWarning'] is None
+
+
+def test_workspace_exposes_live_preliminary_results_during_informed_voting(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    conversation.phase_informed_voting = True
+    conversation.phase6_polis_conversation_id = 'phase6abc123'
+    db.session.commit()
+
+    with patch('app._build_phase6_results', return_value={'statements': [{'fs_id': 8}]}):
+        response = auth_client.get('/api/v1/conversations/test-conv/workspace')
+
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    tab = next(tab for tab in data['tabs'] if tab['key'] == 'p6-results')
+    assert tab['label'] == 'Preliminary results'
+    assert tab['dataHref'] == '/api/v1/conversations/test-conv/results'
+    assert data['links']['results'] == '/api/v1/conversations/test-conv/results'
 
 
 def test_workspace_returns_join_required_without_exposing_phase_data(
