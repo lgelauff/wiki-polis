@@ -599,6 +599,24 @@ automatically opens an ephemeral `node20` runtime shell and builds there. Toolfo
 tool's shared home directory into that shell, so the resulting `v2/static/spa` assets are ready
 for the Python webservice restart. No manual npm or partial-deployment recovery step is needed.
 
+### Node 20 build shell (2026-10-23)
+
+A Node security release on 2026-10-20 (relayed via a WMCS notice) fixed Node 22.23.4, 24.22.1
+and 26.12.1. Node 20 reached end of life in April 2026 and gets no fix, so the `node20` shell
+that `deploy.sh` opens stays below the patched versions. Toolforge only offers the runtimes WMCS
+ships: on 2026-10-23 its registry had `toolforge-node20-*` images and no node22 or node24 ones.
+
+The exposure is limited because the shell is **build-only**: it runs `v2/bin/build-spa.sh`
+(`npm ci`, then `npm run build`) with the tool's home mounted, and exits. It starts no server
+process, listens on no port and handles no user input. Its only outside input is the npm
+registry download, pinned by the integrity hashes in `v2/frontend/package-lock.json`. The app
+itself is served by the Python webservice. CI (`.github/workflows/test.yml`) builds and tests
+with the exact patched Node 24.22.1.
+
+Switch `deploy.sh` (and `v2/tests/test_deploy_script.py`) to a node22 or node24 runtime as soon as
+WMCS ships one for Toolforge with a patched Node. The build needs Node `^20.19.0 || >=22.12.0`
+(vite's `engines` range).
+
 ### Buildservice status
 
 Toolforge buildservice has been evaluated but is **not** the default deploy path. The
