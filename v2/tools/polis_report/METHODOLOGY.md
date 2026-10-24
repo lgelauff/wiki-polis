@@ -7,7 +7,7 @@ implements today. Planned changes are marked **Planned**.
 ## 1. Scope: two settings
 
 **External exports.** Analysis of conversations run elsewhere, from the files the platform publishes. Example:
-the Europeana Poll A / Poll B pair, from pol.is's public report export plus each conversation's xid file.
+an external partner's Poll A / Poll B pair, from pol.is's public report export plus each conversation's xid file.
 - Only the files are known, not the platform's code or configuration, so every rule is stated in terms of what
   is visible in the files. For example, "a response by the statement's author at the second it was created", not
   "the response the platform adds".
@@ -100,7 +100,7 @@ uses it has to name its source and how it was extracted.
       blocks authors from responding to their own statements, so the author cannot confirm or change that agree.
     - wiki-polis's own data-model reference (`v2/ref_polis-data-model.md`) records the same two paths.
   - **External setting:** only the observable rule applies. The report does not assume which component produced
-    the response. On the Europeana data all 39 statements are seed statements, and the rule removes exactly their
+    the response. On the external partner's data all 39 statements are seed statements, and the rule removes exactly their
     39 automatic passes; no other responses by the authors exist there.
   - **Production setting:** the report must name the deployed version of the participant-facing code it was
     checked against, because that code decides whether participant-written statements carry an automatic agree.
@@ -165,7 +165,7 @@ uses it has to name its source and how it was extracted.
 - **Same people only.** The comparison uses only participants whose xid appears in both conversations' xid
   files and who gave a counted response to an opinion statement in both. Each conversation has its own xid file.
   The production extract has no xids, so this comparison needs the xid files in both settings.
-  - Comparing the two rooms' totals mixes change with who turned up. On the Europeana data, the agree share on #4
+  - Comparing the two rooms' totals mixes change with who turned up. On the external partner's data, the agree share on #4
     among all participants fell from 26% to 15% of responses, but among the 34 matched people the number
     agreeing was 4 in both polls.
   - The report shows how the one-poll-only participants responded, but keeps them out of the comparison.
