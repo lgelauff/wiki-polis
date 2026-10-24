@@ -157,6 +157,8 @@ elif command -v toolforge >/dev/null 2>&1; then
   # immediately available to the Python webservice after it restarts.
   # The default shell pod is too small for `tsc -b` + `vite build` (Node ran out of
   # heap at ~256 MB on 2026-10-10), so ask for more memory explicitly.
+  # node20 is end-of-life and below the patched Node releases; it only builds. See
+  # v2/guide_deployment.md, "Node 20 build shell (2026-10-23)".
   echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell (2Gi)..."
   toolforge webservice --backend=kubernetes --mem 2Gi node20 shell -- \
     "$HOME/wiki-polis/v2/bin/build-spa.sh"
