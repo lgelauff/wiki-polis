@@ -6,7 +6,7 @@
  "label_share": 0.7,
  "n_differ": 5,
  "meta": [
-  "I'm here today as an employee of a cultural heritage institution.",
+  "I'm here today as a member of staff of a participating organisation.",
   "I'm here today as someone who can help influence or shape policy."
  ],
  "polls": [
@@ -27,6 +27,6 @@
    "xid": "data/xid/poll-b-xid.csv"
   }
  ],
- "timezone": "Europe/Dublin",
+ "timezone": "UTC",
  "min_participants_for_groups": 25
 }
