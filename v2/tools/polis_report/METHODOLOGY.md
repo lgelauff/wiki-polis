@@ -34,7 +34,7 @@ the deterministic test suite.
   *which response*, not *which person*. All other responses count, including those of statement authors and the
   conversation owner, who can also take part as ordinary participants.
   `exclude_participants` remains as a manual override and must come with a stated reason.
-  - On the Europeana data this rule removes exactly the 20 (Poll A) and 19 (Poll B) passes recorded at
+  - On the external partner's data this rule removes exactly the 20 (Poll A) and 19 (Poll B) passes recorded at
     statement creation. No other responses by the author exist there.
 - **Current response.** The latest row per participant and statement in `votes.csv`. Rows with equal timestamps keep
   file order, and the report counts them. `participant-votes.csv` is not used for responses: Polis builds it by id
@@ -90,7 +90,7 @@ the deterministic test suite.
 
 - **Same people only.** The comparison uses only participants whose xid appears in both conversations' xid
   files and who gave a counted response to an opinion statement in both. Each conversation has its own xid file.
-  - Comparing the two rooms' totals mixes change with who turned up. On the Europeana data, #4 looked like a
+  - Comparing the two rooms' totals mixes change with who turned up. On the external partner's data, #4 looked like a
     22-point drop in agreement, but among the 34 matched people the number agreeing was 4 in both polls.
   - The report shows how the one-poll-only participants responded, but keeps them out of the comparison.
   - Each single-poll page lists where its labels differ from those of the matched group.
