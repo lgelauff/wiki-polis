@@ -17,7 +17,11 @@ Every sentence is a fixed template filled from the data: the same input and code
 Rules (all in the config):
   since                 votes before this UTC time are dropped (whole rows, before taking the latest vote)
   timezone              IANA zone for local times in the report (default UTC)
-  exclude_participants  participant ids left out entirely, per poll (exclude_reason says why)
+  automatic votes       a vote by a statement's author on that statement, cast at the second the statement was created,
+                        is the platform's automatic vote and is not counted; all other votes count, whoever casts them
+  exclude_participants  optional manual override: participant ids left out entirely, per poll (exclude_reason says why)
+  statement_pairs       optional [[text in first poll, text in second poll], ...] for statements edited between polls
+  min_participants_for_groups  groups are shown only with at least this many participants (default 25)
   meta                  role/demographic statements, by text; left out of opinion totals, labels, groups, map
   include_unmoderated   also treat statements with moderated == 0 as opinion statements (default: only accepted, 1)
   label_share           among agree + disagree: >= share agree / >= share disagree / neither (default 0.7)
@@ -126,11 +130,18 @@ class Poll:
             self.renumbered = False
         else:
             by_text = {norm(t): k for k, t in ref_text.items()}
+            for ta, tb in cfg.get('statement_pairs', []):
+                if norm(ta) in by_text:
+                    by_text[norm(tb)] = by_text[norm(ta)]
             self.map = {k: by_text.get(t, f'{self.key}{k}') for k, t in own.items()}
             self.renumbered = any(k != v for k, v in self.map.items())
         self.own_id = {v: k for k, v in self.map.items()}
         self.text = {self.map[r['comment-id']]: ' '.join(r['comment-body'].split()) for r in rows}
         self.moderated = {self.map[r['comment-id']]: r['moderated'] for r in rows}
+        self.created = {self.map[r['comment-id']]: int(r['timestamp']) for r in rows}
+        auto_key = {(r['author-id'], r['comment-id'], int(r['timestamp'])) for r in rows}
+        self.n_rejected = sum(1 for m in self.moderated.values() if m == '-1')
+        self.n_unmoderated = sum(1 for m in self.moderated.values() if m == '0')
         meta_texts = {norm(t) for t in cfg.get('meta', [])}
         self.meta = {c for c in self.text if norm(self.text[c]) in meta_texts}
         missing = meta_texts - {norm(self.text[c]) for c in self.meta}
@@ -143,13 +154,17 @@ class Poll:
         self.unmatched = sorted((c for c in self.text if not c.isdigit()), key=skey)
 
         # votes: drop rows before `since`, then latest per (participant, statement)
-        raw = read_csv(d / 'votes.csv')
+        raw_all = read_csv(d / 'votes.csv')
+        is_auto = lambda r: (r['voter-id'], r['comment-id'], int(r['timestamp'])) in auto_key
+        raw = [r for r in raw_all if not is_auto(r)]
+        self.auto_votes = len(raw_all) - len(raw)
+        self.auto_only = sorted({r['voter-id'] for r in raw_all if is_auto(r)} - {r['voter-id'] for r in raw}, key=int)
         kept = [r for r in raw if int(r['timestamp']) >= self.since]
         self.removed_rows = len(raw) - len(kept)
         self.removed_only_early = sorted({r['voter-id'] for r in raw} - {r['voter-id'] for r in kept}, key=int)
         ts = [int(r['timestamp']) for r in kept if r['voter-id'] not in self.exclude]
         self.first_ts, self.last_ts = (min(ts), max(ts)) if ts else (None, None)
-        self.last_export_vote = max(int(r['timestamp']) for r in raw)
+        self.last_export_vote = max(int(r['timestamp']) for r in raw_all)
         self.revotes = len(kept) - len({(r['voter-id'], r['comment-id']) for r in kept})
         self.tie_rows = sum(n - 1 for n in Counter((r['voter-id'], r['comment-id'], r['timestamp']) for r in kept).values() if n > 1)
         latest = {}
@@ -170,7 +185,7 @@ class Poll:
         self.group = {r['participant']: r['group-id'] for r in mrows if r.get('group-id', '') != ''}
         self.polis_sizes = Counter(self.group.values())
         allest = {}
-        for i, r in enumerate(raw):
+        for i, r in enumerate(raw_all):
             k = (r['voter-id'], r['comment-id']); st = (int(r['timestamp']), i)
             if k not in allest or st >= allest[k][0]:
                 allest[k] = (st, int(r['vote']))
@@ -182,15 +197,28 @@ class Poll:
                 if (cell == '' and lv is not None) or (cell != '' and (lv is None or int(cell) != lv[1])):
                     self.mismatch += 1
         people = set(self.people)
-        self.excluded_in_groups = sorted({self.group[p] for p in self.exclude if p in self.group}, key=int)
-        self.grouped_not_counted = sum(1 for p in self.group if p not in people and p not in self.exclude)
-        gids = sorted({g for p, g in self.group.items() if p in people}, key=int)
+        self.excluded_in_groups = sorted({self.group[p] for p in set(self.exclude) | set(self.auto_only) if p in self.group}, key=int)
+        self.grouped_not_counted = sum(1 for p in self.group if p not in people and p not in self.exclude and p not in self.auto_only)
+        self.group_floor = cfg.get('min_participants_for_groups', 25)
+        self.groups_computed = len(self.people) >= self.group_floor
+        gids = sorted({g for p, g in self.group.items() if p in people}, key=int) if self.groups_computed else []
         self.members = {g: [p for p in self.people if self.group.get(p) == g] for g in gids}
         self.groups = [g for g in gids if len(self.members[g]) >= MIN_GROUP]           # shown groups
         self.small = [g for g in gids if len(self.members[g]) < MIN_GROUP]             # merged into "Other"
         self.gname = {g: f'Group {i + 1}' for i, g in enumerate(gids)}
         self.other = [p for g in self.small for p in self.members[g]]
         self.ungrouped = [p for p in self.people if self.group.get(p) not in gids]
+
+        # statements created after the first counted vote: who could not have seen them
+        self.late = []
+        if self.first_ts is not None:
+            last_by = {}
+            for r in kept:
+                if r['voter-id'] in people:
+                    last_by[r['voter-id']] = max(last_by.get(r['voter-id'], 0), int(r['timestamp']))
+            for c in self.opinion:
+                if self.created[c] > self.first_ts:
+                    self.late.append((c, self.created[c], sum(1 for t in last_by.values() if t < self.created[c])))
 
         # xids
         self.xid = {}
@@ -218,6 +246,27 @@ class Poll:
             tz, tzname = dt.timezone.utc, 'UTC'
         t = dt.datetime.fromtimestamp(ts, dt.timezone.utc)
         return f"{t.strftime('%Y-%m-%d %H:%M')} UTC ({t.astimezone(tz).strftime('%H:%M')} {tzname})"
+
+
+def wilson(k, n, z=1.96):
+    if n == 0:
+        return 0.0, 1.0
+    p = k / n
+    c = (p + z * z / (2 * n)) / (1 + z * z / n)
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return max(0.0, c - h), min(1.0, c + h)
+
+
+def near_line(t, share):
+    """Rule-based wording when the 95% interval of the agree (or disagree) share among agree + disagree crosses the threshold."""
+    a, d, _ = t
+    if a + d == 0:
+        return ''
+    side, k = ('agree', a) if a >= d else ('disagree', d)
+    lo, hi = wilson(k, a + d)
+    if lo < share <= hi:
+        return f'close to the {share:.0%} line: 95% range {lo:.0%}–{hi:.0%} {side} of {a + d} agree + disagree'
+    return ''
 
 
 def label(t, share):
@@ -459,6 +508,9 @@ def poll_report(P, cfg, out, repro, other_labels=None):
                     f'<div class="div-bar" role="img" aria-label="{esc(tip)}"><div class="half left"><div class="seg dis" style="width:{pct(d, n):.1f}%"></div></div>'
                     f'<div class="half right"><div class="seg agr" style="width:{pct(a, n):.1f}%"></div></div></div>'
                     f'<div class="nums">{a} · {d} · {s}</div></div>')
+            nl = near_line(overall[c], share)
+            if nl:
+                ch1 += f'<p class="mfoot" style="margin:-4px 0 6px">#{c}: {esc(nl)}</p>'
         ch1 += '</div>'
 
     # chart 2: groups (only groups with >= MIN_GROUP members)
@@ -535,26 +587,36 @@ def poll_report(P, cfg, out, repro, other_labels=None):
              f'<div class="tile"><b>{len(by_label["agree"])} · {len(by_label["disagree"])} · {len(by_label["neither"])}</b><span>statements {label_text("agree", share)} · {label_text("disagree", share)} · neither</span></div></div>')
     summary = (f'<div class="card"><b>Summary.</b> Of {len(P.opinion)} opinion statements, {len(by_label["agree"])} have {label_text("agree", share)} ({ids(by_label["agree"])}), '
                f'{len(by_label["disagree"])} have {label_text("disagree", share)} ({ids(by_label["disagree"])}) and {len(by_label["neither"])} neither ({ids(by_label["neither"])}), '
-               f'counting agree + disagree only. Polis groups shown: {sizes}.{reconcile} {SELF_SELECTED}</div>')
+               f'counting agree + disagree only. Polis groups shown: {sizes or "none"}.{reconcile} {SELF_SELECTED}</div>')
     differ_note = (f'<p class="note">Measure (this report\'s own, not Polis\'s representativeness or group-informed consensus): for each statement, the range across '
                    f'groups of (agree − disagree) / all votes in the group, over groups with at least {MIN_GROUP} members. The {word(len(differ))} statements with the '
                    f'largest range are shown. Descriptive only: the groups were formed from these same votes, so no test is applied. {ORDER_NOTE}</p>'
                    if measure_ok else
-                   f'<p class="note">Not computed: fewer than two Polis groups have at least {MIN_GROUP} members ({sizes}).</p>')
-    excl = (f'Participants listed in the config\'s exclude_participants are left out ({esc(P.exclude_reason)}): {len(P.exclude)}. ')
+                   (f'<p class="note">Not computed: fewer than two Polis groups have at least {MIN_GROUP} members ({sizes}).</p>' if P.groups_computed else
+                    f'<p class="note">Not computed: {len(P.people)} participants, fewer than the {P.group_floor} needed before opinion groups are shown.</p>'))
+    excl = (f'{plural(P.auto_votes, "automatic vote")} not counted (a vote by a statement\'s author on that statement at the second it was created); '
+            f'{plural(len(P.auto_only), "participant")} cast only automatic votes. All other votes count, including those of statement authors.'
+            + (f' Manually excluded in the config ({esc(P.exclude_reason)}): {plural(len(P.exclude), "participant")}.' if P.exclude else ''))
+    late = ('; '.join(f'#{c} created {esc(P.local(t))}, after {n} participant(s) had cast their last vote' for c, t, n in P.late) or 'none')
+    stmt_line = (f'<li><b>Statements:</b> {len(P.opinion)} opinion and {plural(len(P.roles), "role question")} counted; '
+                 f'{P.n_rejected} rejected and {P.n_unmoderated} unmoderated statement(s) '
+                 f'{"included" if cfg.get("include_unmoderated") else "left out"}{" (unmoderated ones included)" if cfg.get("include_unmoderated") else ""}. '
+                 f'Statements created after voting in the window had started: {late}. Each statement is reported with its own number of votes.</li>')
     caveats = [
         f'<li><b>Window:</b> votes from {esc(P.local(P.since))}. {P.removed_rows} earlier vote rows are left out; '
         f'{plural(len([p for p in P.removed_only_early if p not in P.exclude]), "participant")} voted only before the window. '
         f'Opinion votes in the window: first {esc(P.local(P.first_ts))}, last {esc(P.local(P.last_ts))}. Exported {esc(P.pulled)}.</li>',
-        f'<li><b>Exclusions:</b> {excl}</li>',
+        f'<li><b>Automatic votes:</b> {excl}</li>',
+        stmt_line,
         f'<li><b>Current vote</b> = each participant\'s latest row per statement in votes.csv ({P.revotes} earlier re-vote rows superseded; '
         f'{plural(P.tie_rows, "row shares", "rows share")} a timestamp with another row for the same participant and statement and {"is" if P.tie_rows == 1 else "are"} ordered by file position). '
         f'{P.mismatch} cells of participant-votes.csv differ from this; that file keeps the last row per participant and statement in id order, not time order.</li>',
-        f'<li><b>Polis groups</b> (group-id) are a snapshot at export time, computed by Polis over all votes, including votes before the window and the excluded '
-        f'participants{" (in Polis " + ", ".join(P.gname.get(g, "group " + g) for g in P.excluded_in_groups) + ")" if P.excluded_in_groups else ""}. '
+        f'<li><b>Polis groups</b> (group-id) are a snapshot at export time, computed by Polis over all votes, including votes before the window and automatic votes; participants with only automatic votes '
+        f'are{"" if P.excluded_in_groups else " not"} in a Polis group{" (in Polis " + ", ".join(P.gname.get(g, "group " + g) for g in P.excluded_in_groups) + ")" if P.excluded_in_groups else ""}. '
         f'{plural(P.grouped_not_counted, "participant")} with a group-id {"has" if P.grouped_not_counted == 1 else "have"} no opinion vote in this window. Polis group sizes as exported: '
         f'{", ".join(f"{P.gname.get(g, chr(35) + g)} {n}" for g, n in sorted(P.polis_sizes.items(), key=lambda t: int(t[0])))}. '
-        f'Groups with fewer than {MIN_GROUP} participants here are merged into "Other"; {plural(len(P.ungrouped), "participant")} without a group count in "All" only.</li>',
+        f'Groups are shown only with at least {P.group_floor} participants (here {len(P.people)}: {"shown" if P.groups_computed else "not shown"}); '
+        f'groups with fewer than {MIN_GROUP} participants are merged into "Other"; {plural(len(P.ungrouped), "participant")} without a group count in "All" only.</li>',
         '<li><b>Small cells:</b> counts of 1–2 are shown as "&lt;3" for "Other" and wherever role answers are crossed with anything; role answers are not shown for "Other".</li>',
         f'<li><b>Participation:</b> median {median:g} of {len(P.opinion)} opinion statements per participant. Polis chooses the order in which each participant sees statements.</li>',
         f'<li><b>Labels</b> use {share:.0%} of agree + disagree; passes are not in the denominator. They are not Polis\'s group-informed consensus. Role answers are self-reported.</li>',
@@ -653,6 +715,22 @@ def compare_reports(PA, PB, cfg, out, repro):
     for i, c in enumerate(sorted(common, key=lambda c: (pv[c], skey(c)))):
         run = max(run, min(1.0, (m - i) * pv[c])); holm[c] = run
     no_raw = [c for c in common if minp[c] > 0.05]
+
+    def reading(c):
+        """Significance where a test can say something, otherwise a rule-based description; never causal."""
+        up, down = mv[c][0], mv[c][1]
+        n = up + down
+        side = 'agree' if up > down else 'disagree'
+        if n == 0:
+            return 'No observed movement.'
+        if minp[c] > 0.05:
+            return f'Too few people changed their vote to tell ({up} toward agree, {down} toward disagree).'
+        if holm[c] < 0.05:
+            return f'More moved toward {side} than the other way; unlikely to be chance (p = {pv[c]:.3f}; {holm[c]:.3f} after correcting for {m} statements).'
+        if pv[c] < 0.05:
+            return f'More moved toward {side}; p = {pv[c]:.3f} on its own, not below 0.05 after correcting for {m} statements ({holm[c]:.2f}).'
+        return (f'No clear direction: if movers were equally likely to go either way, a split at least as uneven as {up} toward agree and '
+                f'{down} toward disagree would happen in about {round(100 * pv[c])}% of cases (p = {pv[c]:.2f}).')
     no_holm = [c for c in common if minp[c] > 0.05 / m]
     pooled = Counter()
     for c in common:
@@ -703,8 +781,8 @@ def compare_reports(PA, PB, cfg, out, repro):
               [[c, PA.text[c], a, b, tabs[c][(a, b)]] for c in common for a in cats for b in cats])
     write_csv(out / 'transitions_pooled.csv', ['A_vote'] + [f'B_{b}' for b in cats], [[a] + [pooled[(a, b)] for b in cats] for a in cats])
     write_csv(out / 'movers.csv', ['statement', 'text', 'toward_agree', 'toward_disagree', 'stayed', 'no_vote_in_one_poll', 'agree_to_disagree',
-                                   'disagree_to_agree', 'movers', 'smallest_reachable_p', 'sign_test_p', 'holm_p'],
-              [[c, PA.text[c], *mv[c], *flips[c], mv[c][0] + mv[c][1], f'{minp[c]:.4f}', f'{pv[c]:.3f}', f'{holm[c]:.3f}'] for c in common])
+                                   'disagree_to_agree', 'movers', 'smallest_reachable_p', 'sign_test_p', 'holm_p', 'reading'],
+              [[c, PA.text[c], *mv[c], *flips[c], mv[c][0] + mv[c][1], f'{minp[c]:.4f}', f'{pv[c]:.3f}', f'{holm[c]:.3f}', reading(c)] for c in common])
     comp = {}
     for c in common:
         def agr(P, people):
@@ -730,7 +808,10 @@ def compare_reports(PA, PB, cfg, out, repro):
                  f'(agree→pass counts the same as agree→disagree), Holm-corrected for {m} statements. Uncorrected p &lt; 0.05: {ids(raw_sig)}; after correction: {ids(sig)}. '
                  f'{power_line} {plain_p}</li>')
     scope_note = (f'<li><b>Scope:</b> paired results describe these {N} returners only. Labels among all voters differ from the labels among the {N} on: '
-                  f'{esc(PA.name)} {ids([c for c in common if allA[c] != labA[c]])}; {esc(PB.name)} {ids([c for c in common if allB[c] != labB[c]])}.</li>')
+                  f'{esc(PA.name)} {ids([c for c in common if allA[c] != labA[c]])}; {esc(PB.name)} {ids([c for c in common if allB[c] != labB[c]])}. '
+                  f'Statements in only one poll (not compared): {esc(PA.name)} {ids([c for c in PA.opinion if c not in common])}; '
+                  f'{esc(PB.name)} {ids([c for c in PB.opinion if c not in common])}. Statements are the same when their text matches '
+                  f'(ignoring spacing and apostrophe style) or when the config pairs them.</li>')
 
     # --- compared
     def pair(t, who):
@@ -739,6 +820,7 @@ def compare_reports(PA, PB, cfg, out, repro):
     rows = ''
     for c in common:
         lb = f'<span class="lab">{label_text(labA[c], share)} → <b>{label_text(labB[c], share)}</b></span>' if labA[c] != labB[c] else ''
+        lb += f'<span class="lab">{esc(reading(c))}</span>'
         rows += (f'<div class="crow"><div class="stmt"><span class="num">#{c}</span> {esc(PA.text[c])}{lb}</div>'
                  f'<div class="bars">{pair(A[c], "A")}{pair(B[c], "B")}</div>'
                  f'<div class="delta">{B[c][0] - A[c][0]:+d}<small> agree</small><span class="mvd">{mv[c][1]}↘ {mv[c][0]}↗</span></div></div>')
@@ -801,7 +883,7 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
         for c in common)
     grid = ''.join(f'<div class="mult"><p class="mtitle"><span class="num">#{c}</span> {esc(PA.text[c])}</p>{matrix(tabs[c], f"Transitions for #{c}")}'
                    f'<p class="mfoot">{mv[c][0]} toward agree · {mv[c][1]} toward disagree · agree→disagree {flips[c][0]} · disagree→agree {flips[c][1]} · '
-                   f'{mv[c][0] + mv[c][1]} movers, smallest reachable p {minp[c]:.3f} · sign test p = {pv[c]:.2f}</p></div>' for c in common)
+                   f'{mv[c][0] + mv[c][1]} movers, smallest reachable p {minp[c]:.3f}</p><p class="mfoot"><b>{esc(reading(c))}</b></p></div>' for c in common)
     pu, pdn, ps, pg = movers(pooled)
     two_way = [c for c in common if mv[c][0] and mv[c][1]]
     one_way = [c for c in common if bool(mv[c][0]) != bool(mv[c][1])]

@@ -18,6 +18,7 @@ B_XID = {'1': 'xid-two', '2': 'xid-three', '3': 'xid-four', '4': 'xid-five', '5'
 A_GROUP = {'0': '1', '1': '0', '2': '0', '6': '0', '3': '1', '4': '1', '5': '1'}
 B_GROUP = {'0': '0', '1': '0', '2': '0', '3': '1', '4': '1', '5': '0'}
 SINCE = 1000
+CREATED = 1500   # statements are created inside the window, so only the automatic-vote rule removes the author's passes
 
 
 def write_poll(d, text_by_id, votes, groups, xids, early=()):
@@ -25,10 +26,10 @@ def write_poll(d, text_by_id, votes, groups, xids, early=()):
     with open(d / 'comments.csv', 'w', newline='') as f:
         w = csv.writer(f); w.writerow(['timestamp', 'datetime', 'comment-id', 'author-id', 'agrees', 'disagrees', 'moderated', 'comment-body'])
         for cid, t in sorted(text_by_id.items()):
-            w.writerow([1, '', cid, 0, 0, 0, 1, t])
+            w.writerow([CREATED, '', cid, 0, 0, 0, 1, t])
     rows = []
     for cid in sorted(text_by_id):
-        rows.append([500, '', cid, '0', 0])                         # moderator's automatic pass, before the window
+        rows.append([CREATED, '', cid, '0', 0])                     # the author's automatic pass, inside the window
     rows += [list(r) for r in early]
     t = 2000
     for p, vs in votes.items():
@@ -53,14 +54,16 @@ def build(tmp_path):
     write_poll(tmp_path / 'a', A_TEXT, a_votes, A_GROUP, A_XID, early=[(900, '', '0', '7', 1)])   # participant 7 voted only before the window
     # Poll A: participant 2 re-votes on statement 3 (pass, then agree... then pass again: latest is pass)
     with open(tmp_path / 'a' / 'votes.csv', 'a', newline='') as f:
-        csv.writer(f).writerows([[3000, '', '3', '2', 1], [3001, '', '3', '2', 0]])
+        csv.writer(f).writerows([[3000, '', '3', '2', 1], [3001, '', '3', '2', 0],
+                                 [3100, '', '1', '0', 1]])   # the author also votes as a participant: this vote counts
     b_text = {bid: t for t, bid in B_IDS.items()}
     # B votes are given per A statement; write them under B's own ids
     b_votes = {p: [vs[int(next(a for a, t in A_TEXT.items() if t == b_text[str(i)]))] for i in range(5)] for p, vs in B_VOTES.items()}
     write_poll(tmp_path / 'b', b_text, b_votes, B_GROUP, B_XID)
     cfg = {'title': 'Test', 'banner': 'TEST', 'out': 'out', 'since': '1970-01-01T00:16:40Z', 'meta': ['I am staff.'],
-           'polls': [{'key': 'a', 'name': 'Poll A', 'dir': 'a', 'report': 'ra', 'url': 'u/a', 'xid': 'a/xid.csv', 'exclude_participants': ['0']},
-                     {'key': 'b', 'name': 'Poll B', 'dir': 'b', 'report': 'rb', 'url': 'u/b', 'xid': 'b/xid.csv', 'exclude_participants': ['0']}]}
+           'min_participants_for_groups': 3,
+           'polls': [{'key': 'a', 'name': 'Poll A', 'dir': 'a', 'report': 'ra', 'url': 'u/a', 'xid': 'a/xid.csv'},
+                     {'key': 'b', 'name': 'Poll B', 'dir': 'b', 'report': 'rb', 'url': 'u/b', 'xid': 'b/xid.csv'}]}
     (tmp_path / 'config.json').write_text(json.dumps(cfg))
     return polis_report.run(tmp_path / 'config.json', pdf=False)
 
@@ -77,6 +80,10 @@ def test_counts_window_exclusion_and_renumbering(tmp_path):
     # participant 2's latest vote on statement 3 is pass
     assert (a['3']['All_agree'], a['3']['All_disagree'], a['3']['All_pass']) == ('4', '1', '1')
     assert a['4']['label'] == 'role' and a['2']['label'] == '≥70% disagree'
+    # automatic votes are not counted, but the author's own later vote is: statement 1 has 5 agrees from 1..6 plus the author's
+    assert (a['1']['All_agree'], a['1']['All_disagree'], a['1']['All_pass']) == ('6', '1', '0')
+    page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
+    assert '5 automatic votes not counted' in page
     # Poll B is reported with Poll A's numbers: 'S zero' is B's own id 1 but appears as #0
     b = {r['statement']: r for r in rows(out / 'poll-b-statements.csv')}
     assert b['0']['text'] == 'S zero'
@@ -140,3 +147,22 @@ def test_power_and_baseline_lines(tmp_path):
     assert m['0']['movers'] == '1' and m['0']['smallest_reachable_p'] == '1.0000'
     assert 'could not reach p &lt; 0.05 even without correction' in page
     assert 'answered role question #4 differently' in page
+
+
+def test_groups_need_the_minimum_number_of_participants(tmp_path):
+    build(tmp_path)
+    cfg = json.loads((tmp_path / 'config.json').read_text())
+    cfg['min_participants_for_groups'] = 25
+    cfg['out'] = 'out3'
+    (tmp_path / 'config.json').write_text(json.dumps(cfg))
+    out = polis_report.run(tmp_path / 'config.json', pdf=False)
+    page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
+    assert 'fewer than the 25 needed before opinion groups are shown' in page
+    assert 'Other_agree' not in open(out / 'poll-a-statements.csv').readline()
+
+
+def test_shift_readings_are_rule_based(tmp_path):
+    out = build(tmp_path)
+    m = {r['statement']: r for r in rows(out / 'movers.csv')}
+    assert m['0']['reading'].startswith('Too few people changed their vote to tell')
+    assert m['2']['reading'] == 'No observed movement.' or m['2']['reading'].startswith('Too few')
