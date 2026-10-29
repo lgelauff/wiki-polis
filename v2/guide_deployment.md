@@ -861,7 +861,7 @@ export DATABASE_URL
 | `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |
 | `STAGING_DEV_TOKEN` | staging only | HMAC secret for `/dev/login/<username>?token=...` on `wiki-polis-dev`; never set on production |
 | `FLASK_DEBUG` | dev only | Enables debug mode; never set in production |
-| `REMINDERS_BOT_USERNAME` | no | Login of the Proto bot account for participant reminders (#577), as a bot password name (`ProtoWikiBot@label`). Set as a Toolforge secret. Unset → every send is a dry run |
+| `REMINDERS_BOT_USERNAME` | no | Login of the Proto bot account for participant reminders (#577), as a bot password name (`Protowikibot@label`). Set as a Toolforge secret. Unset → every send is a dry run |
 | `REMINDERS_BOT_PASSWORD` | no | The bot password for `REMINDERS_BOT_USERNAME` (Special:BotPasswords), with only the grants it needs: *Edit existing pages*, *Create, edit, and move pages* (a talk page may not exist yet) and *Send email to other users*. The bot account itself needs a confirmed email address, or the wiki refuses every wiki-mail. Set as a Toolforge secret |
 | `REMINDERS_LIVE_WIKIS` | no | Comma-separated wikis where the bot may really send (`nlwiki`, `metawiki`). Unset → nothing is sent anywhere; tests are recorded as dry runs. Wiki-mail falls back to Meta only when `metawiki` is listed |
 | `REMINDERS_TEST_RECIPIENTS` | no | Comma-separated Wikimedia usernames that may receive test messages (`flask send-test-reminder`, the Reminder test section on `/site-admin`). Nobody else can receive anything while the bot is tested |

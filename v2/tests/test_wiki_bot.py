@@ -16,24 +16,24 @@ from services.wiki_bot import (
     ('{{ NoBots }}', False),
     ('{{bots}}', True),
     ('{{bots|deny=all}}', False),
-    ('{{bots|deny=SomeOtherBot, ProtoWikiBot}}', False),
+    ('{{bots|deny=SomeOtherBot, Protowikibot}}', False),
     ('{{bots|deny=SomeOtherBot}}', True),
     ('{{bots|allow=none}}', False),
     ('{{bots|allow=all}}', True),
-    ('{{bots|allow=ProtoWikiBot}}', True),
+    ('{{bots|allow=Protowikibot}}', True),
     ('{{bots|allow=SomeOtherBot}}', False),
     ('{{bots|optout=all}}', False),
     ('{{bots|optout=nosource}}', True),
-    ('{{bots}} and later {{bots|deny=ProtoWikiBot}}', False),
+    ('{{bots}} and later {{bots|deny=Protowikibot}}', False),
     ('{{bots|deny=Proto_Wiki_Bot}}', True),
     ('{{bots|deny=protoWikiBot}}', False),
 ])
 def test_bot_exclusion_templates(text, allowed):
-    assert bot_allowed(text, 'ProtoWikiBot') is allowed
+    assert bot_allowed(text, 'Protowikibot') is allowed
 
 
 def test_bot_password_suffix_is_ignored_when_matching_names():
-    assert bot_allowed('{{bots|deny=ProtoWikiBot}}', 'ProtoWikiBot@reminders') is False
+    assert bot_allowed('{{bots|deny=Protowikibot}}', 'Protowikibot@reminders') is False
 
 
 class FakeResponse:
@@ -102,7 +102,7 @@ def wiki_answers(*, emailuser=None, edit=None, login='Success', emailable=True, 
     return answer
 
 
-def make_client(answer, wiki='nlwiki', credentials=BotCredentials('ProtoWikiBot@r', 'pw'),
+def make_client(answer, wiki='nlwiki', credentials=BotCredentials('Protowikibot@r', 'pw'),
                 sleeps=None):
     session = FakeSession(answer)
     client = WikiBotClient(wiki, credentials=credentials, user_agent='test-agent',
@@ -116,7 +116,7 @@ def test_send_email_logs_in_then_posts_with_csrf_token_and_maxlag():
     client.send_email('Tester', subject='S', text='T')
     posts = [call for call in session.calls if call[0] == 'POST']
     assert [call[2]['action'] for call in posts] == ['login', 'emailuser']
-    assert posts[0][2]['lgname'] == 'ProtoWikiBot@r'
+    assert posts[0][2]['lgname'] == 'Protowikibot@r'
     email = posts[1][2]
     assert email['token'] == 'tok+\\' and email['maxlag'] == 5 and email['assert'] == 'user'
     assert session.calls[0][1] == 'https://nl.wikipedia.org/w/api.php'

@@ -49,7 +49,7 @@ class FakeBot:
 
 def settings(*, live=('nlwiki', 'metawiki'), recipients=('Tester',), credentials=True):
     return ReminderSettings(
-        credentials=BotCredentials('ProtoWikiBot@r', 'pw') if credentials else None,
+        credentials=BotCredentials('Protowikibot@r', 'pw') if credentials else None,
         live_wikis=frozenset(live), test_recipients=tuple(recipients), user_agent='x',
     )
 
@@ -160,7 +160,7 @@ def test_a_wiki_error_is_reported_with_its_reason_and_code():
 @pytest.fixture
 def configured(app):
     app.config.update(
-        REMINDERS_BOT_USERNAME='ProtoWikiBot@r', REMINDERS_BOT_PASSWORD='pw',
+        REMINDERS_BOT_USERNAME='Protowikibot@r', REMINDERS_BOT_PASSWORD='pw',
         REMINDERS_LIVE_WIKIS=['nlwiki'], REMINDERS_TEST_RECIPIENTS=['Tester'],
     )
     log = []
