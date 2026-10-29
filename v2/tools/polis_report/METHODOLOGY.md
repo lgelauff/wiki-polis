@@ -77,7 +77,7 @@ Three kinds of input:
 | Label sensitivity (responses that would change a label) | yes | | yes | not yet (an interval is shown today) |
 | Per-statement privacy minimum | yes | | yes | not yet |
 | Statistics in fold-outs | yes | | yes | not yet |
-| `*` for shifts significant at 95% | needs xid file | | needs xid file | not yet |
+| `*` on significant results (§11) | yes (shifts need the xid file) | | yes (shifts need the xid file) | not yet |
 | Linking participants across conversations | no | yes | no | yes (with xid files) |
 | wiki-polis phases, arguments, featured statements | no | no | no | no |
 
@@ -151,7 +151,10 @@ uses it has to name its source and how it was extracted.
 - **Close to the line.** A fold-out gives how many responses would have to change for the label to change
   (e.g. "6 responses changing from disagree to agree would change this label"). That describes these responses;
   it is not a confidence interval, which would assume a sample from a wider population.
-- **No significance marker.** Labels are descriptive, so they never carry the `*` used for shifts (§8).
+- **No significance marker.** Labels are descriptive, so they never carry the `*` (§11).
+- **Pass rate.** Statements that were passed more often than others get a `*`: one test across all statements
+  (Cochran's Q, since the same people respond to every statement), then a per-statement comparison with Holm
+  correction. Details are in the fold-out.
 - **No statistical minimum.** Labels describe counts, so they need none; the only minimum is the privacy
   minimum per statement (§9).
 
@@ -167,6 +170,9 @@ uses it has to name its source and how it was extracted.
 - **Descriptive only.** Testing differences between groups formed from these same responses would be circular, so
   no test is applied. The "largest difference between groups" chart uses this report's own measure: the range
   across groups of (agree − disagree) / all responses, over groups of 5 or more. It is named as such on the page.
+- **Planned:** an indication of how confident a grouping is (for example, how stable group assignments stay
+  when the analysis is repeated on resampled participants). The method needs research first; until then groups
+  are shown without a confidence indicator.
 - **Planned:** show k-means and Leiden community detection side by side, so readers see how much the grouping
   depends on the method. Replace the fixed minimum with a robustness measure: re-cluster on resampled
   participants, and show groups only when assignments stay stable above a stated threshold. Leiden needs an
@@ -198,14 +204,15 @@ uses it has to name its source and how it was extracted.
     - otherwise: "No clear direction", with the probability of a split at least as uneven if movers were
       equally likely to go either way.
   - The report also counts how many statements could not reach significance with the movers they had.
-  - **Marker:** a shift that is significant at 95% (two-sided, after Holm correction) gets a `*` in the main text,
-    with a footnote saying so. Everything else about the test (p-values, the reading, how many movers) is in
+  - **Marker:** a result that is significant at 95% (two-sided, after Holm correction within its family, §11)
+    gets a `*` in the main text, with a footnote saying so. Three families of per-statement tests carry it: the
+    direction of shift (sign test), direct agree↔disagree switches (McNemar on agree and disagree only), and the
+    change in pass rate (McNemar on pass versus not pass). Everything else about the test (p-values, the reading, how many movers) is in
     the fold-out.
     The marker belongs to the test only: descriptive labels (≥70% agree, ≥70% disagree, neither) and other
     counts never carry it.
-- **Noise baselines.** The report counts how many matched participants answered a factual role question
-  differently in the two polls, and how many statements' net movement went toward the middle. Changes in
-  responses to opinion statements can be read against these. Rows are in statement order, not ranked by change,
+- **Noise baseline.** The report counts how many statements' net movement went toward the middle. Changes in
+  responses to opinion statements can be read against it. Rows are in statement order, not ranked by change,
   so the top rows don't read as findings.
 - **Planned:** a paired effect size per statement with a confidence interval (Newcombe), so the size and
   uncertainty of a shift are visible together. A pre-specified person-level test across statements, if a pooled
@@ -234,3 +241,30 @@ uses it has to name its source and how it was extracted.
 - Matching assumes one xid per person.
 - In external exports, platform behaviour (such as automatic responses) is inferred from the files, not checked
   in code.
+
+## 11. Where a significance marker can appear
+
+A `*` means: significant at 95%, two-sided, after Holm correction within its family (the per-statement tests
+of one kind in one report). A place gets a marker only if a test there makes a claim our principles allow:
+- it is not a claim about a wider population;
+- it is not circular (testing groups formed from the same responses);
+- it does not break the privacy rules.
+
+| Place | Test | Marker |
+|---|---|---|
+| Statement labels (≥70% agree / disagree / neither) | — | never: descriptive |
+| Agree versus disagree on one statement | — | never: no defensible noise model for one-off responses |
+| Differences between Polis groups on a statement | — | never: the groups were formed from these responses |
+| Opinion by role answer | — | never |
+| Polis group membership by role answer | Fisher / χ² | later |
+| Statements passed more often than others | Cochran's Q, then per statement | **yes** |
+| Map, participation, timing | — | never: no claim to test |
+| Direction of shift per statement | sign test | **yes** |
+| Direct agree↔disagree switches per statement | McNemar | **yes** |
+| Change in pass rate per statement | McNemar | **yes** |
+| Label changes between polls | — | never: a threshold crossing, not a test |
+| Overall drift; drift toward pass; movement toward the middle | per-person or per-statement test, decided in advance | later |
+| Shifts by role answer | — | not reported |
+| Shifts by Polis group in the first poll | — | later: designed together with confidence for groupings, since groups formed from the first poll's responses regress toward the middle |
+| Participants who responded in one poll only, versus returners | — | never |
+| All participants of one poll versus all of the other | — | never: only participants with the same xid are compared |
