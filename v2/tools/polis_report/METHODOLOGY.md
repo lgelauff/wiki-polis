@@ -39,9 +39,9 @@ everything that applies to external exports:
 5. **Privacy at a small event.** Counts only; no xid or participant id is ever written. Small cells are
    suppressed where they could identify someone (§9).
 6. **Descriptive first, statistics in fold-outs.** The main text gives counts and plain readings. Test details
-   (p-values, corrections, how close a label is to the line) sit in fold-out sections. The one statistical claim
-   is the test on shifts (§8), read against a model of response noise among these same participants; everything
-   else describes these participants and makes no claim about a wider population.
+   (p-values, corrections, how close a label is to the line) sit in fold-out sections. The statistical claims are the tests listed in §11, each read against a model of
+   response noise among these same participants; everything else describes these participants and makes no
+   claim about a wider population.
 
 **Planned (language review):** a semantic check of the report templates for overclaiming, run when templates
 change and before a report goes out. It covers implied causation, more certainty than the test supports,
@@ -226,7 +226,7 @@ uses it has to name its source and how it was extracted.
 - Counts of 1–2 are shown as "<3" for the merged "Other" group, and wherever role answers are crossed with
   anything.
 - Role answers are never crossed with a group under 5.
-- Role answers over time are summarised as the number of differing answers, not tabulated per person.
+- Role answers are not compared between polls.
 - Per-person opinion transitions are shown exactly. Seeing single agree↔disagree switches is the point of that
   table, and it contains no role answers.
 - xids are used only to match people; they never appear in an output.
