@@ -74,7 +74,9 @@ def build_results_report(
     participation, reveal_state: str | None,
     self_link: str, conversation_link: str, about_link: str,
     identity_reveal_link: str | None,
+    preview: bool = False,
 ) -> dict:
+    """Build the results report. ``preview`` marks a site-admin preview, never published."""
     results = phase6_results or {}
     detailed = bool(results.get('pg_available'))
     statements = []
@@ -100,7 +102,10 @@ def build_results_report(
     return {
         'slug': conversation.slug,
         'title': conversation.title,
-        'publication': 'final' if conversation.closed_at else 'preliminary',
+        'publication': (
+            'preview' if preview
+            else 'final' if conversation.closed_at else 'preliminary'
+        ),
         'resultsAvailable': phase6_results is not None,
         'openedAt': _utc_iso(conversation.created_at),
         'closedAt': _utc_iso(conversation.closed_at),

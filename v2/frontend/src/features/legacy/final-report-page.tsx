@@ -221,7 +221,11 @@ function ResultsBody({report}: {report: Report}) {
 export function FinalReportLegacyPage({report}: {report: Report}) {
   const dates = useDateFormat();
   const msg: Message = useMessage();
-  const contextOutput = report.publication === 'final' ? 'report' : 'preliminary-results';
+  // A site admin's preview (never published) is marked on the page itself, so a
+  // screenshot of it cannot pass for the published report.
+  const preview = report.publication === 'preview';
+  const contextOutput = (preview ? report.closedAt : report.publication === 'final')
+    ? 'report' : 'preliminary-results';
   return <LegacyShell headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
@@ -229,13 +233,16 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
     <span>{msg('report-crumb')}</span>
   </span>}>
     <div className="container" style={{maxWidth: 800}}>
+      {preview && <p className="report-preview-banner" role="note" dangerouslySetInnerHTML={richHtml(msg('report-preview-banner'))} />}
       <p style={{marginBottom: '1.25rem'}}><InternalLink href={report.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><span className="dir-glyph" aria-hidden="true">←</span> {report.title}</InternalLink></p>
       <div className="report-header">
         <div>
           <h1 className="report-title">{report.title}</h1>
-          <p className="report-subtitle">{`${msg('report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${dates.date(report.closedAt)}` : ''}`}</p>
+          <p className="report-subtitle">{`${msg(preview ? 'report-subtitle-preview' : 'report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${dates.date(report.closedAt)}` : ''}`}</p>
         </div>
-        <span className="report-badge">{msg('report-badge-final')}</span>
+        {preview
+          ? <span className="report-badge report-badge--preview">{msg('report-badge-preview')}</span>
+          : <span className="report-badge">{msg('report-badge-final')}</span>}
       </div>
       <div className="report-section output-context">
         <h2 className="report-section-heading">{msg('output-howto-heading')}</h2>
@@ -243,7 +250,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
           {/* The server takes this context from the output definition: "report" once the
               consultation is closed, "preliminary-results" before. */}
           <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>
-          <div><dt>{msg('output-status-label')}</dt><dd>{msg('report-status-final')}</dd></div>
+          <div><dt>{msg('output-status-label')}</dt><dd>{msg(preview ? 'report-status-preview' : 'report-status-final')}</dd></div>
           <div><dt>{msg('output-method-label')}</dt><dd>{outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>

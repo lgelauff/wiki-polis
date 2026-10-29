@@ -717,6 +717,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/report-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Preview the results report in any phase, for site admins only
+         * @description Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
+         */
+        get: operations["getAdminConversationReportPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/eligibility-policies": {
         parameters: {
             query?: never;
@@ -1731,6 +1753,7 @@ export interface components {
                 useAdvancedPhases: boolean;
                 initializePhase6: boolean;
                 archive: boolean;
+                previewReport: boolean;
             };
             links: {
                 self: string;
@@ -2511,7 +2534,7 @@ export interface components {
             slug: string;
             title: string;
             /** @enum {string} */
-            publication: "preliminary" | "final";
+            publication: "preliminary" | "final" | "preview";
             resultsAvailable: boolean;
             /** Format: date-time */
             openedAt: string;
@@ -5100,6 +5123,55 @@ export interface operations {
             };
             /** @description Vote verification unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationReportPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsReportResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -93,6 +93,7 @@ def register_admin_routes(
     set_admin_schedule: Callable[[int, dict], dict],
     set_admin_phases: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
+    resolve_admin_report_preview: Callable[[int], dict],
 ) -> None:
     """Register admin-only HTTP adapters on the shared API blueprint."""
     _no_store = no_store
@@ -308,6 +309,13 @@ def register_admin_routes(
     def get_admin_conversation_lifecycle(conversation_id: int):
         return _no_store(jsonify({
             'data': resolve_admin_lifecycle(conversation_id),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/report-preview')
+    @limiter.limit('60 per minute')
+    def get_admin_conversation_report_preview(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_report_preview(conversation_id),
         }))
 
     @bp.get('/admin/conversations/<int:conversation_id>/settings')

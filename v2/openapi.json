@@ -942,6 +942,15 @@
         "503": {"description": "Vote verification unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/report-preview": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {"operationId": "getAdminConversationReportPreview", "summary": "Preview the results report in any phase, for site admins only", "description": "Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.", "responses": {
+        "200": {"description": "Report preview", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ResultsReportResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/eligibility-policies": {
       "get": {"operationId": "getAdminEligibilityPolicies", "summary": "Return canivote's eligibility policies an organizer may choose from", "responses": {
         "200": {"description": "Policy list; available is false and policies empty when canivote is not configured or cannot be reached", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminEligibilityPoliciesResponse"}}}},
@@ -1330,8 +1339,8 @@
           "counts": {"type": "object", "required": ["participants", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
             "participants": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}
           }},
-          "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases", "initializePhase6", "archive"], "additionalProperties": false, "properties": {
-            "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}, "initializePhase6": {"type": "boolean"}, "archive": {"type": "boolean"}
+          "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases", "initializePhase6", "archive", "previewReport"], "additionalProperties": false, "properties": {
+            "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}, "initializePhase6": {"type": "boolean"}, "archive": {"type": "boolean"}, "previewReport": {"type": "boolean"}
           }},
           "links": {"type": "object", "required": ["self", "participantView", "moderation", "statements", "settings", "termination"], "additionalProperties": false, "properties": {
             "self": {"type": "string"}, "participantView": {"type": "string"}, "moderation": {"type": "string"}, "statements": {"type": "string"}, "settings": {"type": "string"}, "termination": {"type": "string"}
@@ -2563,7 +2572,7 @@
         "properties": {
           "slug": {"type": "string"},
           "title": {"type": "string"},
-          "publication": {"type": "string", "enum": ["preliminary", "final"]},
+          "publication": {"type": "string", "enum": ["preliminary", "final", "preview"]},
           "resultsAvailable": {"type": "boolean"},
           "openedAt": {"type": "string", "format": "date-time"},
           "closedAt": {"type": ["string", "null"], "format": "date-time"},

@@ -275,6 +275,19 @@ export async function putAdminRecommendationTier(
   ))).data;
 }
 
+/** A site admin's preview of the results report (never published). It does not refetch on
+ *  focus or reconnect: every fetch writes an audit event, so one page open is one row. */
+export const adminReportPreviewQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-report-preview', conversationId],
+  queryFn: async () => (await requireApiData(api.GET(
+    '/admin/conversations/{conversationId}/report-preview',
+    {params: {path: {conversationId}}},
+  ))).data,
+  staleTime: Infinity,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+});
+
 export const adminTerminationQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-termination', conversationId],
   queryFn: async () => (await requireApiData(api.GET(

@@ -37,7 +37,7 @@ const lifecycle: Lifecycle = {
     informedVoting: {participants: 9, statementCount: 4, excludedStatementCount: 0, excludedParticipantCount: 0,
       largestShift: {text: 'Regional communities should share infrastructure funding.', shift: 12}}},
   counts: {participants: 12, openFlags: 1, featuredStatements: 4},
-  capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+  capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true, previewReport: true},
   links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
 };
 
@@ -143,7 +143,7 @@ const moderatorLifecycle: Lifecycle = {
   operator: {roleLabel: 'Moderator'},
   phase: {...lifecycle.phase, activeKeys: ['submission', 'informed_voting']},
   schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false},
-  capabilities: {advancePhase: false, pause: false, publish: false, editSettings: false, useAdvancedPhases: false, initializePhase6: false, archive: false},
+  capabilities: {advancePhase: false, pause: false, publish: false, editSettings: false, useAdvancedPhases: false, initializePhase6: false, archive: false, previewReport: false},
 };
 
 test.each([
@@ -221,4 +221,24 @@ test('a moderator sees no next-phase line when nothing is scheduled, or the sche
     expect(container.querySelector('.admin-scheduled-transition')).toBeNull();
     unmount();
   }
+});
+
+test('a site admin can preview the report from the Publish report row while it is unpublished', async () => {
+  serve(lifecycle);
+  renderConsole();
+
+  const link = await screen.findByRole('link', {name: new RegExp(`^${testMessages['adminconv-preview-report']}`)}, {timeout: 10_000});
+  expect(link).toHaveAttribute('href', '/admin/conversations/7/report-preview');
+  expect(link.closest('.danger-row-title')).toHaveTextContent(testMessages['adminconv-publish-report']!);
+});
+
+test.each([
+  ['without the capability (organizers and moderators)', {...lifecycle, capabilities: {...lifecycle.capabilities, previewReport: false}}],
+  ['once the report is published', {...closedLifecycle, capabilities: {...closedLifecycle.capabilities, previewReport: false}}],
+] as const)('no preview link %s', async (_case, payload) => {
+  serve(payload);
+  renderConsole();
+
+  expect(await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByRole('link', {name: new RegExp(`^${testMessages['adminconv-preview-report']}`)})).toBeNull();
 });

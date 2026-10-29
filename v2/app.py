@@ -2626,6 +2626,7 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/admin/conversations/\d+/settings/vouchers',
     r'/admin/conversations/\d+/settings/roles',
     r'/admin/conversations/\d+/termination',
+    r'/admin/conversations/\d+/report-preview',
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
@@ -4878,6 +4879,61 @@ def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
     return {'lifecycle': _admin_lifecycle_api_payload(conv.id)}
 
 
+def _admin_report_preview_api_payload(conv_id: int) -> dict:
+    """Site-admin preview of the results report, in any phase, before publication.
+
+    Read-only by design. While the process is open it reads the live moderation filter
+    (``_current_phase6_results_filter``), never ``_snapshot_report_filter``, which writes
+    the snapshot, and it never calls ``_publish_final_report``. Once closed it reads the
+    stored snapshot, exactly as the published report does. The only write is the audit row.
+
+    The conversation access check is skipped on purpose: it has no site-admin exception,
+    so a gated process would refuse a site admin who does not pass its gate. The site-admin
+    check below replaces it. The preview is built as a non-participant sees the report:
+    no personal vote overlay and no identity-reveal callout.
+    """
+    if not _is_global_admin():
+        _refuse_admin()
+    conv = Conversation.query.get_or_404(conv_id)
+    closed = bool(conv.closed_at)
+    result_filter = (
+        Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
+        if closed else _current_phase6_results_filter(conv)
+    )
+    results = _build_phase6_results(
+        conv, participation=None, results_filter=result_filter,
+    )
+    output_key = 'report' if closed else 'preliminary-results'
+    output_context = next(
+        item for item in _output_items(conv) if item['key'] == output_key
+    )
+    reveal = _reveal_context(conv, participation=None)
+    payload = build_results_report(
+        conversation=conv,
+        phase6_results=results,
+        output_context=output_context,
+        participation=None,
+        reveal_state=reveal['state'] if reveal else None,
+        self_link=url_for(
+            'api_v1.get_admin_conversation_report_preview', conversation_id=conv.id,
+        ),
+        # The preview's back link returns to the admin console, where it was opened.
+        conversation_link=_admin_client_link(conv.id),
+        about_link=_path_conversation(conv.slug, page='about'),
+        identity_reveal_link=None,
+        preview=True,
+    )
+    # Ids and enums only (record_audit's privacy contract).
+    record_audit(
+        'report.preview', conv_id=conv.id,
+        target_type='conversation', target_id=conv.id,
+        phase=_phase_sequence_for(conv)[_current_stage_index(conv)]['key'],
+        source='snapshot' if closed else 'live',
+        results_available=results is not None,
+    )
+    return payload
+
+
 def _replace_admin_roles_api_payload(
     conv_id: int, participant_id: int, body: dict,
 ) -> dict:
@@ -6342,6 +6398,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_admin_schedule=_set_admin_schedule_api_payload,
         set_admin_phases=_set_admin_phases_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,
+        resolve_admin_report_preview=_admin_report_preview_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

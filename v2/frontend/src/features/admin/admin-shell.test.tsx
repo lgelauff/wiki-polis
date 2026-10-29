@@ -31,7 +31,7 @@ const lifecycle: Lifecycle = {
   publicationReadiness: {windowOpen: false, preconditions: []},
   statistics: {upstreamUnavailable: false, groups: [], informedVoting: null},
   counts: {participants: 12, openFlags: 3, featuredStatements: 4},
-  capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+  capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true, previewReport: true},
   links: {
     self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy',
     moderation: '/admin/conversations/7/flags',
