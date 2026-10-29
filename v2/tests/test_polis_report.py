@@ -166,3 +166,19 @@ def test_shift_readings_are_rule_based(tmp_path):
     m = {r['statement']: r for r in rows(out / 'movers.csv')}
     assert m['0']['reading'].startswith('Too few people changed their response to tell')
     assert m['2']['reading'] == 'No observed movement.' or m['2']['reading'].startswith('Too few')
+
+
+def test_comparison_tiles_divide_each_poll_by_its_own_responses(tmp_path):
+    """The headline tiles: B's shares are out of B's responses, not A's."""
+    build(tmp_path)
+    # Matched participant xid-two gives no response to 'S zero' in Poll B (B's own id 1), so
+    # among the matched four, A has 16 opinion responses and B has 15.
+    votes = tmp_path / 'b' / 'votes.csv'
+    kept = [r for r in csv.reader(open(votes, newline='')) if not (r[2] == '1' and r[3] == '1')]
+    with open(votes, 'w', newline='') as f:
+        csv.writer(f).writerows(kept)
+    out = polis_report.run(tmp_path / 'config.json', pdf=False)
+    page = (out / 'poll-ab-compared.html').read_text(encoding='utf-8')
+    # agree: 9 of 16 in A, 9 of 15 in B; pass: 2 of 16 in A, 1 of 15 in B
+    assert '<b>56% → 60%</b><span>of opinion votes agree' in page
+    assert '<b>12% → 7%</b><span>of opinion votes pass' in page

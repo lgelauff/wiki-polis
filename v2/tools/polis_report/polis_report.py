@@ -828,7 +828,7 @@ def compare_reports(PA, PB, cfg, out, repro):
                     f'<td class="first">{B[c][0]}</td><td>{B[c][1]}</td><td class="pc">{B[c][2]}</td><td class="first lab2">{label_text(labA[c], share)}</td><td class="lab2">{label_text(labB[c], share)}</td>'
                     f'<td class="first">{B[c][0] - A[c][0]:+d}</td><td>{mv[c][1]}</td><td>{mv[c][0]}</td></tr>' for c in common)
     ta = [sum(A[c][i] for c in common) for i in range(3)]; tb = [sum(B[c][i] for c in common) for i in range(3)]
-    nv = sum(ta)
+    na, nb = sum(ta), sum(tb)  # each poll's share is out of that poll's own responses
 
     def cl(L):
         v = list(L.values())
@@ -836,8 +836,8 @@ def compare_reports(PA, PB, cfg, out, repro):
     changed = [c for c in common if labA[c] != labB[c]]
     left_agree = Counter(b for c in common for (a, b), n in tabs[c].items() for _ in range(n) if a == 'agree' and b != 'agree')
     body = f'''<div class="tiles"><div class="tile"><b>{N}</b><span>matched participants; all figures on this page are among these {N}</span></div>
-<div class="tile"><b>{round(pct(ta[0], nv))}% → {round(pct(tb[0], nv))}%</b><span>of opinion votes agree, among the {N}</span></div>
-<div class="tile"><b>{round(pct(ta[2], nv))}% → {round(pct(tb[2], nv))}%</b><span>of opinion votes pass, among the {N}</span></div>
+<div class="tile"><b>{round(pct(ta[0], na))}% → {round(pct(tb[0], nb))}%</b><span>of opinion votes agree, among the {N}</span></div>
+<div class="tile"><b>{round(pct(ta[2], na))}% → {round(pct(tb[2], nb))}%</b><span>of opinion votes pass, among the {N}</span></div>
 <div class="tile"><b>{cl(labA)} → {cl(labB)}</b><span>statements {label_text("agree", share)} · {label_text("disagree", share)} · neither, among the {N}</span></div></div>
 <div class="card"><b>Summary.</b> {m} statements appear in both polls. Label changes among the {N}: {ids(changed)}.
 Votes that left agree went to disagree {left_agree.get("disagree", 0)} times and to pass {left_agree.get("pass", 0)} times.
