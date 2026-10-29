@@ -4035,7 +4035,8 @@ def _reminder_test_api_payload() -> dict:
         'wikis': [{'key': wiki, 'host': host, 'live': wiki in settings.live_wikis}
                   for wiki, host in WIKI_HOSTS.items()],
         'recipients': list(settings.test_recipients),
-        'credentialsSet': settings.credentials is not None,
+        'credentialsSet': {channel: settings.credentials_for(channel) is not None
+                           for channel in REMINDER_CHANNELS},
     }
 
 
@@ -5980,11 +5981,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = (
         os.environ.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', '0')
     )
-    # Participant reminders (#577). The bot's own login (a bot password), and two guards
-    # that are empty by default: the wikis where real sends are switched on, and the only
-    # accounts that may receive anything while the bot is being tested (#581, #582).
-    app.config['REMINDERS_BOT_USERNAME'] = _read_secret('reminders-bot-username')
-    app.config['REMINDERS_BOT_PASSWORD'] = _read_secret('reminders-bot-password')
+    # Participant reminders (#577). The bot's logins (bot passwords: one for wiki-mail, one
+    # for talk-page posts, each with only its own grants), and two guards that are empty by
+    # default: the wikis where real sends are switched on, and the only accounts that may
+    # receive anything while the bot is being tested (#581, #582).
+    for _channel in ('email', 'talk'):
+        for _part in ('username', 'password'):
+            app.config[f'REMINDERS_BOT_{_channel.upper()}_{_part.upper()}'] = _read_secret(
+                f'reminders-bot-{_channel}-{_part}')
     app.config['REMINDERS_LIVE_WIKIS'] = _split_csv(os.environ.get('REMINDERS_LIVE_WIKIS', ''))
     app.config['REMINDERS_TEST_RECIPIENTS'] = _split_csv(
         os.environ.get('REMINDERS_TEST_RECIPIENTS', ''))

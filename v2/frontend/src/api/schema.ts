@@ -1232,7 +1232,11 @@ export interface components {
                     live: boolean;
                 }[];
                 recipients: string[];
-                credentialsSet: boolean;
+                /** @description Whether the bot login for each channel is set */
+                credentialsSet: {
+                    email: boolean;
+                    talk: boolean;
+                };
             };
         };
         ReminderTestSendRequest: {

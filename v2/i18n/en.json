@@ -677,7 +677,7 @@
     "admin-reminder-test-btn": "Send test",
     "admin-reminder-test-sent": "Sent from $1.",
     "admin-reminder-test-dry-not-live": "Not sent: this wiki is not switched on for real sends. Recorded as a dry run.",
-    "admin-reminder-test-dry-no-login": "Not sent: the bot's login is not set on the server. Tests are recorded as dry runs.",
+    "admin-reminder-test-dry-no-login": "Not sent: the bot's login for this channel is not set on the server. Tests on it are recorded as dry runs.",
     "admin-reminder-test-failed-not-emailable": "Not sent: this account can't receive wiki-mail, on this wiki or on Meta.",
     "admin-reminder-test-failed-nobots": "Not sent: the talk page asks bots not to post there.",
     "admin-reminder-test-failed-throttled": "Not sent: the wiki's rate limit was reached. Try again later.",

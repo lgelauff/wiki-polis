@@ -3,8 +3,11 @@
 Two guards, both empty by default, decide whether anything really leaves Proto:
   - `live_wikis`: the wikis where real sends are switched on;
   - `test_recipients`: the only accounts that may receive anything.
-A recipient outside the list is refused. A wiki that is not live, or a bot without
-credentials, gives a dry run: nothing is sent and the result says why.
+A recipient outside the list is refused. A wiki that is not live, or a channel whose bot
+login is not set, gives a dry run: nothing is sent and the result says why.
+
+Wiki-mail and talk-page posts log in with separate bot passwords, each with only the grants
+its channel needs (owner, 2026-10-29).
 
 Wiki-mail is checked on the chosen wiki first. If the account can't receive it there, it is
 checked on Meta and sent from Meta, when Meta is live too.
@@ -51,17 +54,21 @@ def _as_list(value) -> list[str]:
 
 @dataclass(frozen=True)
 class ReminderSettings:
-    credentials: BotCredentials | None
+    email_credentials: BotCredentials | None
+    talk_credentials: BotCredentials | None
     live_wikis: frozenset[str]
     test_recipients: tuple[str, ...]
     user_agent: str
 
     @classmethod
     def from_config(cls, config, *, user_agent: str) -> ReminderSettings:
-        username = (config.get('REMINDERS_BOT_USERNAME') or '').strip()
-        password = config.get('REMINDERS_BOT_PASSWORD') or ''
+        def login(prefix: str) -> BotCredentials | None:
+            username = (config.get(f'{prefix}_USERNAME') or '').strip()
+            password = config.get(f'{prefix}_PASSWORD') or ''
+            return BotCredentials(username, password) if username and password else None
         return cls(
-            credentials=BotCredentials(username, password) if username and password else None,
+            email_credentials=login('REMINDERS_BOT_EMAIL'),
+            talk_credentials=login('REMINDERS_BOT_TALK'),
             live_wikis=frozenset(
                 wiki for wiki in _as_list(config.get('REMINDERS_LIVE_WIKIS')) if wiki in WIKI_HOSTS
             ),
@@ -70,6 +77,9 @@ class ReminderSettings:
             )),
             user_agent=user_agent,
         )
+
+    def credentials_for(self, channel: str) -> BotCredentials | None:
+        return self.email_credentials if channel == 'email' else self.talk_credentials
 
 
 @dataclass(frozen=True)
@@ -95,12 +105,12 @@ class ReminderTestRefused(ValueError):
         self.code = code
 
 
-ClientFactory = Callable[[str], WikiBotClient]
+ClientFactory = Callable[[str, BotCredentials], WikiBotClient]
 
 
 def default_client_factory(settings: ReminderSettings) -> ClientFactory:
-    def make(wiki: str) -> WikiBotClient:
-        return WikiBotClient(wiki, credentials=settings.credentials, user_agent=settings.user_agent)
+    def make(wiki: str, credentials: BotCredentials) -> WikiBotClient:
+        return WikiBotClient(wiki, credentials=credentials, user_agent=settings.user_agent)
     return make
 
 
@@ -115,12 +125,13 @@ def send_test_message(*, wiki: str, channel: str, recipient: str, settings: Remi
         raise ReminderTestRefused('recipient_not_allowed')
     if wiki not in settings.live_wikis:
         return ReminderTestResult(DRY_RUN, WIKI_NOT_LIVE)
-    if settings.credentials is None:
+    credentials = settings.credentials_for(channel)
+    if credentials is None:
         return ReminderTestResult(DRY_RUN, NO_CREDENTIALS)
 
     with ExitStack() as clients:
         def open_client(name: str):
-            client = client_factory(name)
+            client = client_factory(name, credentials)
             if hasattr(client, 'close'):
                 clients.callback(client.close)
             return client

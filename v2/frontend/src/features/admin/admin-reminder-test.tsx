@@ -116,6 +116,9 @@ function ReminderTestForm({state, failed, pending, line, onChange, onSend}: {
   const chosenRecipient = recipient && state.recipients.includes(recipient)
     ? recipient : state.recipients[0] ?? '';
 
+  // Wiki-mail and talk-page posts have their own bot login; the note follows the channel.
+  const loginSet = state.credentialsSet[channel];
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSend({wiki: chosenWiki, channel, recipient: chosenRecipient});
@@ -136,11 +139,11 @@ function ReminderTestForm({state, failed, pending, line, onChange, onSend}: {
       <label className="admin-field admin-field--medium">{msg('admin-reminder-test-label-recipient')}<select value={chosenRecipient} onChange={(event) => { setRecipient(event.target.value); onChange(); }}>
         {state.recipients.map((name) => <option key={name} value={name}>{name}</option>)}
       </select></label>
-      {!state.credentialsSet && <p className="admin-empty" id={noLoginId}>{msg('admin-reminder-test-dry-no-login')}</p>}
+      {!loginSet && <p className="admin-empty" id={noLoginId}>{msg('admin-reminder-test-dry-no-login')}</p>}
       <div className="admin-form__actions">
         {/* aria-disabled, not disabled, so the button keeps focus during the send. */}
         <button type="submit" className="admin-button admin-button--primary" aria-disabled={pending}
-          {...(state.credentialsSet ? {} : {'aria-describedby': noLoginId})}>{msg('admin-reminder-test-btn')}</button>
+          {...(loginSet ? {} : {'aria-describedby': noLoginId})}>{msg('admin-reminder-test-btn')}</button>
       </div>
       {pending && <p>{msg('admin-reminder-test-sending')}</p>}
       {line && <p className={line.error ? 'admin-error' : undefined}>{line.text}</p>}

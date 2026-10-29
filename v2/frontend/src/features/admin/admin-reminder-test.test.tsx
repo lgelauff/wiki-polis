@@ -22,7 +22,7 @@ const state: State = {
     {key: 'nlwiki', host: 'nl.wikipedia.org', live: true},
   ],
   recipients: ['Tester', 'Tester two'],
-  credentialsSet: true,
+  credentialsSet: {email: true, talk: true},
 };
 
 const sent = (sentVia: string): Sent => ({outcome: 'sent', reason: null, code: null, sentVia});
@@ -146,11 +146,14 @@ test('without test accounts there is nothing to send to', async () => {
   expect(screen.queryByRole('button', {name: 'Send test'})).toBeNull();
 });
 
-test('says when the bot login is not set, next to the button', async () => {
-  serve({...state, credentialsSet: false});
+test('says when the bot login for the chosen channel is not set, next to the button', async () => {
+  serve({...state, credentialsSet: {email: false, talk: true}});
   await renderSection();
   const button = await screen.findByRole('button', {name: 'Send test'});
   expect(button.getAttribute('aria-describedby')).toBeTruthy();
   expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent)
-    .toMatch(/the bot's login is not set on the server/);
+    .toMatch(/the bot's login for this channel is not set on the server/);
+  fireEvent.change(screen.getByRole('combobox', {name: 'Channel'}), {target: {value: 'talk'}});
+  expect(screen.queryByText(/the bot's login for this channel is not set/)).toBeNull();
+  expect(button.getAttribute('aria-describedby')).toBeNull();
 });

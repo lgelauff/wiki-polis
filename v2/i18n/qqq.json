@@ -676,7 +676,7 @@
     "admin-reminder-test-btn": "Button in the reminder test section that sends the test message. Admin-only.",
     "admin-reminder-test-sent": "Result line after a test message was sent from the chosen wiki. Admin-only. Parameters:\n* $1 - host name of the wiki that sent it, for example nl.wikipedia.org; not translated\nSee also {{msg-proto|admin-reminder-test-sent-fallback}}.",
     "admin-reminder-test-dry-not-live": "Result line after a test on a wiki that is not switched on for real sends. Nothing was sent. Admin-only.",
-    "admin-reminder-test-dry-no-login": "Shown in the reminder test section, and as the result line, when the bot account's login is not configured on the server. Nothing is sent. Admin-only.",
+    "admin-reminder-test-dry-no-login": "Shown in the reminder test section, and as the result line, when the bot account's login for the chosen channel (wiki-mail or talk page; each has its own) is not configured on the server. Nothing is sent. Admin-only.",
     "admin-reminder-test-failed-not-emailable": "Result line when the test account has no confirmed email address or does not accept wiki-mail, both on the chosen wiki and on Meta-Wiki. Admin-only.",
     "admin-reminder-test-failed-nobots": "Result line when the test account's talk page carries <code><nowiki>{{nobots}}</nowiki></code> or a <code><nowiki>{{bots}}</nowiki></code> template that excludes the Proto bot. Admin-only.",
     "admin-reminder-test-failed-throttled": "Result line when the wiki refused the test because the bot account has sent too much (for wiki-mail, about 20 a day for an account without the bot flag). Admin-only.",

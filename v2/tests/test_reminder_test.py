@@ -21,8 +21,9 @@ MESSAGE = ReminderTestMessage(subject='Proto test message', body='Body', summary
 class FakeBot:
     """Stands in for WikiBotClient on one wiki; every instance shares one log."""
 
-    def __init__(self, wiki, log, *, emailable=(), talk_blocked=False, error=None):
+    def __init__(self, wiki, log, *, login=None, emailable=(), talk_blocked=False, error=None):
         self.wiki = wiki
+        self.login = login
         self._log = log
         self._emailable = emailable
         self._talk_blocked = talk_blocked
@@ -39,17 +40,20 @@ class FakeBot:
         if self._error:
             raise self._error
         self._log.append(('email', self.wiki, username, subject, text))
+        self._log.append(('login', self.login.username))
 
     def post_talk_section(self, username, *, title, text, summary):
         if self._error:
             raise self._error
         self._log.append(('talk', self.wiki, username, title, text, summary))
+        self._log.append(('login', self.login.username))
         return 1
 
 
 def settings(*, live=('nlwiki', 'metawiki'), recipients=('Tester',), credentials=True):
     return ReminderSettings(
-        credentials=BotCredentials('Protowikibot@r', 'pw') if credentials else None,
+        email_credentials=BotCredentials('Protowikibot@mail', 'pw') if credentials else None,
+        talk_credentials=BotCredentials('Protowikibot@talk', 'pw') if credentials else None,
         live_wikis=frozenset(live), test_recipients=tuple(recipients), user_agent='x',
     )
 
@@ -58,7 +62,7 @@ def run(wiki='nlwiki', channel='email', recipient='Tester', *, conf=None, log=No
     log = [] if log is None else log
     result = send_test_message(
         wiki=wiki, channel=channel, recipient=recipient, settings=conf or settings(),
-        message=MESSAGE, client_factory=lambda w: FakeBot(w, log, **bot),
+        message=MESSAGE, client_factory=lambda w, c: FakeBot(w, log, login=c, **bot),
     )
     return result, log
 
@@ -96,13 +100,14 @@ def test_no_bot_login_is_a_dry_run():
 def test_email_is_sent_from_the_chosen_wiki_when_the_account_accepts_it_there():
     result, log = run(recipient='tester', emailable=('nlwiki', 'metawiki'))
     assert (result.outcome, result.sent_via) == (SENT, 'nlwiki')
-    assert log[-1] == ('email', 'nlwiki', 'Tester', 'Proto test message', 'Body')
+    assert log[-2] == ('email', 'nlwiki', 'Tester', 'Proto test message', 'Body')
+    assert log[-1] == ('login', 'Protowikibot@mail')
 
 
 def test_email_falls_back_to_meta():
     result, log = run(emailable=('metawiki',))
     assert (result.outcome, result.sent_via) == (SENT, 'metawiki')
-    assert log[-1][:2] == ('email', 'metawiki')
+    assert log[-2][:2] == ('email', 'metawiki')
 
 
 def test_no_fallback_when_meta_is_not_live_and_the_result_says_so():
@@ -129,7 +134,7 @@ def test_settings_accept_a_comma_separated_string():
     }, user_agent='x')
     assert conf.live_wikis == frozenset({'nlwiki'})
     assert conf.test_recipients == ('Tester', 'Tester two')
-    assert conf.credentials is None
+    assert conf.email_credentials is None and conf.talk_credentials is None
 
 
 def test_not_emailable_anywhere_fails_and_never_moves_to_the_talk_page():
@@ -141,7 +146,19 @@ def test_not_emailable_anywhere_fails_and_never_moves_to_the_talk_page():
 def test_talk_page_note_is_signed():
     result, log = run(channel='talk')
     assert (result.outcome, result.sent_via) == (SENT, 'nlwiki')
-    assert log[-1] == ('talk', 'nlwiki', 'Tester', 'Proto test message', 'Body ~~~~', 'Summary')
+    assert log[-2] == ('talk', 'nlwiki', 'Tester', 'Proto test message', 'Body ~~~~', 'Summary')
+    assert log[-1] == ('login', 'Protowikibot@talk')
+
+
+def test_each_channel_needs_its_own_login():
+    conf = ReminderSettings(
+        email_credentials=BotCredentials('Protowikibot@mail', 'pw'), talk_credentials=None,
+        live_wikis=frozenset({'nlwiki'}), test_recipients=('Tester',), user_agent='x',
+    )
+    talk, log = run(channel='talk', conf=conf)
+    assert (talk.outcome, talk.reason) == (DRY_RUN, NO_CREDENTIALS) and log == []
+    email, _ = run(conf=conf, emailable=('nlwiki',))
+    assert email.outcome == SENT
 
 
 def test_nobots_stops_the_talk_page_note():
@@ -160,12 +177,13 @@ def test_a_wiki_error_is_reported_with_its_reason_and_code():
 @pytest.fixture
 def configured(app):
     app.config.update(
-        REMINDERS_BOT_USERNAME='Protowikibot@r', REMINDERS_BOT_PASSWORD='pw',
+        REMINDERS_BOT_EMAIL_USERNAME='Protowikibot@mail', REMINDERS_BOT_EMAIL_PASSWORD='pw',
         REMINDERS_LIVE_WIKIS=['nlwiki'], REMINDERS_TEST_RECIPIENTS=['Tester'],
     )
     log = []
     with patch('services.reminder_test.WikiBotClient',
-               side_effect=lambda wiki, **_: FakeBot(wiki, log, emailable=('nlwiki',))):
+               side_effect=lambda wiki, **kw: FakeBot(
+                   wiki, log, login=kw['credentials'], emailable=('nlwiki',))):
         yield log
 
 
@@ -179,7 +197,8 @@ def test_state_is_for_site_admins_only(auth_client, configured):
 
 def test_state_lists_wikis_test_accounts_and_login(admin_client, configured):
     data = admin_client.get('/api/v1/admin/reminder-test').get_json()['data']
-    assert data['recipients'] == ['Tester'] and data['credentialsSet'] is True
+    assert data['recipients'] == ['Tester']
+    assert data['credentialsSet'] == {'email': True, 'talk': False}
     assert {(row['key'], row['live']) for row in data['wikis']} == {
         ('nlwiki', True), ('metawiki', False),
     }
@@ -193,7 +212,8 @@ def test_send_returns_the_result_and_audits_without_the_name(admin_client, confi
     assert response.get_json()['data'] == {
         'outcome': 'sent', 'reason': None, 'code': None, 'sentVia': 'nlwiki',
     }
-    assert configured[-1][:3] == ('email', 'nlwiki', 'Tester')
+    assert configured[-2][:3] == ('email', 'nlwiki', 'Tester')
+    assert configured[-1] == ('login', 'Protowikibot@mail')
     event = AuditEvent.query.filter_by(operation='reminder.test').one()
     assert event.outcome == 'sent' and event.detail['wiki'] == 'nlwiki'
     assert 'Tester' not in repr(event.detail) and event.target_id is None
