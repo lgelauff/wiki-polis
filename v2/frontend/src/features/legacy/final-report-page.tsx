@@ -213,9 +213,11 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
   // A site admin's preview (never published) is marked on the page itself, so a
   // screenshot of it cannot pass for the published report.
   const preview = report.publication === 'preview';
-  const contextOutput = (preview ? report.closedAt : report.publication === 'final')
-    ? 'report' : 'preliminary-results';
-  return <LegacyShell headerCrumb={<span className="header-crumb">
+  // A preview has the report's full shape, so it is read as the report is.
+  const contextOutput = preview || report.publication === 'final' ? 'report' : 'preliminary-results';
+  // The preview's tab title says it is a preview; the published report keeps the shell's.
+  const shellTitle = preview ? {title: msg('output-doc-title', msg('report-subtitle-preview'), report.title)} : {};
+  return <LegacyShell {...shellTitle} headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
     <span className="header-crumb-sep">/</span>

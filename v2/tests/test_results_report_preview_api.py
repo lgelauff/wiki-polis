@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+from flask import g
+
 import app as app_module
 from app import Phase6ResultsFilter
 from db import AdminRole, AuditEvent, Participant, db
@@ -83,34 +85,57 @@ def test_preview_before_informed_voting_is_an_empty_report(admin_client, convers
     assert data['statements'] == []
 
 
-def test_preview_of_a_closed_process_reads_the_snapshot(admin_client, conversation):
+def test_preview_of_a_published_report_points_to_it(admin_client, conversation):
+    """Nothing to preview once published: 409 with the published report's path, no audit row."""
     conversation.active = False
     conversation.phase_public_results = True
     conversation.closed_at = datetime.now(timezone.utc)
-    conversation.phase6_polis_conversation_id = 'private-phase6-id'
-    conversation.report_filter_snapshot = {'excluded_tids': [42], 'excluded_pids': [7]}
     db.session.commit()
-    seen = {}
-
-    def build(_conversation, participation, results_filter=None):
-        seen['filter'] = results_filter
-        return _results()
 
     publish, snapshot = _no_publication()
-    with patch('app._build_phase6_results', side_effect=build), \
-            patch('app._current_phase6_results_filter',
-                  side_effect=AssertionError('closed: snapshot only')), \
-            publish, snapshot:
+    with patch('app._build_phase6_results',
+               side_effect=AssertionError('published: nothing to build')), publish, snapshot:
+        response = admin_client.get(_url(conversation))
+
+    assert response.status_code == 409
+    error = response.get_json()['error']
+    assert error['code'] == 'conversation_closed'
+    assert error['details'] == {'report': '/c/test-conv/report'}
+    assert AuditEvent.query.filter_by(operation='report.preview').count() == 0
+
+
+def test_preview_rows_are_sorted_by_shift_like_the_report(admin_client, conversation):
+    """The builder orders an open process's rows by id; the preview orders them as the report."""
+    conversation.phase_informed_voting = True
+    conversation.phase6_polis_conversation_id = 'private-phase6-id'
+    db.session.commit()
+    base = _results()
+    row = base['statements'][0]
+    base['statements'] = [
+        {**row, 'fs_id': 1, 'shift': 2.0},
+        {**row, 'fs_id': 2, 'shift': -15.0},
+        {**row, 'fs_id': 3, 'shift': None},
+        {**row, 'fs_id': 4, 'shift': 8.0},
+    ]
+
+    with patch('app._build_phase6_results', return_value=base):
         data = admin_client.get(_url(conversation)).get_json()['data']
 
-    assert data['publication'] == 'preview'
-    assert seen['filter'] == Phase6ResultsFilter(
-        excluded_tids=frozenset({42}), excluded_pids=frozenset({7}),
+    assert [s['featuredStatementId'] for s in data['statements']] == [2, 4, 1, 3]
+
+
+def test_preview_is_read_as_the_report_but_not_final(admin_client, conversation):
+    conversation.phase_informed_voting = True
+    db.session.commit()
+
+    data = admin_client.get(_url(conversation)).get_json()['data']
+
+    report = next(
+        item for item in app_module._output_items(conversation) if item['key'] == 'report'
     )
-    db.session.refresh(conversation)
-    assert conversation.report_filter_snapshot == {
-        'excluded_tids': [42], 'excluded_pids': [7],
-    }
+    assert data['context']['phase'] == report['phase']
+    assert data['context']['method'] == report['method']
+    assert data['context']['status'] == 'provisional'
 
 
 def test_preview_skips_the_gate_of_a_private_process(admin_client, conversation):
@@ -139,8 +164,17 @@ def test_preview_is_for_site_admins_only(client, participant, conversation):
     assert AuditEvent.query.filter_by(operation='report.preview').count() == 0
 
 
-def test_preview_unknown_conversation_is_404(admin_client):
-    assert admin_client.get('/api/v1/admin/conversations/999/report-preview').status_code == 404
+def test_preview_unknown_conversation_is_404_only_for_site_admins(
+    app, admin_client, participant,
+):
+    """The site-admin check comes first, so nobody else learns which ids exist."""
+    url = '/api/v1/admin/conversations/999/report-preview'
+    other = app.test_client()
+    login(other, 'testuser')
+    assert other.get(url).status_code == 403
+    # The fixture's app context outlives a request, so drop the participant it cached.
+    g.pop('participant', None)
+    assert admin_client.get(url).status_code == 404
 
 
 def test_preview_writes_one_privacy_safe_audit_event(
@@ -157,9 +191,7 @@ def test_preview_writes_one_privacy_safe_audit_event(
     assert event.actor_participant_id == admin_participant.id
     assert event.conversation_id == conversation.id
     assert (event.target_type, event.target_id) == ('conversation', str(conversation.id))
-    assert event.detail == {
-        'phase': 'informed_voting', 'source': 'live', 'results_available': False,
-    }
+    assert event.detail == {'phase': 'informed_voting', 'results_available': False}
     stored = json.dumps(event.detail)
     assert 'adminuser' not in stored
     assert conversation.title not in stored

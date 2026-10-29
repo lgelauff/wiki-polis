@@ -728,7 +728,7 @@ export interface paths {
         };
         /**
          * Preview the results report in any phase, for site admins only
-         * @description Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. It has the published report's full shape (cross-round comparison, opinion groups) even while informed voting is open, unlike the public results endpoint. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
+         * @description Never publishes, snapshots or changes the conversation. Uses the live moderation filter. It has the published report's full shape (cross-round comparison, opinion groups, rows sorted by shift) even while informed voting is open, unlike the public results endpoint; context.status is always provisional. Once the report is published it answers 409 conversation_closed with details.report, the published report's path. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
          */
         get: operations["getAdminConversationReportPreview"];
         put?: never;
@@ -5189,6 +5189,15 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The report is already published; details.report is its path */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

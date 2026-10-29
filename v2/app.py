@@ -66,7 +66,7 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
-from services.results_report import build_results_report
+from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
     InvitationNotInConversation, add_conversation_invites, build_invitation_roster,
@@ -950,6 +950,14 @@ def _invalidate_phase6_results_cache(conv=None) -> None:
                 _phase6_agg_cache.pop(k, None)
 
 
+def _sort_by_shift(statements: list[dict]) -> None:
+    """Order report rows by the size of their cross-round shift, largest first."""
+    statements.sort(
+        key=lambda s: abs(s['shift']) if s['shift'] is not None else -1,
+        reverse=True,
+    )
+
+
 def _build_phase6_results(
     conv,
     participation,
@@ -1120,10 +1128,7 @@ def _build_phase6_results(
 
     if conv.closed_at:
         # The final Report may rank statements by its cross-round comparison.
-        statements.sort(
-            key=lambda s: abs(s['shift']) if s['shift'] is not None else -1,
-            reverse=True,
-        )
+        _sort_by_shift(statements)
     else:
         # Preliminary output is single-round; its order must not encode P2-to-P6 deltas.
         statements.sort(key=lambda s: s['fs_id'])
@@ -4916,10 +4921,13 @@ def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
 def _admin_report_preview_api_payload(conv_id: int) -> dict:
     """Site-admin preview of the results report, in any phase, before publication.
 
-    Read-only by design. While the process is open it reads the live moderation filter
+    Read-only by design: it reads the live moderation filter
     (``_current_phase6_results_filter``), never ``_snapshot_report_filter``, which writes
-    the snapshot, and it never calls ``_publish_final_report``. Once closed it reads the
-    stored snapshot, exactly as the published report does. The only write is the audit row.
+    the snapshot, and it never calls ``_publish_final_report``. The only write is the
+    audit row. It has the published report's full shape, sorted as the report is, even
+    while informed voting is open (where the public endpoint shows nothing). Once the
+    report is published there is nothing to preview: ``ReportPublished`` carries the
+    published report's link, and the console page goes there.
 
     The conversation access check is skipped on purpose: it has no site-admin exception,
     so a gated process would refuse a site admin who does not pass its gate. The site-admin
@@ -4929,17 +4937,16 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
     if not _is_global_admin():
         _refuse_admin()
     conv = Conversation.query.get_or_404(conv_id)
-    closed = bool(conv.closed_at)
-    result_filter = (
-        Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
-        if closed else _current_phase6_results_filter(conv)
-    )
+    if conv.closed_at:
+        raise ReportPublished(_path_conversation(conv.slug, page='report'))
     results = _build_phase6_results(
-        conv, participation=None, results_filter=result_filter,
+        conv, participation=None, results_filter=_current_phase6_results_filter(conv),
     )
-    output_key = 'report' if closed else 'preliminary-results'
+    if results:
+        # The builder orders an open process's rows by id; the report orders them by shift.
+        _sort_by_shift(results['statements'])
     output_context = next(
-        item for item in _output_items(conv) if item['key'] == output_key
+        item for item in _output_items(conv) if item['key'] == 'report'
     )
     reveal = _reveal_context(conv, participation=None)
     payload = build_results_report(
@@ -4962,7 +4969,6 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
         'report.preview', conv_id=conv.id,
         target_type='conversation', target_id=conv.id,
         phase=_phase_sequence_for(conv)[_current_stage_index(conv)]['key'],
-        source='snapshot' if closed else 'live',
         results_available=results is not None,
     )
     return payload
