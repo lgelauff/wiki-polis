@@ -50,30 +50,17 @@ function renderPanel(locale = 'en') {
   );
 }
 
-test('the viewer’s own recorded vote stays labelled and styled on ranked statements', async () => {
-  const tally = (agree: number, pass: number, disagree: number): NonNullable<Statement['informed']> => ({
-    counts: {agree, pass, disagree, voters: agree + pass + disagree},
-    percentages: {agree: agree * 5, pass: pass * 5, disagree: disagree * 5},
-  });
-  const rows = [
-    {...statement(1, 'agree'), informed: tally(18, 0, 2)},
-    {...statement(2, 'disagree'), informed: tally(16, 0, 4)},
-    {...statement(3, 'pass'), informed: tally(10, 0, 10)},
-    {...statement(4, null), informed: tally(10, 1, 9)},
-  ];
-  serveResults(rows);
-  renderPanel();
-  await screen.findByText('Agreed');
+const tally = (agree: number, pass: number, disagree: number): NonNullable<Statement['informed']> => ({
+  counts: {agree, pass, disagree, voters: agree + pass + disagree},
+  percentages: {agree: agree * 5, pass: pass * 5, disagree: disagree * 5},
+});
 
-  const classes = [...document.querySelectorAll('.report-stmt-row .p6-my-vote')].map((badge) => badge.className);
-  expect(classes).toEqual(expect.arrayContaining([
-    'p6-my-vote p6-my-vote--agreed',
-    'p6-my-vote p6-my-vote--disagreed',
-    'p6-my-vote p6-my-vote--passed',
-  ]));
-  const ownVoteRows = [...document.querySelectorAll('.report-stmt-row p')]
-    .filter((row) => row.textContent?.startsWith('Yours:'));
-  expect(ownVoteRows.some((row) => row.querySelector('.muted')?.textContent === '—')).toBe(true);
+test('no own-vote line on the results, even for a participant with a recorded choice', async () => {
+  serveResults([{...statement(1, 'agree'), informed: tally(18, 0, 2)}]);
+  renderPanel();
+  await screen.findAllByText('Statement 1');
+
+  expect(document.querySelector('.p6-my-vote')).toBeNull();
 });
 
 test('preliminary results rank informed-vote consensus and contention without phase comparisons', async () => {

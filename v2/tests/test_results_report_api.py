@@ -179,7 +179,8 @@ def test_preliminary_results_passes_participation_for_private_vote_overlay(
         ).get_json()['data']
 
     assert seen['participation'].id == participation.id
-    assert data['statements'][0]['viewerChoice'] == 'agree'
+    # The own choice in a results table waits for the personal lens (owner, 2026-10-17).
+    assert data['statements'][0]['viewerChoice'] is None
 
 
 def test_openapi_documents_results_report_and_pass_counts(client):
@@ -298,21 +299,26 @@ def test_preliminary_results_exposes_only_the_informed_round_publicly(
     assert statement['personalDelta'] is None
 
 
-def test_preliminary_results_are_live_during_informed_voting(
-    client, conversation,
+def test_no_results_while_the_informed_round_is_open(
+    client, auth_client, conversation, participant,
 ):
+    """No live informed-round results (owner, 2026-10-13): informed voting alone opens
+    nothing, for a joined participant as for a visitor."""
     conversation.phase_informed_voting = True
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        pseudonym='patient-owl',
+    ))
     db.session.commit()
 
     with patch('app._build_phase6_results', return_value=_results()):
-        response = client.get('/api/v1/conversations/test-conv/results')
+        anonymous = client.get('/api/v1/conversations/test-conv/results')
+        joined = auth_client.get('/api/v1/conversations/test-conv/results')
 
-    assert response.status_code == 200
-    data = response.get_json()['data']
-    assert data['publication'] == 'preliminary'
-    assert data['context']['status'] == 'provisional'
-    assert data['statements'][0]['informed']['counts']['voters'] == 20
+    assert anonymous.status_code == 409
+    assert joined.status_code == 409
 
 
 def test_preliminary_results_projects_a_private_group_view_and_personal_delta(

@@ -106,10 +106,9 @@ def build_results_report(
     )
     statements = []
     for row in results.get('statements', []):
-        viewer_choice = (
-            _choice(row.get('my_p6_vote'))
-            if participation and not is_final else None
-        )
+        # A participant's own choice in a results table is part of the personal lens
+        # (owner, 2026-10-17), which stays off until its privacy gate (#233) is defined.
+        viewer_choice = _choice(row.get('my_p6_vote')) if personal_lens else None
         group_choice = _group_choice(row.get('my_group_votes')) if personal_lens else None
         statements.append({
             'featuredStatementId': row['fs_id'],

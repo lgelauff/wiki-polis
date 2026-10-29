@@ -2706,8 +2706,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         session['space'] = conv_space
 
     phase6_results_available = False
-    if ((conv.phase_public_results or conv.phase_informed_voting)
-            and conv.phase6_polis_conversation_id
+    if (conv.phase_public_results and conv.phase6_polis_conversation_id
             and participation is not None):
         phase6_results = _build_phase6_results(conv, participation)
         phase6_results_available = bool(
@@ -2732,8 +2731,6 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         links['intermediateResults'] = url_for(
             'api_v1.get_intermediate_results', slug=slug,
         )
-    if (conv.phase_public_results or conv.phase_personal_results
-            or conv.phase_informed_voting):
         links['results'] = url_for('api_v1.get_results_report', slug=slug)
     if can_moderate:
         links['manage'] = _path_admin_conversation(conv.id)
@@ -3220,8 +3217,7 @@ def _informed_voting_api_payload(slug: str) -> dict:
             links['explore'] = _conversation_client_link(slug)
         if conv.phase_argument_mapping:
             links['arguments'] = _conversation_client_link(slug, tab='arguments')
-        if (conv.phase_public_results or conv.phase_personal_results
-                or conv.phase_informed_voting):
+        if conv.phase_public_results or conv.phase_personal_results:
             links['results'] = _path_conversation(slug, page='report')
         return {
             'slug': conv.slug,
@@ -3273,11 +3269,9 @@ def _results_report_api_payload(slug: str) -> dict:
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     _check_conversation_access(conv, participant)
-    live_preliminary_results = bool(
-        conv.phase_informed_voting and conv.phase6_polis_conversation_id
-    )
-    if not (conv.phase_public_results or conv.phase_personal_results
-            or live_preliminary_results):
+    # No live informed-round results: they appear once that round has ended (owner,
+    # 2026-10-13; spec_results-access C2), so informed voting alone opens nothing here.
+    if not (conv.phase_public_results or conv.phase_personal_results):
         abort(409, description='Results are not published for this conversation.')
     if conv.phase_personal_results and not conv.phase_public_results and participant is None:
         abort(401)
@@ -3939,10 +3933,11 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     reveal = _reveal_context(conv, participation=None)
     biggest_shift = None
     if phase6_results:
-        biggest = next((
+        # Preliminary rows are in statement order, so the largest shift is looked up.
+        biggest = max((
             row for row in phase6_results.get('statements', [])
             if row.get('shift') is not None
-        ), None)
+        ), key=lambda row: abs(row['shift']), default=None)
         if biggest:
             biggest_shift = {
                 'text': biggest['text'], 'shift': biggest['shift'],

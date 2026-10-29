@@ -23,20 +23,12 @@ function VoteBar({tally, msg}: {tally: Tally; msg: Message}) {
   </>;
 }
 
-function ViewerVote({choice, msg}: {choice: Statement['viewerChoice']; msg: Message}) {
-  if (choice === 'agree') return <span className="p6-my-vote p6-my-vote--agreed">{msg('conv-p6-voted-agree')}</span>;
-  if (choice === 'disagree') return <span className="p6-my-vote p6-my-vote--disagreed">{msg('conv-p6-voted-disagree')}</span>;
-  if (choice === 'pass') return <span className="p6-my-vote p6-my-vote--passed">{msg('conv-p6-voted-pass')}</span>;
-  return <span className="muted">—</span>;
-}
-
-function OpinionRows({statements, participating, msg}: {statements: Statement[]; participating: boolean; msg: Message}) {
+// No "Yours" line: a participant's own choice in the results waits for the personal lens
+// (owner, 2026-10-17).
+function OpinionRows({statements, msg}: {statements: Statement[]; msg: Message}) {
   return statements.map((statement) => statement.informed && <div className="report-stmt-row" key={statement.featuredStatementId}>
     <p className="report-stmt-text">{statement.statement}</p>
     <VoteBar tally={statement.informed} msg={msg} />
-    {participating && <p className="muted" style={{fontSize: 12, margin: '.35rem 0 0'}}>
-      {msg('conv-col-yours')}: <ViewerVote choice={statement.viewerChoice} msg={msg} />
-    </p>}
   </div>);
 }
 
@@ -61,12 +53,12 @@ export function LegacyPreliminaryResultsPanel({slug}: {slug: string}) {
         <>
           {consensus.length > 0 && <section className="report-section">
             <h3 className="report-section-sub-heading">{msg('report-highest-agreement')}</h3>
-            <OpinionRows statements={consensus} participating={data.viewer.participating} msg={msg} />
+            <OpinionRows statements={consensus} msg={msg} />
           </section>}
           {divisive.length > 0 && <section className="report-section">
             <h3 className="report-section-sub-heading">{msg('report-most-divisive')}</h3>
             <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>{msg('report-divisive-intro')}</p>
-            <OpinionRows statements={divisive} participating={data.viewer.participating} msg={msg} />
+            <OpinionRows statements={divisive} msg={msg} />
           </section>}
         </>
       )}

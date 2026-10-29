@@ -892,8 +892,8 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   expect(screen.getByRole('heading', {name: 'Most divisive'})).toBeVisible();
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
   expect(screen.getAllByText('70.0% agree · 20.0% pass')).toHaveLength(2);
-  // The recorded vote is past tense, and carries the modifier class the stylesheet colours.
-  expect(screen.getAllByText('Agreed', {selector: '.p6-my-vote.p6-my-vote--agreed'})).toHaveLength(2);
+  // No own-vote line until the personal lens (owner, 2026-10-17).
+  expect(document.querySelector('.p6-my-vote')).toBeNull();
 });
 
 test('stays usable when the message catalogue is unavailable', async () => {

@@ -76,15 +76,23 @@ def test_workspace_contract_owns_legacy_tab_composition(
     assert repeated.get_json()['data']['spaceWarning'] is None
 
 
-def test_workspace_exposes_live_preliminary_results_during_informed_voting(
+def test_workspace_has_no_preliminary_results_while_informed_voting_is_open(
     auth_client, participant, conversation,
 ):
+    """No live informed-round results (owner, 2026-10-13); the tab comes with the Report phase."""
     _join(participant, conversation)
     conversation.phase_informed_voting = True
     conversation.phase6_polis_conversation_id = 'phase6abc123'
     db.session.commit()
 
     with patch('app._build_phase6_results', return_value={'statements': [{'fs_id': 8}]}):
+        live = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
+        assert 'p6-results' not in [tab['key'] for tab in live['tabs']]
+        assert 'results' not in live['links']
+
+        conversation.phase_informed_voting = False
+        conversation.phase_public_results = True
+        db.session.commit()
         response = auth_client.get('/api/v1/conversations/test-conv/workspace')
 
     assert response.status_code == 200

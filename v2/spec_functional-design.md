@@ -165,7 +165,7 @@ A second, independent voting round on the featured statements only. Arguments fr
 The conversation page uses three distinct result surfaces across the deliberation lifecycle:
 
 - **Intermediate results tab** (`phase_personal_results` or `phase_public_results`) — Polis opinion-group results from the initial voting round (Phase 2).
-- **Preliminary results tab** (informed voting is active + Phase 6 initialised + results available) — a live, provisional, single-round view of informed-voting consensus and contention. It does not compare aggregate Phase 2 and Phase 6 results; that comparison belongs only in the final Report. A participant's private group comparison and own-vote delta remain subject to the personal-lens privacy gate.
+- **Preliminary results tab** (`phase_public_results` + Phase 6 initialised + results available) — a provisional, single-round view of informed-vote consensus and contention, shown once the informed round has ended (Report phase). There are no live results while informed voting is open. It does not compare aggregate Phase 2 and Phase 6 results; that comparison belongs only in the final Report. A participant's own choices and group comparison wait for the personal lens.
 - **Final report** (`/c/<slug>/report`, published when `closed_at` is set) — the definitive published findings after the organizer closes the consultation.
 
 All these toggles default to off and are designed to be enabled in order, each phase building on the previous. The authoritative ordering — including the Preparation and Cleanup phases and the choice of phase route — is in *Phase control* below; the guided "Move on" flow walks the admin through it one step at a time. The admin can also deviate and set flags independently via the advanced controls.
