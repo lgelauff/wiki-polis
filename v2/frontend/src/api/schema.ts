@@ -1350,6 +1350,8 @@ export interface components {
             guidance: {
                 recommendedCount: number;
                 note: string;
+                agreementFloor: number;
+                agreementMarkShare: number;
             };
             capabilities: {
                 manage: boolean;
@@ -1386,7 +1388,10 @@ export interface components {
                 pass: number;
                 disagree: number;
                 total: number;
+                /** @description Whole percent of agree among agree + disagree, rounded once by the server; null below guidance.agreementFloor agree + disagree responses. */
                 agreementPercent: number | null;
+                /** @description The agree share is at least guidance.agreementMarkShare; false when agreementPercent is null. */
+                agreementMarked: boolean;
             };
         };
         AdminStatementProvenance: {

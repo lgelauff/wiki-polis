@@ -33,7 +33,7 @@ const workspace = (candidates: Candidate[]): Workspace => ({
   candidates,
   dataAvailability: {candidates: true},
   phase: {argumentMappingActive: false, informedVotingLive: false},
-  guidance: {recommendedCount: 15, note: 'Choose across viewpoints.'},
+  guidance: {recommendedCount: 15, note: 'Choose across viewpoints.', agreementFloor: 10, agreementMarkShare: 0.7},
   capabilities: {manage: true},
   links: {self: FEATURED_URL, lifecycle: '/admin/conversations/7/lifecycle'},
 });
@@ -61,30 +61,38 @@ async function agreementCell() {
   const row = await screen.findByRole('row', {name: /A representative statement/});
   const header = screen.getByRole('columnheader', {name: '(featured-th-agreement)'});
   const column = [...header.parentElement!.children].indexOf(header);
-  return within(row).getAllByRole('cell')[column];
+  const cell = within(row).getAllByRole('cell')[column];
+  if (!cell) throw new Error('no Agreement cell in the candidate row');
+  return cell;
 }
 
-test('the agreement share is shown as a whole percentage, with the column defined', async () => {
+test('the server\'s share is shown as a whole percentage, and the note is tied to the table', async () => {
   renderAsQqx();
-  serve(workspace([candidate({agree: 15, pass: 2, disagree: 5, total: 22, agreementPercent: 75})]));
+  serve(workspace([candidate({agree: 13, pass: 2, disagree: 7, total: 22, agreementPercent: 65, agreementMarked: false})]));
   renderPage();
 
-  expect(await agreementCell()).toHaveTextContent(/^75\s?%$/);
-  expect(screen.getByText('(featured-agreement-note)')).toBeVisible();
+  const cell = await agreementCell();
+  expect(cell).toHaveTextContent(/^65\s?%$/);
+  expect(within(cell).queryByRole('img')).toBeNull();
+  const note = screen.getByText('(featured-agreement-note: 10)');
+  expect(screen.getByRole('table')).toHaveAttribute('aria-describedby', note.id);
 });
 
-test('below ten agree and disagree responses the share is withheld', async () => {
+test('a share at or above the mark share carries a mark that names itself', async () => {
   renderAsQqx();
-  serve(workspace([candidate({agree: 6, pass: 9, disagree: 3, total: 18, agreementPercent: 66.7})]));
+  serve(workspace([candidate({agree: 15, pass: 2, disagree: 5, total: 22, agreementPercent: 75, agreementMarked: true})]));
   renderPage();
 
-  expect(await agreementCell()).toHaveTextContent('(featured-agreement-few: 10)');
+  const cell = await agreementCell();
+  expect(within(cell).getByRole('img', {name: /^\(featured-agreement-mark: 70\s?%\)$/})).toBeVisible();
 });
 
-test('a candidate with only pass responses has no share either', async () => {
+test('a share the server withheld says so, with the floor it sent', async () => {
   renderAsQqx();
-  serve(workspace([candidate({agree: 0, pass: 4, disagree: 0, total: 4, agreementPercent: null})]));
+  serve(workspace([candidate({agree: 6, pass: 9, disagree: 3, total: 18, agreementPercent: null, agreementMarked: false})]));
   renderPage();
 
-  expect(await agreementCell()).toHaveTextContent('(featured-agreement-few: 10)');
+  const cell = await agreementCell();
+  expect(cell).toHaveTextContent('(featured-agreement-few: 10)');
+  expect(within(cell).queryByRole('img')).toBeNull();
 });

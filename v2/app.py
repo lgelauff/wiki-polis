@@ -4508,7 +4508,27 @@ def _admin_featured_api_payload(conv_id: int) -> dict:
             'api_v1.get_admin_featured_statements', conversation_id=conv.id,
         ),
         lifecycle_link=_admin_client_link(conv.id),
+        agreement_floor=_featured_agreement_floor(),
+        agreement_mark_share=_featured_agreement_mark_share(),
     )
+
+
+def _featured_agreement_floor() -> int:
+    """FEATURED_AGREEMENT_FLOOR: fewest agree + disagree responses before a candidate's
+    agreement share is shown (default 10, the floor for opinion data)."""
+    try:
+        return max(1, int(current_app.config.get('FEATURED_AGREEMENT_FLOOR', 10)))
+    except (TypeError, ValueError):
+        return 10
+
+
+def _featured_agreement_mark_share() -> float:
+    """FEATURED_AGREEMENT_MARK_SHARE: agree share of agree + disagree at which a candidate
+    is marked (default 0.7, as polis_report's label share)."""
+    try:
+        return max(0.0, min(1.0, float(current_app.config.get('FEATURED_AGREEMENT_MARK_SHARE', 0.7))))
+    except (TypeError, ValueError):
+        return 0.7
 
 
 def _select_admin_featured_api_payload(
