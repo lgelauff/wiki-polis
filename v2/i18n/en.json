@@ -683,6 +683,7 @@
     "admin-reminder-test-failed-throttled": "Not sent: the wiki's rate limit was reached. Try again later.",
     "admin-reminder-test-failed-blocked": "Not sent: the bot account is blocked on this wiki.",
     "admin-reminder-test-failed-error": "Not sent: the wiki returned an error ($1).",
+    "admin-reminder-test-failed-not-bot-password": "Not sent: the bot's username on the server is not a bot-password name. It must be the full name from Special:BotPasswords, such as Protowikibot@label.",
     "admin-reminder-test-mail-subject": "Proto test message",
     "admin-reminder-test-mail-body": "This is a test message from Proto. A Proto site admin sent it to check that messages from the Proto bot arrive. You don't need to do anything.",
     "admin-reminder-test-talk-summary": "Proto: test message",

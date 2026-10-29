@@ -248,3 +248,11 @@ def test_emailable_and_talk_page_checks():
 def test_unknown_wiki_is_refused():
     with pytest.raises(ValueError):
         WikiBotClient('enwiki', credentials=None, user_agent='x')
+
+
+def test_a_plain_account_name_is_refused_before_contacting_the_wiki():
+    client, session = make_client(wiki_answers(), credentials=BotCredentials('Protowikibot', 'pw'))
+    with pytest.raises(WikiBotError) as raised:
+        client.send_email('Tester', subject='S', text='T')
+    assert raised.value.code == 'not_a_bot_password'
+    assert not [call for call in session.calls if call[0] == 'POST']

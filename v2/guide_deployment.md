@@ -867,3 +867,5 @@ export DATABASE_URL
 | `REMINDERS_BOT_TALK_PASSWORD` | no | The bot password for `REMINDERS_BOT_TALK_USERNAME` with only the grants *Edit existing pages* and *Create, edit, and move pages* (a talk page may not exist yet). Set as a Toolforge secret |
 | `REMINDERS_LIVE_WIKIS` | no | Comma-separated wikis where the bot may really send (`nlwiki`, `metawiki`). Unset → nothing is sent anywhere; tests are recorded as dry runs. Wiki-mail falls back to Meta only when `metawiki` is listed |
 | `REMINDERS_TEST_RECIPIENTS` | no | Comma-separated Wikimedia usernames that may receive test messages (`flask send-test-reminder`, the Reminder test section on `/site-admin`). Nobody else can receive anything while the bot is tested. Running `flask send-test-reminder` outside Toolforge (on a workstation, for a trial) also needs `MIGRATION_MODE=1`, or the app refuses to start without its Toolforge-only settings |
+
+The earlier single bot login, `REMINDERS_BOT_USERNAME`/`_PASSWORD`, is no longer read. If it was set anywhere, remove it, and revoke its bot password on Special:BotPasswords so only the two narrower ones remain.

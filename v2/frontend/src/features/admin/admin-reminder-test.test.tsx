@@ -156,4 +156,16 @@ test('says when the bot login for the chosen channel is not set, next to the but
   fireEvent.change(screen.getByRole('combobox', {name: 'Channel'}), {target: {value: 'talk'}});
   expect(screen.queryByText(/the bot's login for this channel is not set/)).toBeNull();
   expect(button.getAttribute('aria-describedby')).toBeNull();
+  fireEvent.change(screen.getByRole('combobox', {name: 'Channel'}), {target: {value: 'email'}});
+  const describedBy = button.getAttribute('aria-describedby');
+  expect(document.getElementById(describedBy!)?.textContent).toMatch(/login for this channel is not set/);
+});
+
+test('a plain account name instead of a bot-password name is explained', async () => {
+  serve(state, () => HttpResponse.json({data: {
+    outcome: 'failed', reason: 'api_error', code: 'not_a_bot_password', sentVia: null,
+  }}));
+  await renderSection();
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText(/is not a bot-password name/)).toBeTruthy();
 });

@@ -181,6 +181,7 @@ TAGS:
     - admin-reminder-test-failed-error
     - admin-reminder-test-failed-lagged
     - admin-reminder-test-failed-nobots
+    - admin-reminder-test-failed-not-bot-password
     - admin-reminder-test-failed-not-emailable
     - admin-reminder-test-failed-not-emailable-here
     - admin-reminder-test-failed-throttled

@@ -134,6 +134,11 @@ def app(tmp_path):
             'POLIS_SERVER_URL': '',
             'POLIS_ADMIN_EMAIL': '',
             'POLIS_ADMIN_PASSWORD': '',
+            # The bot's real logins must never reach a test, even from a shell that
+            # exported them (#583); reminder tests set their own.
+            'REMINDERS_BOT_EMAIL_USERNAME': '', 'REMINDERS_BOT_EMAIL_PASSWORD': '',
+            'REMINDERS_BOT_TALK_USERNAME': '', 'REMINDERS_BOT_TALK_PASSWORD': '',
+            'REMINDERS_LIVE_WIKIS': [], 'REMINDERS_TEST_RECIPIENTS': [],
         })
     with a.app_context():
         db.create_all()

@@ -40,7 +40,9 @@ function resultLine(msg: Message, result: Result, sent: Request, state: State | 
     case 'throttled': return failed(msg('admin-reminder-test-failed-throttled'));
     case 'lagged': return failed(msg('admin-reminder-test-failed-lagged'));
     case 'blocked': return failed(msg('admin-reminder-test-failed-blocked'));
-    default: return failed(msg('admin-reminder-test-failed-error', result.code ?? ''));
+    default: return failed(result.code === 'not_a_bot_password'
+      ? msg('admin-reminder-test-failed-not-bot-password')
+      : msg('admin-reminder-test-failed-error', result.code ?? ''));
   }
 }
 

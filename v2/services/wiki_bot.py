@@ -199,6 +199,10 @@ class WikiBotClient:
             return
         if self._credentials is None:
             raise WikiBotError(API_ERROR, 'no_credentials')
+        if '@' not in self._credentials.username:
+            # A bot password only logs in as "Account@label"; the plain account name would
+            # fail at the wiki with an unhelpful wrong-password error.
+            raise WikiBotError(API_ERROR, 'not_a_bot_password')
         payload = self._call('POST', {
             'action': 'login',
             'lgname': self._credentials.username,

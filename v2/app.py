@@ -146,9 +146,10 @@ from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
-from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, ReminderSettings,
-                                    ReminderTestMessage, ReminderTestRefused,
-                                    default_client_factory, send_test_message)
+from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
+                                    ReminderSettings, ReminderTestMessage,
+                                    ReminderTestRefused, default_client_factory,
+                                    login_settings, missing_login_parts, send_test_message)
 from services.wiki_bot import WIKI_HOSTS
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
@@ -5985,10 +5986,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     # for talk-page posts, each with only its own grants), and two guards that are empty by
     # default: the wikis where real sends are switched on, and the only accounts that may
     # receive anything while the bot is being tested (#581, #582).
-    for _channel in ('email', 'talk'):
-        for _part in ('username', 'password'):
-            app.config[f'REMINDERS_BOT_{_channel.upper()}_{_part.upper()}'] = _read_secret(
-                f'reminders-bot-{_channel}-{_part}')
+    app.config.update(login_settings(_read_secret))
+    for _channel, _empty in missing_login_parts(app.config).items():
+        # Names only, never values: a half-set login counts as not set (a dry run).
+        app.logger.warning('reminder bot login for %s is half set: %s is empty',
+                           _channel, _empty[0])
     app.config['REMINDERS_LIVE_WIKIS'] = _split_csv(os.environ.get('REMINDERS_LIVE_WIKIS', ''))
     app.config['REMINDERS_TEST_RECIPIENTS'] = _split_csv(
         os.environ.get('REMINDERS_TEST_RECIPIENTS', ''))
@@ -6232,6 +6234,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             line += f', reason {result.reason}'
         if result.code:
             line += f' ({result.code})'
+        if result.reason == 'no_credentials':
+            half = missing_login_parts(current_app.config).get(channel)
+            prefix = LOGIN_PREFIX[channel]
+            line += (f': {half[0]} is empty' if half
+                     else f': set {prefix}_USERNAME and {prefix}_PASSWORD')
         click.echo(line + '.')
         if result.outcome == 'failed':
             raise SystemExit(1)

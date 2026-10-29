@@ -263,6 +263,60 @@ def test_cli_dry_run_on_a_wiki_that_is_not_live(app, configured):
     assert configured == []
 
 
+def test_cli_names_the_settings_to_fill_when_a_login_is_missing(app, configured):
+    result = app.test_cli_runner().invoke(args=[
+        'send-test-reminder', '--wiki', 'nlwiki', '--channel', 'talk', '--to', 'Tester',
+    ])
+    assert 'set REMINDERS_BOT_TALK_USERNAME and REMINDERS_BOT_TALK_PASSWORD' in result.output
+
+
+def test_cli_names_the_empty_half_of_a_login(app, configured):
+    app.config['REMINDERS_BOT_TALK_USERNAME'] = 'Protowikibot@talk'
+    result = app.test_cli_runner().invoke(args=[
+        'send-test-reminder', '--wiki', 'nlwiki', '--channel', 'talk', '--to', 'Tester',
+    ])
+    assert 'REMINDERS_BOT_TALK_PASSWORD is empty' in result.output
+
+
+def test_login_settings_come_from_the_toolforge_secret_names(monkeypatch):
+    import app as app_module
+    from services.reminder_test import login_settings
+    decoys = {
+        'REMINDERS_BOT_EMAIL_USERNAME': 'Decoy@mail', 'REMINDERS_BOT_EMAIL_PASSWORD': 'decoy-1',
+        'REMINDERS_BOT_TALK_USERNAME': 'Decoy@talk', 'REMINDERS_BOT_TALK_PASSWORD': 'decoy-2',
+    }
+    for name, value in decoys.items():
+        monkeypatch.setenv(name, value)
+    settings_ = login_settings(app_module._read_secret)
+    assert settings_ == decoys
+    conf = ReminderSettings.from_config(settings_, user_agent='x')
+    assert conf.credentials_for('email') == BotCredentials('Decoy@mail', 'decoy-1')
+    assert conf.credentials_for('talk') == BotCredentials('Decoy@talk', 'decoy-2')
+
+
+def test_secret_names_are_the_ones_set_on_toolforge():
+    from services.reminder_test import login_settings
+    asked = []
+    login_settings(lambda name: asked.append(name) or '')
+    assert sorted(asked) == [
+        'reminders-bot-email-password', 'reminders-bot-email-username',
+        'reminders-bot-talk-password', 'reminders-bot-talk-username',
+    ]
+
+
+def test_an_unknown_channel_has_no_login():
+    with pytest.raises(KeyError):
+        settings().credentials_for('sms')
+
+
+def test_a_half_set_login_is_named():
+    from services.reminder_test import missing_login_parts
+    assert missing_login_parts({'REMINDERS_BOT_EMAIL_USERNAME': 'a@b'}) == {
+        'email': ['REMINDERS_BOT_EMAIL_PASSWORD'],
+    }
+    assert missing_login_parts({}) == {}
+
+
 def test_cli_refuses_an_account_that_is_not_listed(app, configured):
     result = app.test_cli_runner().invoke(args=[
         'send-test-reminder', '--wiki', 'nlwiki', '--channel', 'email', '--to', 'Other',

@@ -45,6 +45,31 @@ def normalize_username(name: str) -> str:
     return name[:1].upper() + name[1:]
 
 
+# The Toolforge secret behind each login setting, per channel.
+LOGIN_PREFIX = {'email': 'REMINDERS_BOT_EMAIL', 'talk': 'REMINDERS_BOT_TALK'}
+
+
+def login_settings(read_secret: Callable[[str], str]) -> dict[str, str]:
+    """The bot-login settings, read from their secrets (`reminders-bot-email-username` →
+    `REMINDERS_BOT_EMAIL_USERNAME`, …). One place, so a test can check the names."""
+    return {
+        f'{prefix}_{part.upper()}': read_secret(f'{prefix.lower().replace("_", "-")}-{part}')
+        for prefix in LOGIN_PREFIX.values() for part in ('username', 'password')
+    }
+
+
+def missing_login_parts(config) -> dict[str, list[str]]:
+    """Per channel, the login settings that are empty while the other one is set: a
+    half-set login, which counts as not set."""
+    half = {}
+    for channel, prefix in LOGIN_PREFIX.items():
+        names = [f'{prefix}_USERNAME', f'{prefix}_PASSWORD']
+        empty = [name for name in names if not (config.get(name) or '').strip()]
+        if len(empty) == 1:
+            half[channel] = empty
+    return half
+
+
 def _as_list(value) -> list[str]:
     """A list setting, given as a list or as one comma-separated string."""
     if isinstance(value, str):
@@ -67,8 +92,8 @@ class ReminderSettings:
             password = config.get(f'{prefix}_PASSWORD') or ''
             return BotCredentials(username, password) if username and password else None
         return cls(
-            email_credentials=login('REMINDERS_BOT_EMAIL'),
-            talk_credentials=login('REMINDERS_BOT_TALK'),
+            email_credentials=login(LOGIN_PREFIX['email']),
+            talk_credentials=login(LOGIN_PREFIX['talk']),
             live_wikis=frozenset(
                 wiki for wiki in _as_list(config.get('REMINDERS_LIVE_WIKIS')) if wiki in WIKI_HOSTS
             ),
@@ -79,7 +104,8 @@ class ReminderSettings:
         )
 
     def credentials_for(self, channel: str) -> BotCredentials | None:
-        return self.email_credentials if channel == 'email' else self.talk_credentials
+        """The login for a channel; an unknown channel raises KeyError, never a fallback."""
+        return {'email': self.email_credentials, 'talk': self.talk_credentials}[channel]
 
 
 @dataclass(frozen=True)
