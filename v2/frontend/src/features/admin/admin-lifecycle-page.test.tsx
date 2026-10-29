@@ -1,6 +1,6 @@
 import {Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen, within} from '@testing-library/react';
+import {render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
@@ -15,6 +15,8 @@ import {testMessages} from '../../test/handlers';
 type Lifecycle = components['schemas']['AdminLifecycle'];
 
 const LIFECYCLE_URL = new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString();
+const TERMINATION_URL = new URL('/api/v1/admin/conversations/7/termination', globalThis.location.origin).toString();
+const ARCHIVE_URL = new URL('/api/v1/admin/conversations/7/archive', globalThis.location.origin).toString();
 
 /** An active consultation mid-route: one unmet readiness check, live statistics from an
  *  informed-voting round, and the advanced controls visible. Enough branches in one
@@ -66,8 +68,11 @@ function renderConsole() {
   );
 }
 
-function serve(payload: Lifecycle) {
-  server.use(http.get(LIFECYCLE_URL, () => HttpResponse.json({data: payload})));
+function serve(payload: Lifecycle, onRead?: () => void) {
+  server.use(http.get(LIFECYCLE_URL, () => {
+    onRead?.();
+    return HttpResponse.json({data: payload});
+  }));
 }
 
 test('the page renders the console shell, not the legacy header and role bar', async () => {
@@ -100,6 +105,7 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByText('1 readiness check still need resolving before Arguments')).toBeVisible();
   expect(screen.getByRole('button', {name: 'Move on to Arguments →'})).toBeDisabled();
   expect(screen.getByText('12 participants joined', {exact: false})).toBeVisible();
+  expect(screen.queryByRole('button', {name: 'Archive consultation'})).not.toBeInTheDocument();
   expect(screen.getByText('Need time to coordinate inviting people back? You can pause first.')).toBeVisible();
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
   expect(within(screen.getByText(/These toggles act independently/)).getByText('Advanced.').tagName).toBe('STRONG');
@@ -168,6 +174,151 @@ test.each([
   expect(within(sidebar).getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(sidebar).getByRole('link', {name: /^Moderation/})).toHaveAttribute('href', '/admin/conversations/7/flags');
   expect(within(sidebar).getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
+});
+
+/** The lifecycle with a public-results toggle that is on, so archiving visibly turns it off. */
+const withPublicResults: Lifecycle = {...lifecycle, phase: {...lifecycle.phase, advancedControls: [
+  ...lifecycle.phase.advancedControls,
+  {key: 'public_results', label: 'Report', effect: 'x', active: true, requiresInitialization: false, initialized: true},
+]}};
+
+test('does not recommend archiving a published consultation with votes', async () => {
+  server.use(http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+    links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+  }})));
+  serve({...closedLifecycle, capabilities: {...closedLifecycle.capabilities, archive: false}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  expect(screen.queryByRole('button', {name: 'Archive consultation'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Reopen consultation'})).toBeNull();
+});
+
+test('offers archive for a voted consultation and lets the admin reopen it', async () => {
+  const requestedStates: boolean[] = [];
+  let csrfHeader: string | null = null;
+  server.use(
+    http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+      links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+    }})),
+    http.put(ARCHIVE_URL, async ({request}) => {
+      const body = await request.json() as {archived: boolean};
+      requestedStates.push(body.archived);
+      csrfHeader = request.headers.get('X-CSRFToken');
+      // Archiving turns public results off on the server; the page must follow.
+      const updatedLifecycle = {
+        ...withPublicResults,
+        conversation: {...lifecycle.conversation, status: body.archived ? 'archived' as const : 'active' as const},
+        phase: {...withPublicResults.phase, advancedControls: withPublicResults.phase.advancedControls.map(
+          (row) => row.key === 'public_results' ? {...row, active: false} : row)},
+      };
+      return HttpResponse.json({data: {archived: body.archived, changed: true, lifecycle: updatedLifecycle}});
+    }),
+  );
+  serve(withPublicResults);
+  const confirmation = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+
+  try {
+    const {container} = renderConsole();
+    await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+    const publicResults = () => container.querySelectorAll<HTMLInputElement>('.phases-form input[type="checkbox"]')[1]!;
+    expect(publicResults().checked).toBe(true);
+
+    const archive = screen.getByRole('button', {name: 'Archive consultation'});
+    // The button is described by the row that says what archiving does.
+    expect(document.getElementById(archive.getAttribute('aria-describedby')!)).toHaveClass('danger-row-desc');
+    archive.click();
+    expect(confirmation).toHaveBeenCalledTimes(1);
+
+    expect(await screen.findByRole('button', {name: 'Reopen consultation'})).toBeVisible();
+    expect(container.querySelector('.status-pill--closed')).not.toBeNull();
+    expect(requestedStates).toEqual([true]);
+    expect(csrfHeader).toBe('test-csrf-token');
+    // The checkboxes follow the server: a later "Save phases" cannot turn public results back on.
+    expect(publicResults().checked).toBe(false);
+    // An archived consultation offers no Publish row: it goes back by Reopen.
+    expect(screen.queryByRole('button', {name: /publish/i})).toBeNull();
+
+    screen.getByRole('button', {name: 'Reopen consultation'}).click();
+    expect(await screen.findByRole('button', {name: 'Archive consultation'})).toBeVisible();
+    expect(requestedStates).toEqual([true, false]);
+    expect(confirmation).toHaveBeenCalledTimes(2);
+  } finally {
+    confirmation.mockRestore();
+  }
+});
+
+test('does not send an archive request when the admin cancels confirmation', async () => {
+  const requestedStates: boolean[] = [];
+  server.use(
+    http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+      links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+    }})),
+    http.put(ARCHIVE_URL, async ({request}) => {
+      const body = await request.json() as {archived: boolean};
+      requestedStates.push(body.archived);
+      return HttpResponse.json({data: {archived: body.archived, changed: true, lifecycle}});
+    }),
+  );
+  serve(lifecycle);
+  const confirmation = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+
+  try {
+    renderConsole();
+    await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+    screen.getByRole('button', {name: 'Archive consultation'}).click();
+    expect(confirmation).toHaveBeenCalledTimes(1);
+    expect(requestedStates).toEqual([]);
+  } finally {
+    confirmation.mockRestore();
+  }
+});
+
+test('a refused archive leaves the consultation as it was and reads the server again', async () => {
+  let lifecycleReads = 0;
+  server.use(
+    http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+      links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+    }})),
+    http.put(ARCHIVE_URL, () => HttpResponse.json(
+      {error: {code: 'conversation_closed', message: 'SERVER message.'}}, {status: 409})),
+  );
+  serve(lifecycle, () => { lifecycleReads += 1; });
+  const confirmation = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+
+  try {
+    const {container} = renderConsole();
+    await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+    const readsBefore = lifecycleReads;
+    screen.getByRole('button', {name: 'Archive consultation'}).click();
+
+    await waitFor(() => expect(lifecycleReads).toBeGreaterThan(readsBefore));
+    expect(container.querySelector('.status-pill--closed')).toBeNull();
+    expect(screen.getByRole('button', {name: 'Archive consultation'})).toBeVisible();
+  } finally {
+    confirmation.mockRestore();
+  }
+});
+
+test('does not offer archive when the lifecycle capability is false', async () => {
+  server.use(http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+    links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+  }})));
+  serve({...lifecycle, capabilities: {...lifecycle.capabilities, archive: false}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  expect(screen.queryByRole('button', {name: 'Archive consultation'})).not.toBeInTheDocument();
 });
 
 test('a moderator sees the phase control and statistics read-only, with nothing that changes a phase', async () => {
