@@ -202,3 +202,25 @@ def test_openapi_documents_the_report_preview(client):
     assert 'preview' in report['properties']['publication']['enum']
     capabilities = spec['components']['schemas']['AdminLifecycle']['properties']['capabilities']
     assert 'previewReport' in capabilities['required']
+
+
+def test_preview_has_the_full_report_shape_while_informed_voting_is_open(
+    admin_client, conversation,
+):
+    """The public endpoint shows nothing in this phase; the preview shows the whole report."""
+    conversation.phase_informed_voting = True
+    conversation.phase6_polis_conversation_id = 'private-phase6-id'
+    db.session.commit()
+
+    with patch('app._build_phase6_results', return_value=_results()):
+        public = admin_client.get('/api/v1/conversations/test-conv/results')
+        data = admin_client.get(_url(conversation)).get_json()['data']
+
+    assert public.status_code == 409
+    assert data['publication'] == 'preview'
+    assert data['statements'][0]['initial'] is not None
+    assert data['statements'][0]['agreementShift'] == 10.0
+    assert data['participation']['initialRound'] == 25
+    assert data['dataAvailability']['opinionGroups'] is True
+    assert len(data['opinionGroups']) == 1
+    assert data['dataAvailability']['personalLens'] is False

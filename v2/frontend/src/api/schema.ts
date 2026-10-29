@@ -728,7 +728,7 @@ export interface paths {
         };
         /**
          * Preview the results report in any phase, for site admins only
-         * @description Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
+         * @description Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. It has the published report's full shape (cross-round comparison, opinion groups) even while informed voting is open, unlike the public results endpoint. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
          */
         get: operations["getAdminConversationReportPreview"];
         put?: never;
@@ -1372,6 +1372,8 @@ export interface components {
             guidance: {
                 recommendedCount: number;
                 note: string;
+                agreementFloor: number;
+                agreementMarkShare: number;
             };
             capabilities: {
                 manage: boolean;
@@ -1408,7 +1410,10 @@ export interface components {
                 pass: number;
                 disagree: number;
                 total: number;
+                /** @description Whole percent of agree among agree + disagree, rounded once by the server; null below guidance.agreementFloor agree + disagree responses. */
                 agreementPercent: number | null;
+                /** @description The agree share is at least guidance.agreementMarkShare; false when agreementPercent is null. */
+                agreementMarked: boolean;
             };
         };
         AdminStatementProvenance: {
@@ -2554,6 +2559,7 @@ export interface components {
             dataAvailability: {
                 detailedCounts: boolean;
                 opinionGroups: boolean;
+                personalLens: boolean;
             };
             moderation: {
                 excludedStatements: number;
@@ -2577,6 +2583,17 @@ export interface components {
             agreementShift: number | null;
             /** @enum {string|null} */
             viewerChoice: "agree" | "pass" | "disagree" | null;
+            /** @enum {string|null} */
+            viewerGroupChoice: "agree" | "pass" | "disagree" | null;
+            viewerMatchesGroup: boolean | null;
+            personalDelta: components["schemas"]["PersonalDelta"] | null;
+        };
+        PersonalDelta: {
+            /** @enum {string} */
+            initial: "agree" | "pass" | "disagree";
+            /** @enum {string} */
+            informed: "agree" | "pass" | "disagree";
+            changed: boolean;
         };
         VoteTally: {
             counts: {

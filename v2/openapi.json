@@ -944,7 +944,7 @@
     },
     "/admin/conversations/{conversationId}/report-preview": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
-      "get": {"operationId": "getAdminConversationReportPreview", "summary": "Preview the results report in any phase, for site admins only", "description": "Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.", "responses": {
+      "get": {"operationId": "getAdminConversationReportPreview", "summary": "Preview the results report in any phase, for site admins only", "description": "Never publishes, snapshots or changes the conversation. Open conversations use the live moderation filter; closed ones use the publication snapshot. It has the published report's full shape (cross-round comparison, opinion groups) even while informed voting is open, unlike the public results endpoint. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.", "responses": {
         "200": {"description": "Report preview", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ResultsReportResponse"}}}},
         "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -1223,7 +1223,7 @@
         "candidates": {"type": "array", "items": {"$ref": "#/components/schemas/AdminFeaturedCandidate"}},
         "dataAvailability": {"type": "object", "required": ["candidates"], "additionalProperties": false, "properties": {"candidates": {"type": "boolean"}}},
         "phase": {"type": "object", "required": ["argumentMappingActive", "informedVotingLive"], "additionalProperties": false, "properties": {"argumentMappingActive": {"type": "boolean"}, "informedVotingLive": {"type": "boolean"}}},
-        "guidance": {"type": "object", "required": ["recommendedCount", "note"], "additionalProperties": false, "properties": {"recommendedCount": {"type": "integer", "minimum": 1}, "note": {"type": "string"}}},
+        "guidance": {"type": "object", "required": ["recommendedCount", "note", "agreementFloor", "agreementMarkShare"], "additionalProperties": false, "properties": {"recommendedCount": {"type": "integer", "minimum": 1}, "note": {"type": "string"}, "agreementFloor": {"type": "integer", "minimum": 1}, "agreementMarkShare": {"type": "number", "minimum": 0, "maximum": 1}}},
         "capabilities": {"type": "object", "required": ["manage"], "additionalProperties": false, "properties": {"manage": {"type": "boolean"}}},
         "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
       }},
@@ -1233,7 +1233,7 @@
       }},
       "AdminFeaturedCandidate": {"type": "object", "required": ["statementId", "text", "seed", "votes", "provenance"], "additionalProperties": false, "properties": {
         "statementId": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "seed": {"type": "boolean"}, "provenance": {"oneOf": [{"type": "null"}, {"$ref": "#/components/schemas/AdminStatementProvenance"}]},
-        "votes": {"type": "object", "required": ["agree", "pass", "disagree", "total", "agreementPercent"], "additionalProperties": false, "properties": {"agree": {"type": "integer", "minimum": 0}, "pass": {"type": "integer", "minimum": 0}, "disagree": {"type": "integer", "minimum": 0}, "total": {"type": "integer", "minimum": 0}, "agreementPercent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}}}
+        "votes": {"type": "object", "required": ["agree", "pass", "disagree", "total", "agreementPercent", "agreementMarked"], "additionalProperties": false, "properties": {"agree": {"type": "integer", "minimum": 0}, "pass": {"type": "integer", "minimum": 0}, "disagree": {"type": "integer", "minimum": 0}, "total": {"type": "integer", "minimum": 0}, "agreementPercent": {"type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "Whole percent of agree among agree + disagree, rounded once by the server; null below guidance.agreementFloor agree + disagree responses."}, "agreementMarked": {"type": "boolean", "description": "The agree share is at least guidance.agreementMarkShare; false when agreementPercent is null."}}}
       }},
       "AdminStatementProvenance": {"type": "object", "required": ["derivedFromId", "scores"], "additionalProperties": false, "properties": {"derivedFromId": {"type": "integer", "minimum": 0}, "scores": {"type": "array", "items": {"type": "object", "required": ["model", "value"], "additionalProperties": false, "properties": {"model": {"type": "string"}, "value": {"type": "number", "minimum": 0, "maximum": 1}}}}}},
       "AdminStatementWorkspace": {"type": "object", "required": ["conversation", "statements", "moderationPolicy", "dataAvailability", "seeding", "capabilities", "links"], "additionalProperties": false, "properties": {
@@ -2598,11 +2598,12 @@
           },
           "dataAvailability": {
             "type": "object",
-            "required": ["detailedCounts", "opinionGroups"],
+            "required": ["detailedCounts", "opinionGroups", "personalLens"],
             "additionalProperties": false,
             "properties": {
               "detailedCounts": {"type": "boolean"},
-              "opinionGroups": {"type": "boolean"}
+              "opinionGroups": {"type": "boolean"},
+              "personalLens": {"type": "boolean"}
             }
           },
           "moderation": {
@@ -2631,7 +2632,7 @@
       },
       "ResultsStatement": {
         "type": "object",
-        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice"],
+        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice", "viewerGroupChoice", "viewerMatchesGroup", "personalDelta"],
         "additionalProperties": false,
         "properties": {
           "featuredStatementId": {"type": "integer", "minimum": 1},
@@ -2639,7 +2640,20 @@
           "initial": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
           "informed": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
           "agreementShift": {"type": ["number", "null"]},
-          "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]}
+          "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
+          "viewerGroupChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
+          "viewerMatchesGroup": {"type": ["boolean", "null"]},
+          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]}
+        }
+      },
+      "PersonalDelta": {
+        "type": "object",
+        "required": ["initial", "informed", "changed"],
+        "additionalProperties": false,
+        "properties": {
+          "initial": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "informed": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "changed": {"type": "boolean"}
         }
       },
       "VoteTally": {

@@ -857,16 +857,19 @@ test('routes preliminary results through the legacy workspace tab', async () => 
         publication: 'preliminary', resultsAvailable: true,
         openedAt: '2026-05-01T12:00:00Z', closedAt: null,
         context: {phase: 'Informed voting', status: 'provisional', method: 'Live comparison.'},
-        participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
-        dataAvailability: {detailedCounts: true, opinionGroups: false},
+        participation: {initialRound: null, informedRound: 22, matchedRounds: null},
+        dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false},
         moderation: {excludedStatements: 0, excludedParticipants: 0},
         statements: [{
           featuredStatementId: 31,
           statement: 'Regional communities should share infrastructure funding.',
-          initial: {counts: {agree: 12, pass: 3, disagree: 5, voters: 20}, percentages: {agree: 60, pass: 15, disagree: 25}},
+          initial: null,
           informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
-          agreementShift: 10,
+          agreementShift: null,
           viewerChoice: 'agree',
+          viewerGroupChoice: null,
+          viewerMatchesGroup: null,
+          personalDelta: null,
         }],
         opinionGroups: [],
         viewer: {participating: true, pseudonym: 'quiet-otter', revealState: null},
@@ -895,10 +898,12 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}><App /></MemoryRouter></QueryClientProvider>);
 
   expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByRole('table', {name: 'Preliminary informed opinion results by statement'})).toBeVisible();
-  expect(screen.getByText('70.0% agree · 20.0% pass')).toBeVisible();
-  // The recorded vote is past tense, and carries the modifier class the stylesheet colours.
-  expect(screen.getByText('Agreed', {selector: '.p6-my-vote.p6-my-vote--agreed'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Highest agreement'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Most divisive'})).toBeVisible();
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  expect(screen.getAllByText('70.0% agree · 20.0% pass')).toHaveLength(2);
+  // No own-vote line until the personal lens (owner, 2026-10-17).
+  expect(document.querySelector('.p6-my-vote')).toBeNull();
 });
 
 test('stays usable when the message catalogue is unavailable', async () => {
@@ -932,7 +937,9 @@ test('renders preliminary results from the message catalogue, not from source li
       new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
       () => HttpResponse.json({
         ...testMessages,
-        'conv-p6-table-aria': 'CATALOGUE TABLE LABEL',
+        'conv-preliminary-results-intro': 'CATALOGUE SINGLE-ROUND INTRO',
+        'report-highest-agreement': 'CATALOGUE TOP AGREEMENT',
+        'report-most-divisive': 'CATALOGUE CONTENTION',
         'conv-bar-label': '$1 in favour and $2 abstaining',
         'conv-participant-count': '$1 {{PLURAL:$1|voter|voters}}',
       }),
@@ -944,16 +951,19 @@ test('renders preliminary results from the message catalogue, not from source li
         publication: 'preliminary', resultsAvailable: true,
         openedAt: '2026-05-01T12:00:00Z', closedAt: null,
         context: {phase: 'Informed voting', status: 'provisional', method: 'Live comparison.'},
-        participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
-        dataAvailability: {detailedCounts: true, opinionGroups: false},
+        participation: {initialRound: null, informedRound: 22, matchedRounds: null},
+        dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false},
         moderation: {excludedStatements: 0, excludedParticipants: 0},
         statements: [{
           featuredStatementId: 31,
           statement: 'Regional communities should share infrastructure funding.',
-          initial: {counts: {agree: 12, pass: 3, disagree: 5, voters: 20}, percentages: {agree: 60, pass: 15, disagree: 25}},
+          initial: null,
           informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
-          agreementShift: 10,
+          agreementShift: null,
           viewerChoice: 'agree',
+          viewerGroupChoice: null,
+          viewerMatchesGroup: null,
+          personalDelta: null,
         }],
         opinionGroups: [],
         viewer: {participating: true, pseudonym: 'quiet-otter', revealState: null},
@@ -982,11 +992,13 @@ test('renders preliminary results from the message catalogue, not from source li
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}><App /></MemoryRouter></QueryClientProvider>);
 
   expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toBeVisible();
-  // aria-label resolved through the catalogue
-  expect(screen.getByRole('table', {name: 'CATALOGUE TABLE LABEL'})).toBeVisible();
+  // Section headings and the single-round explanation resolve through the catalogue.
+  expect(await screen.findByRole('heading', {name: 'CATALOGUE TOP AGREEMENT'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'CATALOGUE CONTENTION'})).toBeVisible();
+  expect(screen.getByText('CATALOGUE SINGLE-ROUND INTRO')).toBeVisible();
   // $1/$2 substitution, and the original English is gone
-  expect(screen.getByText('70.0% in favour and 20.0% abstaining')).toBeVisible();
-  expect(screen.queryByText('70.0% agree · 20.0% pass')).not.toBeInTheDocument();
+  expect(screen.getAllByText('70.0% in favour and 20.0% abstaining')).toHaveLength(2);
+  expect(screen.queryAllByText('70.0% agree · 20.0% pass')).toHaveLength(0);
   // {{PLURAL:}} selects the plural form for 22 participants
   expect(screen.getByText('22 voters')).toBeVisible();
 });

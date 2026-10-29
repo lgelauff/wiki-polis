@@ -355,6 +355,9 @@ TAGS:
     - adminconv-you-are-in-phase
     - base-admin-badge
     - featured-addnumber-heading
+    - featured-agreement-few
+    - featured-agreement-mark
+    - featured-agreement-note
     - featured-arg-delete
     - featured-arg-delete-confirm
     - featured-arg-hidden
@@ -372,6 +375,7 @@ TAGS:
     - featured-suggestions-empty
     - featured-suggestions-heading
     - featured-th-agree
+    - featured-th-agreement
     - featured-th-disagree
     - featured-th-number
     - featured-th-seed
