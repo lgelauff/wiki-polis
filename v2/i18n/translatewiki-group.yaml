@@ -179,8 +179,10 @@ TAGS:
     - admin-reminder-test-empty
     - admin-reminder-test-failed-blocked
     - admin-reminder-test-failed-error
+    - admin-reminder-test-failed-lagged
     - admin-reminder-test-failed-nobots
     - admin-reminder-test-failed-not-emailable
+    - admin-reminder-test-failed-not-emailable-here
     - admin-reminder-test-failed-throttled
     - admin-reminder-test-heading
     - admin-reminder-test-intro
@@ -189,8 +191,13 @@ TAGS:
     - admin-reminder-test-label-wiki
     - admin-reminder-test-mail-body
     - admin-reminder-test-mail-subject
+    - admin-reminder-test-rate-limited
+    - admin-reminder-test-refused
+    - admin-reminder-test-sending
     - admin-reminder-test-sent
+    - admin-reminder-test-sent-fallback
     - admin-reminder-test-talk-summary
+    - admin-reminder-test-unknown
     - admin-reminder-test-wiki-dry
     - admin-roles-assigned
     - admin-roles-change

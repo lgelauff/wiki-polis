@@ -1244,9 +1244,9 @@ export interface components {
         ReminderTestSendResponse: {
             data: {
                 /** @enum {string} */
-                outcome: "sent" | "dry_run" | "failed";
+                outcome: "sent" | "dry_run" | "failed" | "unknown";
                 /** @enum {string|null} */
-                reason: "wiki_not_live" | "no_credentials" | "not_emailable" | "nobots" | "throttled" | "blocked" | "api_error" | null;
+                reason: "wiki_not_live" | "no_credentials" | "not_emailable" | "nobots" | "throttled" | "blocked" | "lagged" | "outcome_unknown" | "api_error" | null;
                 code: string | null;
                 sentVia: string | null;
             };
@@ -3323,7 +3323,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Test result: sent, dry_run or failed, with the reason */
+            /** @description Test result: sent, dry_run, failed, or unknown (the wiki did not answer a send in time, so it may have been delivered), with the reason */
             200: {
                 headers: {
                     [name: string]: unknown;

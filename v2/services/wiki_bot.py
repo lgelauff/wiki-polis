@@ -5,12 +5,14 @@ wiki-mail, checks the bot exclusion templates on a talk page, and sends wiki-mai
 (`action=emailuser`) or a new talk-page section (`action=edit`, `section=new`).
 
 Every failure is raised as `WikiBotError` with one of the reason codes the delivery log
-uses, so callers never parse MediaWiki error codes themselves.
+uses, so callers never parse MediaWiki error codes themselves. Use the client as a context
+manager, or call `close()`, so its HTTP session is released.
 """
 
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -28,23 +30,30 @@ NOT_EMAILABLE = 'not_emailable'
 NOBOTS = 'nobots'
 THROTTLED = 'throttled'
 BLOCKED = 'blocked'
+LAGGED = 'lagged'                  # the wiki stayed too busy (maxlag) after waiting
+OUTCOME_UNKNOWN = 'outcome_unknown'  # a write got no answer: it may or may not have happened
 API_ERROR = 'api_error'
 
 _NOT_EMAILABLE_CODES = {'noemail', 'nowikiemail', 'notarget', 'usermaildisabled'}
 _THROTTLED_CODES = {'ratelimited', 'actionthrottledtext'}
 _BLOCKED_CODES = {'blocked', 'autoblocked', 'blockedfrommail', 'globalblocking-blockedtext'}
 
-# Wait for replication lag above this many seconds (https://www.mediawiki.org/wiki/Manual:Maxlag_parameter).
+# Writes ask the wiki to refuse them while replication lag is above this many seconds
+# (https://www.mediawiki.org/wiki/Manual:Maxlag_parameter). A refused write did nothing, so
+# it is retried after the wiki's Retry-After, at most this many times and this long each.
 _MAXLAG = 5
+_MAXLAG_RETRIES = 2
+_MAXLAG_WAIT_CAP = 5.0
 
 
 class WikiBotError(Exception):
     """A send or check failed. `reason` is a delivery-log code; `code` is MediaWiki's."""
 
-    def __init__(self, reason: str, code: str | None = None):
+    def __init__(self, reason: str, code: str | None = None, *, retry_after: float | None = None):
         super().__init__(f'{reason}: {code}' if code else reason)
         self.reason = reason
         self.code = code
+        self.retry_after = retry_after
 
 
 def _reason_for(code: str) -> str:
@@ -54,36 +63,43 @@ def _reason_for(code: str) -> str:
         return THROTTLED
     if code in _BLOCKED_CODES:
         return BLOCKED
+    if code == 'maxlag':
+        return LAGGED
     return API_ERROR
 
 
 _NOBOTS = re.compile(r'\{\{\s*nobots\s*(\|[^}]*)?\}\}', re.IGNORECASE)
-_BOTS = re.compile(r'\{\{\s*bots\s*\|\s*(allow|deny)\s*=\s*([^}]*)\}\}', re.IGNORECASE)
+_BOTS = re.compile(r'\{\{\s*bots\s*((?:\|[^}]*)?)\}\}', re.IGNORECASE)
 
 
 def _name_key(name: str) -> str:
-    return name.strip().replace('_', ' ').casefold()
+    return ' '.join(name.replace('_', ' ').split()).casefold()
 
 
 def bot_allowed(wikitext: str, bot_username: str) -> bool:
     """Whether the bot exclusion templates on a page let this bot post there.
 
-    `{{nobots}}` excludes every bot. `{{bots|deny=…}}` excludes the listed bots, or all of
-    them for `all`. `{{bots|allow=…}}` admits only the listed bots; `none` admits none.
+    Follows the Template:Bots convention, over every template on the page:
+    `{{nobots}}` excludes every bot; `{{bots|deny=…}}` excludes the listed bots (or `all`);
+    `{{bots|allow=…}}` admits only the listed bots (`none` admits none); `{{bots|optout=all}}`
+    opts out of every automated message.
     """
     if _NOBOTS.search(wikitext):
         return False
-    match = _BOTS.search(wikitext)
-    if not match:
-        return True
-    kind = match.group(1).lower()
-    names = {_name_key(part) for part in match.group(2).split(',') if part.strip()}
-    me = _name_key(bot_username)
     # A bot password logs in as "Name@label"; templates name the account itself.
-    me = me.split('@', 1)[0]
-    if kind == 'allow':
-        return 'all' in names or me in names
-    return not ('all' in names or me in names)
+    me = _name_key(bot_username.split('@', 1)[0])
+    for match in _BOTS.finditer(wikitext):
+        for param in match.group(1).split('|'):
+            key, _, value = param.partition('=')
+            key = key.strip().lower()
+            names = {_name_key(part) for part in value.split(',') if part.strip()}
+            if key == 'deny' and ('all' in names or me in names):
+                return False
+            if key == 'allow' and not ('all' in names or me in names):
+                return False
+            if key == 'optout' and 'all' in names:
+                return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -102,34 +118,58 @@ class WikiBotClient:
 
     def __init__(self, wiki: str, *, credentials: BotCredentials | None, user_agent: str,
                  timeout: float = 10.0,
-                 session_factory: Callable[[], requests.Session] = requests.Session):
+                 session_factory: Callable[[], requests.Session] = requests.Session,
+                 sleep: Callable[[float], None] = time.sleep):
         if wiki not in WIKI_HOSTS:
             raise ValueError(f'unknown wiki: {wiki}')
         self.wiki = wiki
         self._url = f'https://{WIKI_HOSTS[wiki]}/w/api.php'
         self._credentials = credentials
         self._timeout = timeout
+        self._sleep = sleep
         self._session = session_factory()
         self._session.headers['User-Agent'] = user_agent
         self._logged_in = False
 
+    def close(self) -> None:
+        self._session.close()
+
+    def __enter__(self) -> WikiBotClient:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
     # -- transport ---------------------------------------------------------------------
 
-    def _call(self, method: str, params: dict) -> dict:
+    def _call(self, method: str, params: dict, *, write: bool = False) -> dict:
         params = {**params, 'format': 'json', 'formatversion': '2'}
         try:
             if method == 'GET':
                 response = self._session.get(self._url, params=params, timeout=self._timeout)
             else:
                 response = self._session.post(self._url, data=params, timeout=self._timeout)
-            response.raise_for_status()
             payload = response.json()
+        except requests.ConnectTimeout as exc:
+            # The connection never opened, so nothing reached the wiki.
+            raise WikiBotError(API_ERROR, 'connect_timeout') from exc
         except (requests.RequestException, ValueError) as exc:
-            raise WikiBotError(API_ERROR, type(exc).__name__) from exc
+            # Any other failure during a write may come after the wiki acted on it.
+            code = 'timeout' if isinstance(exc, requests.Timeout) else type(exc).__name__
+            raise WikiBotError(OUTCOME_UNKNOWN if write else API_ERROR, code) from exc
+        # The error body comes first: MediaWiki answers a maxlag refusal with HTTP 503.
         error = payload.get('error') if isinstance(payload, dict) else None
         if error:
             code = str(error.get('code') or 'unknown')
-            raise WikiBotError(_reason_for(code), code)
+            retry_after = None
+            if code == 'maxlag':
+                try:
+                    retry_after = float(response.headers.get('Retry-After') or _MAXLAG_WAIT_CAP)
+                except ValueError:
+                    retry_after = _MAXLAG_WAIT_CAP
+            raise WikiBotError(_reason_for(code), code, retry_after=retry_after)
+        if not response.ok:
+            raise WikiBotError(API_ERROR, f'http_{response.status_code}')
         return payload
 
     def _token(self, kind: str) -> str:
@@ -141,9 +181,16 @@ class WikiBotClient:
 
     def _write(self, params: dict) -> dict:
         self.login()
-        return self._call('POST', {
-            **params, 'token': self._token('csrf'), 'assert': 'user', 'maxlag': _MAXLAG,
-        })
+        for attempt in range(_MAXLAG_RETRIES + 1):
+            try:
+                return self._call('POST', {
+                    **params, 'token': self._token('csrf'), 'assert': 'user', 'maxlag': _MAXLAG,
+                }, write=True)
+            except WikiBotError as exc:
+                if exc.reason != LAGGED or attempt == _MAXLAG_RETRIES:
+                    raise
+                self._sleep(min(exc.retry_after or _MAXLAG_WAIT_CAP, _MAXLAG_WAIT_CAP))
+        raise AssertionError('unreachable')
 
     # -- session -----------------------------------------------------------------------
 
@@ -174,10 +221,10 @@ class WikiBotClient:
         return bool(users[0].get('emailable'))
 
     def talk_page_allows_bot(self, username: str) -> bool:
-        """Whether the user's talk page lets this bot post (bot exclusion templates)."""
+        """Whether the user's talk page, after following a redirect, lets this bot post."""
         payload = self._call('GET', {
             'action': 'query', 'prop': 'revisions', 'rvprop': 'content', 'rvslots': 'main',
-            'titles': f'User talk:{username}',
+            'titles': f'User talk:{username}', 'redirects': '1',
         })
         pages = (payload.get('query') or {}).get('pages') or [{}]
         revisions = pages[0].get('revisions') or []
@@ -198,10 +245,11 @@ class WikiBotClient:
             raise WikiBotError(API_ERROR, f'emailuser_{str(result or "unknown").lower()}')
 
     def post_talk_section(self, username: str, *, title: str, text: str, summary: str) -> int:
-        """Add a new section to the user's talk page; returns the new revision id."""
+        """Add a new section to the user's talk page (following a redirect, as for a renamed
+        account); returns the new revision id."""
         payload = self._write({
             'action': 'edit', 'title': f'User talk:{username}', 'section': 'new',
-            'sectiontitle': title, 'text': text, 'summary': summary,
+            'sectiontitle': title, 'text': text, 'summary': summary, 'redirect': '1',
             'bot': '1',   # ignored until the account has the bot flag
         })
         edit = payload.get('edit') or {}

@@ -146,7 +146,8 @@ from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
-from services.reminder_test import (ReminderSettings, ReminderTestMessage,
+from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, ReminderSettings,
+                                    ReminderTestMessage, ReminderTestRefused,
                                     default_client_factory, send_test_message)
 from services.wiki_bot import WIKI_HOSTS
 
@@ -3996,21 +3997,32 @@ def _run_reminder_test(*, wiki: str, channel: str, recipient: str):
     """One test message from the bot (#577): the API's test button and the CLI share this.
 
     Raises `ReminderTestRefused` for a request that is not allowed; otherwise returns a
-    `ReminderTestResult` and writes one audit row (outcome, wiki, channel, reason; never
-    the recipient's name)."""
+    `ReminderTestResult`. Either way it writes one audit row (outcome, wiki, channel,
+    reason; never the recipient's name)."""
     settings = _reminder_settings()
     message = ReminderTestMessage(
         subject=i18n.resolve('admin-reminder-test-mail-subject'),
         body=i18n.resolve('admin-reminder-test-mail-body'),
         summary=i18n.resolve('admin-reminder-test-talk-summary'),
     )
-    result = send_test_message(
-        wiki=wiki, channel=channel, recipient=recipient, settings=settings,
-        message=message, client_factory=default_client_factory(settings),
-    )
+    # A command-line run has no signed-in actor; say so instead of leaving it unexplained.
+    origin = {} if has_request_context() else {'actor_kind': 'cli'}
+    # Only known values go into the audit row: a refused request may carry anything.
+    audited = {
+        'wiki': wiki if wiki in WIKI_HOSTS else 'other',
+        'channel': channel if channel in REMINDER_CHANNELS else 'other',
+    }
+    try:
+        result = send_test_message(
+            wiki=wiki, channel=channel, recipient=recipient, settings=settings,
+            message=message, client_factory=default_client_factory(settings),
+        )
+    except ReminderTestRefused as exc:
+        record_audit('reminder.test', outcome='refused', reason=exc.code, **audited, **origin)
+        raise
     record_audit(
-        'reminder.test', outcome=result.outcome, wiki=wiki, channel=channel,
-        reason=result.reason, code=result.code, sent_via=result.sent_via,
+        'reminder.test', outcome=result.outcome, reason=result.reason, code=result.code,
+        sent_via=result.sent_via, **audited, **origin,
     )
     return result
 
@@ -6199,12 +6211,11 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.cli.command('send-test-reminder')
     @click.option('--wiki', required=True, type=click.Choice(sorted(WIKI_HOSTS)))
-    @click.option('--channel', required=True, type=click.Choice(['email', 'talk']))
+    @click.option('--channel', required=True, type=click.Choice(REMINDER_CHANNELS))
     @click.option('--to', 'recipient', required=True,
                   help='A username listed in REMINDERS_TEST_RECIPIENTS.')
     def send_test_reminder_cmd(wiki, channel, recipient):
         """Send one test message from the Proto bot to a test account (#577)."""
-        from services.reminder_test import ReminderTestRefused
         try:
             result = _run_reminder_test(wiki=wiki, channel=channel, recipient=recipient)
         except ReminderTestRefused as exc:

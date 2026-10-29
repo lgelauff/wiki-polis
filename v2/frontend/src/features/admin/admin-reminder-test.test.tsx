@@ -1,6 +1,6 @@
 import {Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {expect, test} from 'vitest';
 
@@ -25,15 +25,27 @@ const state: State = {
   credentialsSet: true,
 };
 
-function serve(stateData: State, sent?: Sent, seen: unknown[] = []) {
+const sent = (sentVia: string): Sent => ({outcome: 'sent', reason: null, code: null, sentVia});
+
+function serve(stateData: State, reply?: () => Response | Promise<Response>, seen: unknown[] = []) {
   server.use(
     http.get(STATE_URL, () => HttpResponse.json({data: stateData})),
     http.post(SEND_URL, async ({request}) => {
       seen.push(await request.json());
-      return HttpResponse.json({data: sent});
+      return reply ? reply() : HttpResponse.json({data: sent('nlwiki')});
     }),
   );
   return seen;
+}
+
+function fold() {
+  return screen.getByRole('heading', {name: 'Reminder test', level: 2}).closest('details')!;
+}
+
+function toggle(open: boolean) {
+  const details = fold();
+  details.open = open;
+  fireEvent(details, new Event('toggle'));
 }
 
 async function renderSection() {
@@ -44,31 +56,87 @@ async function renderSection() {
       </Suspense>
     </QueryClientProvider>,
   );
-  const fold = (await screen.findByRole('heading', {name: 'Reminder test', level: 2})).closest('details')!;
-  fold.open = true;
-  fireEvent(fold, new Event('toggle'));
+  await screen.findByRole('heading', {name: 'Reminder test', level: 2});
+  toggle(true);
 }
 
 test('defaults to a live wiki and sends to the chosen test account', async () => {
-  const seen = serve(state, {outcome: 'sent', reason: null, code: null, sentVia: 'metawiki'});
+  const seen = serve(state);
   await renderSection();
   const wiki = await screen.findByRole('combobox', {name: 'Wiki'});
   expect((wiki as HTMLSelectElement).value).toBe('nlwiki');
   expect(screen.getByRole('option', {name: 'meta.wikimedia.org (dry run)'})).toBeTruthy();
   fireEvent.change(screen.getByRole('combobox', {name: 'Test account'}), {target: {value: 'Tester two'}});
   fireEvent.click(screen.getByRole('button', {name: 'Send test'}));
-  expect((await screen.findByRole('status')).textContent).toBe('Sent from metawiki.');
+  expect(await screen.findByText('Sent from nl.wikipedia.org.')).toBeTruthy();
   expect(seen).toEqual([{wiki: 'nlwiki', channel: 'email', recipient: 'Tester two'}]);
 });
 
-test('says why a test was not sent', async () => {
-  serve(state, {outcome: 'failed', reason: 'nobots', code: null, sentVia: null});
+test('says when wiki-mail went out from Meta instead', async () => {
+  serve({...state, wikis: state.wikis.map((row) => ({...row, live: true}))},
+    () => HttpResponse.json({data: sent('metawiki')}));
+  await renderSection();
+  fireEvent.change(await screen.findByRole('combobox', {name: 'Wiki'}), {target: {value: 'nlwiki'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText(
+    "Sent from meta.wikimedia.org, because this account can't receive wiki-mail on nl.wikipedia.org.",
+  )).toBeTruthy();
+});
+
+test('says why a test was not sent, and that Meta was not tried', async () => {
+  serve(state, () => HttpResponse.json({data: {
+    outcome: 'failed', reason: 'not_emailable', code: 'fallback_not_live', sentVia: null,
+  }}));
+  await renderSection();
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText(/Meta is not switched on for real sends, so it was not tried/)).toBeTruthy();
+});
+
+test('a talk page that keeps bots out is named as the reason', async () => {
+  serve(state, () => HttpResponse.json({data: {outcome: 'failed', reason: 'nobots', code: null, sentVia: null}}));
   await renderSection();
   fireEvent.change(await screen.findByRole('combobox', {name: 'Channel'}), {target: {value: 'talk'}});
   fireEvent.click(screen.getByRole('button', {name: 'Send test'}));
-  expect((await screen.findByRole('status')).textContent).toBe(
-    'Not sent: the talk page asks bots not to post there.',
-  );
+  expect(await screen.findByText('Not sent: the talk page asks bots not to post there.')).toBeTruthy();
+});
+
+test('shows that a send is under way, and keeps its result when the section is folded', async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  serve(state, async () => { await gate; return HttpResponse.json({data: sent('nlwiki')}); });
+  await renderSection();
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText(/^Sending…/)).toBeTruthy();
+  toggle(false);
+  release();
+  await waitFor(() => expect(screen.queryByText(/^Sending…/)).toBeNull());
+  toggle(true);
+  expect(await screen.findByText('Sent from nl.wikipedia.org.')).toBeTruthy();
+});
+
+test('changing the selection clears the previous result', async () => {
+  serve(state);
+  await renderSection();
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText('Sent from nl.wikipedia.org.')).toBeTruthy();
+  fireEvent.change(screen.getByRole('combobox', {name: 'Channel'}), {target: {value: 'talk'}});
+  expect(screen.queryByText('Sent from nl.wikipedia.org.')).toBeNull();
+});
+
+test('a refused request is said in the console\'s own words', async () => {
+  serve(state, () => HttpResponse.json({error: {
+    code: 'recipient_not_allowed', message: 'Only the configured test accounts, wikis and channels can be used.',
+  }}, {status: 400}));
+  await renderSection();
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText(/only the test accounts, wikis and channels set on the server/)).toBeTruthy();
+});
+
+test('too many tests in a minute are named as such', async () => {
+  serve(state, () => HttpResponse.json({error: {code: 'rate_limited', message: '6 per 1 minute'}}, {status: 429}));
+  await renderSection();
+  fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
+  expect(await screen.findByText(/too many tests in a short time/)).toBeTruthy();
 });
 
 test('without test accounts there is nothing to send to', async () => {
@@ -78,8 +146,11 @@ test('without test accounts there is nothing to send to', async () => {
   expect(screen.queryByRole('button', {name: 'Send test'})).toBeNull();
 });
 
-test('says when the bot login is not set', async () => {
+test('says when the bot login is not set, next to the button', async () => {
   serve({...state, credentialsSet: false});
   await renderSection();
-  expect(await screen.findByText(/the bot's login is not set on the server/)).toBeTruthy();
+  const button = await screen.findByRole('button', {name: 'Send test'});
+  expect(button.getAttribute('aria-describedby')).toBeTruthy();
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent)
+    .toMatch(/the bot's login is not set on the server/);
 });

@@ -7,10 +7,13 @@ import pytest
 
 from db import AuditEvent
 from services.reminder_test import (
-    DRY_RUN, FAILED, NO_CREDENTIALS, SENT, WIKI_NOT_LIVE, ReminderSettings, ReminderTestMessage,
-    ReminderTestRefused, normalize_username, send_test_message,
+    DRY_RUN, FAILED, FALLBACK_NOT_LIVE, NO_CREDENTIALS, SENT, UNKNOWN, WIKI_NOT_LIVE,
+    ReminderSettings, ReminderTestMessage, ReminderTestRefused, normalize_username,
+    send_test_message,
 )
-from services.wiki_bot import NOBOTS, NOT_EMAILABLE, THROTTLED, BotCredentials, WikiBotError
+from services.wiki_bot import (
+    NOBOTS, NOT_EMAILABLE, OUTCOME_UNKNOWN, THROTTLED, BotCredentials, WikiBotError,
+)
 
 MESSAGE = ReminderTestMessage(subject='Proto test message', body='Body', summary='Summary')
 
@@ -102,10 +105,31 @@ def test_email_falls_back_to_meta():
     assert log[-1][:2] == ('email', 'metawiki')
 
 
-def test_no_fallback_when_meta_is_not_live():
+def test_no_fallback_when_meta_is_not_live_and_the_result_says_so():
     result, log = run(conf=settings(live=('nlwiki',)), emailable=('metawiki',))
-    assert (result.outcome, result.reason) == (FAILED, NOT_EMAILABLE)
+    assert (result.outcome, result.reason, result.code) == (FAILED, NOT_EMAILABLE, FALLBACK_NOT_LIVE)
     assert not [entry for entry in log if entry[0] == 'email']
+    assert not [entry for entry in log if entry[1] == 'metawiki']   # Meta was not even asked
+
+
+def test_not_emailable_after_trying_meta_has_no_fallback_code():
+    result, log = run(emailable=())
+    assert (result.reason, result.code) == (NOT_EMAILABLE, None)
+    assert ('emailable?', 'metawiki', 'Tester') in log
+
+
+def test_a_send_without_an_answer_has_an_unknown_outcome():
+    result, _ = run(emailable=('nlwiki',), error=WikiBotError(OUTCOME_UNKNOWN, 'timeout'))
+    assert (result.outcome, result.reason) == (UNKNOWN, OUTCOME_UNKNOWN)
+
+
+def test_settings_accept_a_comma_separated_string():
+    conf = ReminderSettings.from_config({
+        'REMINDERS_LIVE_WIKIS': 'nlwiki, enwiki', 'REMINDERS_TEST_RECIPIENTS': 'tester, Tester two,',
+    }, user_agent='x')
+    assert conf.live_wikis == frozenset({'nlwiki'})
+    assert conf.test_recipients == ('Tester', 'Tester two')
+    assert conf.credentials is None
 
 
 def test_not_emailable_anywhere_fails_and_never_moves_to_the_talk_page():
@@ -175,13 +199,24 @@ def test_send_returns_the_result_and_audits_without_the_name(admin_client, confi
     assert 'Tester' not in repr(event.detail) and event.target_id is None
 
 
-def test_send_to_an_account_that_is_not_listed_is_refused(admin_client, configured):
+def test_send_to_an_account_that_is_not_listed_is_refused_and_audited(admin_client, configured):
     response = admin_client.post('/api/v1/admin/reminder-test-sends', json={
         'wiki': 'nlwiki', 'channel': 'email', 'recipient': 'SomeoneElse',
     })
     assert response.status_code == 400
     assert response.get_json()['error']['code'] == 'recipient_not_allowed'
     assert configured == []
+    event = AuditEvent.query.filter_by(operation='reminder.test').one()
+    assert event.outcome == 'refused' and event.detail['reason'] == 'recipient_not_allowed'
+    assert 'SomeoneElse' not in repr(event.detail)
+
+
+def test_refused_request_audits_only_known_values(admin_client, configured):
+    admin_client.post('/api/v1/admin/reminder-test-sends', json={
+        'wiki': 'evil.example', 'channel': 'email', 'recipient': 'Tester',
+    })
+    event = AuditEvent.query.filter_by(operation='reminder.test').one()
+    assert event.detail['wiki'] == 'other' and event.detail['reason'] == 'unknown_wiki'
 
 
 def test_send_rejects_a_malformed_body(admin_client, configured):
@@ -195,6 +230,8 @@ def test_cli_sends_and_reports(app, configured):
     ])
     assert result.exit_code == 0, result.output
     assert 'sent (sent from nlwiki)' in result.output
+    event = AuditEvent.query.filter_by(operation='reminder.test').one()
+    assert event.detail['actor_kind'] == 'cli'
 
 
 def test_cli_dry_run_on_a_wiki_that_is_not_live(app, configured):
