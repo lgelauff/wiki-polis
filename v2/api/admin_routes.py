@@ -47,6 +47,7 @@ from services.admin_settings import (
     AccessSettingsLocked, DemoSwitchForbidden, InvalidAccessSettings,
 )
 from services.eligibility_policies import EligibilityPolicyRefused
+from services.reminder_test import ReminderTestRefused
 
 
 def register_admin_routes(
@@ -60,6 +61,8 @@ def register_admin_routes(
     create_admin_conversation: Callable[[dict], dict],
     grant_global_admin: Callable[[dict], dict],
     set_global_admin: Callable[[int, dict], dict],
+    resolve_reminder_test: Callable[[], dict],
+    send_reminder_test: Callable[[dict], dict],
     resolve_admin_participants: Callable[[int], dict],
     set_admin_participant_access: Callable[[int, int, dict], dict],
     resolve_admin_flags: Callable[[int], dict],
@@ -209,6 +212,29 @@ def register_admin_routes(
             return error_response(
                 'own_site_admin_protected',
                 'You cannot remove your own site admin access.', 409,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.get('/admin/reminder-test')
+    def get_reminder_test():
+        return _no_store(jsonify({'data': resolve_reminder_test()}))
+
+    @bp.post('/admin/reminder-test-sends')
+    @limiter.limit('6 per minute')
+    def post_reminder_test_send():
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'wiki', 'channel', 'recipient'}
+                or any(not isinstance(body.get(key), str) or not body[key].strip()
+                       or len(body[key]) > 255 for key in body)):
+            return error_response(
+                'validation_failed', 'Choose a wiki, a channel and a test account.', 400,
+            )
+        try:
+            data = send_reminder_test(body)
+        except ReminderTestRefused as exc:
+            return error_response(
+                exc.code,
+                'Only the configured test accounts, wikis and channels can be used.', 400,
             )
         return _no_store(jsonify({'data': data}))
 

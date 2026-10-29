@@ -146,6 +146,9 @@ from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
+from services.reminder_test import (ReminderSettings, ReminderTestMessage,
+                                    default_client_factory, send_test_message)
+from services.wiki_bot import WIKI_HOSTS
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -3985,6 +3988,57 @@ def _grant_global_admin_api_payload(body: dict) -> dict:
     }
 
 
+def _reminder_settings() -> ReminderSettings:
+    return ReminderSettings.from_config(current_app.config, user_agent=_MW_USER_AGENT)
+
+
+def _run_reminder_test(*, wiki: str, channel: str, recipient: str):
+    """One test message from the bot (#577): the API's test button and the CLI share this.
+
+    Raises `ReminderTestRefused` for a request that is not allowed; otherwise returns a
+    `ReminderTestResult` and writes one audit row (outcome, wiki, channel, reason; never
+    the recipient's name)."""
+    settings = _reminder_settings()
+    message = ReminderTestMessage(
+        subject=i18n.resolve('admin-reminder-test-mail-subject'),
+        body=i18n.resolve('admin-reminder-test-mail-body'),
+        summary=i18n.resolve('admin-reminder-test-talk-summary'),
+    )
+    result = send_test_message(
+        wiki=wiki, channel=channel, recipient=recipient, settings=settings,
+        message=message, client_factory=default_client_factory(settings),
+    )
+    record_audit(
+        'reminder.test', outcome=result.outcome, wiki=wiki, channel=channel,
+        reason=result.reason, code=result.code, sent_via=result.sent_via,
+    )
+    return result
+
+
+def _reminder_test_api_payload() -> dict:
+    if not _is_global_admin():
+        _refuse_admin()
+    settings = _reminder_settings()
+    return {
+        'wikis': [{'key': wiki, 'host': host, 'live': wiki in settings.live_wikis}
+                  for wiki, host in WIKI_HOSTS.items()],
+        'recipients': list(settings.test_recipients),
+        'credentialsSet': settings.credentials is not None,
+    }
+
+
+def _send_reminder_test_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        _refuse_admin()
+    result = _run_reminder_test(
+        wiki=body['wiki'], channel=body['channel'], recipient=body['recipient'],
+    )
+    return {
+        'outcome': result.outcome, 'reason': result.reason, 'code': result.code,
+        'sentVia': result.sent_via,
+    }
+
+
 def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
         _refuse_admin()
@@ -5914,6 +5968,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = (
         os.environ.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', '0')
     )
+    # Participant reminders (#577). The bot's own login (a bot password), and two guards
+    # that are empty by default: the wikis where real sends are switched on, and the only
+    # accounts that may receive anything while the bot is being tested (#581, #582).
+    app.config['REMINDERS_BOT_USERNAME'] = _read_secret('reminders-bot-username')
+    app.config['REMINDERS_BOT_PASSWORD'] = _read_secret('reminders-bot-password')
+    app.config['REMINDERS_LIVE_WIKIS'] = _split_csv(os.environ.get('REMINDERS_LIVE_WIKIS', ''))
+    app.config['REMINDERS_TEST_RECIPIENTS'] = _split_csv(
+        os.environ.get('REMINDERS_TEST_RECIPIENTS', ''))
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -6135,6 +6197,30 @@ def create_app(test_config: dict | None = None) -> Flask:
         if result['failed']:
             raise SystemExit(1)                # the job's failure email names the run; logs name the conversation
 
+    @app.cli.command('send-test-reminder')
+    @click.option('--wiki', required=True, type=click.Choice(sorted(WIKI_HOSTS)))
+    @click.option('--channel', required=True, type=click.Choice(['email', 'talk']))
+    @click.option('--to', 'recipient', required=True,
+                  help='A username listed in REMINDERS_TEST_RECIPIENTS.')
+    def send_test_reminder_cmd(wiki, channel, recipient):
+        """Send one test message from the Proto bot to a test account (#577)."""
+        from services.reminder_test import ReminderTestRefused
+        try:
+            result = _run_reminder_test(wiki=wiki, channel=channel, recipient=recipient)
+        except ReminderTestRefused as exc:
+            click.echo(f'Refused: {exc.code}.')
+            raise SystemExit(2)
+        line = f'Test {channel} on {wiki}: {result.outcome}'
+        if result.sent_via:
+            line += f' (sent from {result.sent_via})'
+        if result.reason:
+            line += f', reason {result.reason}'
+        if result.code:
+            line += f' ({result.code})'
+        click.echo(line + '.')
+        if result.outcome == 'failed':
+            raise SystemExit(1)
+
     # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
     # English and the in-repo translations, so the language switcher is visible as
     # soon as a locale ships its first catalogue.  Set ENABLED_LOCALES to override.
@@ -6309,6 +6395,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         create_admin_conversation=_create_admin_conversation_api_payload,
         grant_global_admin=_grant_global_admin_api_payload,
         set_global_admin=_set_global_admin_api_payload,
+        resolve_reminder_test=_reminder_test_api_payload,
+        send_reminder_test=_send_reminder_test_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,
