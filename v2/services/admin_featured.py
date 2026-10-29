@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import timezone
+from fractions import Fraction
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -39,10 +40,26 @@ class FeaturedSelectionResult:
     changed: bool
 
 
+def agreement(agree: int, disagree: int, *, floor: int, mark_share: float) -> tuple[int | None, bool]:
+    """The agreement share of agree + disagree responses, as the API serves it.
+
+    Withheld (None) below `floor` agree + disagree responses: it is opinion data, which
+    follows the floor in admin views too (owner, 2026-10-15). Otherwise a whole percent,
+    rounded half up once, here, so no client rounds it again. Marked when the exact share
+    is at least `mark_share`. TODO(#233): take the floor from the shared floor helper.
+    """
+    position = agree + disagree
+    if position < max(1, floor):
+        return None, False
+    percent = (200 * agree + position) // (2 * position)
+    return percent, Fraction(agree, position) >= Fraction(str(mark_share))
+
+
 def build_featured_workspace(
     *, conversation, confirmed, candidates, provenance_by_tid,
     statement_text_by_tid,
     recommendation: int, self_link: str, lifecycle_link: str,
+    agreement_floor: int = 10, agreement_mark_share: float = 0.7,
 ) -> dict:
     def provenance(tid: int):
         row = provenance_by_tid.get(tid)
@@ -81,7 +98,9 @@ def build_featured_workspace(
     for row in candidates or []:
         agree = int(row.get('n_agree') or 0)
         disagree = int(row.get('n_disagree') or 0)
-        position_votes = agree + disagree
+        percent, marked = agreement(
+            agree, disagree, floor=agreement_floor, mark_share=agreement_mark_share,
+        )
         projected_candidates.append({
             'statementId': int(row['tid']),
             'text': str(row.get('text') or ''),
@@ -91,10 +110,8 @@ def build_featured_workspace(
                 'pass': int(row.get('n_pass') or 0),
                 'disagree': disagree,
                 'total': int(row.get('n_votes') or 0),
-                'agreementPercent': (
-                    round(agree * 100 / position_votes, 1)
-                    if position_votes else None
-                ),
+                'agreementPercent': percent,
+                'agreementMarked': marked,
             },
             'provenance': provenance(int(row['tid'])),
         })
@@ -116,6 +133,8 @@ def build_featured_workspace(
         'guidance': {
             'recommendedCount': recommendation,
             'note': 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.',
+            'agreementFloor': agreement_floor,
+            'agreementMarkShare': agreement_mark_share,
         },
         'capabilities': {'manage': True},
         'links': {'self': self_link, 'lifecycle': lifecycle_link},

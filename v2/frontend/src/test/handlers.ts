@@ -141,8 +141,8 @@ export const handlers = [
   http.get(new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     selected: [{featuredId: 61, statementId: 12, text: 'An approved seed statement.', systemSuggested: true, provenance: null, arguments: [{id: 71, side: 'pro', body: 'A useful supporting argument.', proposerPseudonym: 'quiet-otter', hidden: false, createdAt: '2026-08-13T10:00:00Z'}]}],
-    candidates: [{statementId: 13, text: 'A candidate preserving another viewpoint.', seed: false, votes: {agree: 3, pass: 2, disagree: 1, total: 6, agreementPercent: 75}, provenance: null}],
-    dataAvailability: {candidates: true}, phase: {argumentMappingActive: false, informedVotingLive: false}, guidance: {recommendedCount: 15, note: 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.'}, capabilities: {manage: true},
+    candidates: [{statementId: 13, text: 'A candidate preserving another viewpoint.', seed: false, votes: {agree: 3, pass: 2, disagree: 1, total: 6, agreementPercent: null, agreementMarked: false}, provenance: null}],
+    dataAvailability: {candidates: true}, phase: {argumentMappingActive: false, informedVotingLive: false}, guidance: {recommendedCount: 15, note: 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.', agreementFloor: 10, agreementMarkShare: 0.7}, capabilities: {manage: true},
     links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/featured-statements/:statementId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {featuredId: 62, statementId: Number(params.statementId), changed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
