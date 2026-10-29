@@ -972,9 +972,7 @@ def _build_phase6_results(
         }],
         'p6_participants': int | None,
         'p2_participants': int | None,
-        'matched_participants': None,  # int | None — participants who voted in BOTH rounds;
-                                       # requires xid→pid mapping (not yet stored, see TODO below).
-                                       # Individual-level delta + CI extrapolation depend on this.
+        'matched_participants': None,  # Report-only matched-round aggregate; not computed here.
         'p2_consensus': list,   # top-3 statements by Phase 2 agree rate (population consensus)
         'p2_divisive':  list,   # top-3 statements by balanced agree/disagree split (most divisive)
         'filter': Phase6ResultsFilter,
@@ -1055,16 +1053,12 @@ def _build_phase6_results(
     p2_total_participants = _agg['p2_total']
     pa_results            = _agg['pa_results']
 
-    # ── Personal votes (per-request; only when participation is present) ───────
+    # The personal group comparison is a privacy-gated metric. Its release criterion
+    # is still unresolved in the stability policy (#233), so do not resolve or query
+    # participant/group identities here until that gate is defined.
     my_p2_votes: dict[int, int] = {}
     my_p6_votes: dict[int, int] = {}
-    if participation and pg_available:
-        # We need the Polis pid for the participant. Polis pids are not stored in
-        # our DB — we use xid (hashed mw_user_id). The personal-votes query
-        # therefore cannot run until we have a xid→pid mapping.
-        # For now this is left as empty dicts (personal votes show as None).
-        # TODO: store or derive Polis pid to enable per-participant vote display.
-        pass
+    personal_lens_available = False
 
     clusters = None
     source_divergence = None
@@ -1120,11 +1114,19 @@ def _build_phase6_results(
                    if p2_row else None),
             'shift':       shift,
             'my_p2_vote':  my_p2_votes.get(p2_tid),
-            'my_p6_vote':  my_p6_votes.get(p6_tid),
+            'my_p6_vote': my_p6_votes.get(p6_tid),
+            'my_group_votes': None,  # withheld until the #233 privacy gate is defined
         })
 
-    # Sort by largest absolute shift first; statements with no shift data go last.
-    statements.sort(key=lambda s: abs(s['shift']) if s['shift'] is not None else -1, reverse=True)
+    if conv.closed_at:
+        # The final Report may rank statements by its cross-round comparison.
+        statements.sort(
+            key=lambda s: abs(s['shift']) if s['shift'] is not None else -1,
+            reverse=True,
+        )
+    else:
+        # Preliminary output is single-round; its order must not encode P2-to-P6 deltas.
+        statements.sort(key=lambda s: s['fs_id'])
 
     # Phase 2 consensus / divisiveness derived from the same data.
     p2_with_data = [s for s in statements if s['p2'] is not None and s['p2']['n_voters'] > 0]
@@ -1138,8 +1140,8 @@ def _build_phase6_results(
         'statements':            statements,
         'p6_participants':       p6_total_participants,
         'p2_participants':       p2_total_participants,
-        # TODO: compute once xid→pid mapping is available (see personal-votes TODO above).
-        'matched_participants':  None,
+        'matched_participants': None,  # report-only aggregate, not computed in this slice.
+        'personal_lens_available': personal_lens_available,
         'p2_consensus':          p2_consensus,
         'p2_divisive':           p2_divisive,
         'filter':                filt,
@@ -2725,7 +2727,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
 
     phase6_results_available = False
     if (conv.phase_public_results and conv.phase6_polis_conversation_id
-            and participation is not None):
+            and participation is not None and not _informed_round_open(conv)):
         phase6_results = _build_phase6_results(conv, participation)
         phase6_results_available = bool(
             phase6_results and phase6_results.get('statements')
@@ -2749,7 +2751,8 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         links['intermediateResults'] = url_for(
             'api_v1.get_intermediate_results', slug=slug,
         )
-        links['results'] = url_for('api_v1.get_results_report', slug=slug)
+        if not _informed_round_open(conv):
+            links['results'] = url_for('api_v1.get_results_report', slug=slug)
     if can_moderate:
         links['manage'] = _path_admin_conversation(conv.id)
 
@@ -3306,10 +3309,20 @@ def _informed_vote_api_payload(
         _save_phase6_gateway(conv, gateway, key, states)
 
 
+def _informed_round_open(conv: Conversation) -> bool:
+    """True while the informed-vote round still takes responses: no results may show."""
+    return bool(conv.phase_informed_voting and not conv.closed_at)
+
+
 def _results_report_api_payload(slug: str) -> dict:
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     _check_conversation_access(conv, participant)
+    # No live informed-round results: they appear once that round has ended (owner,
+    # 2026-10-13; spec_results-access C2). While informed voting is open nothing opens
+    # here, whichever results flag an organizer has set alongside it.
+    if _informed_round_open(conv):
+        abort(409, description='Results are not published while informed voting is open.')
     if not (conv.phase_public_results or conv.phase_personal_results):
         abort(409, description='Results are not published for this conversation.')
     if conv.phase_personal_results and not conv.phase_public_results and participant is None:
@@ -4065,10 +4078,11 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     reveal = _reveal_context(conv, participation=None)
     biggest_shift = None
     if phase6_results:
-        biggest = next((
+        # Preliminary rows are in statement order, so the largest shift is looked up.
+        biggest = max((
             row for row in phase6_results.get('statements', [])
             if row.get('shift') is not None
-        ), None)
+        ), key=lambda row: abs(row['shift']), default=None)
         if biggest:
             biggest_shift = {
                 'text': biggest['text'], 'shift': biggest['shift'],

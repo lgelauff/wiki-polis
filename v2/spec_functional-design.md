@@ -149,7 +149,7 @@ The admin controls what participants see through the conversation's phase flags 
 Participants can vote on statements and submit new ones. This is the data collection phase.
 
 **Toggle 2 — Personal results**
-Each logged-in participant can see clustering results, but only for statements they have personally voted on. The more a participant votes, the more of the picture they see. This is a deliberate incentive: deeper engagement unlocks a deeper view. Individual vote choices are never shown — results are always aggregate.
+Each logged-in participant can see clustering results, but only for statements they have personally voted on. The more a participant votes, the more of the picture they see. This is a deliberate incentive: deeper engagement unlocks a deeper view. Public results remain aggregate and never show individual vote choices; a private personal lens may show a participant their own choices when the output's privacy gate allows it.
 
 **Toggle 3 — Full public results**
 Complete clustering results are visible to everyone, including visitors who are not logged in. This is the full transparency view: consensus points, contention points, cluster breakdown across all statements.
@@ -165,7 +165,7 @@ A second, independent voting round on the featured statements only. Arguments fr
 The conversation page uses three distinct result surfaces across the deliberation lifecycle:
 
 - **Intermediate results tab** (`phase_personal_results` or `phase_public_results`) — Polis opinion-group results from the initial voting round (Phase 2).
-- **Preliminary results tab** (`phase_public_results` + informed-voting initialised + results available) — side-by-side comparison of initial vs. informed vote per statement, with the shift in agree rate. Shown only when public results are enabled; not shown to participants who have not yet cast any informed votes.
+- **Preliminary results tab** (`phase_public_results` + Phase 6 initialised + results available) — a provisional, single-round view of informed-vote consensus and contention, shown once the informed round has ended (Report phase). There are no live results while informed voting is open. It does not compare aggregate Phase 2 and Phase 6 results; that comparison belongs only in the final Report. A participant's own choices and group comparison wait for the personal lens.
 - **Final report** (`/c/<slug>/report`, published when `closed_at` is set) — the definitive published findings after the organizer closes the consultation.
 
 All these toggles default to off and are designed to be enabled in order, each phase building on the previous. The authoritative ordering — including the Preparation and Cleanup phases and the choice of phase route — is in *Phase control* below; the guided "Move on" flow walks the admin through it one step at a time. The admin can also deviate and set flags independently via the advanced controls.

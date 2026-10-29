@@ -566,3 +566,35 @@ def test_archive_api_refuses_published_conversation(admin_client, conversation):
 
     assert response.status_code == 409
     assert response.get_json()['error']['code'] == 'conversation_closed'
+
+
+def test_largest_shift_is_the_largest_whatever_the_row_order(
+    admin_client, conversation,
+):
+    """Preliminary rows come in statement order, so the summary has to look the largest up."""
+    from types import SimpleNamespace
+    conversation.phase_informed_voting = True
+    conversation.phase6_polis_conversation_id = 'p6-private'
+    db.session.commit()
+    rows = [
+        {'fs_id': 1, 'text': 'small up', 'shift': 3},
+        {'fs_id': 2, 'text': 'none', 'shift': None},
+        {'fs_id': 3, 'text': 'large down', 'shift': -20},
+        {'fs_id': 4, 'text': 'medium up', 'shift': 8},
+    ]
+    results = {
+        'statements': rows, 'p6_participants': 12,
+        'filter': SimpleNamespace(excluded_tids=set(), excluded_pids=set()),
+    }
+
+    with (
+        patch('app.PolisServerClient.get_polis_stats', return_value=None),
+        patch('app._build_phase6_results', return_value=results),
+    ):
+        data = admin_client.get(
+            f'/api/v1/admin/conversations/{conversation.id}',
+        ).get_json()['data']
+
+    assert data['statistics']['informedVoting']['largestShift'] == {
+        'text': 'large down', 'shift': -20,
+    }

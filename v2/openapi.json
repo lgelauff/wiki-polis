@@ -2589,11 +2589,12 @@
           },
           "dataAvailability": {
             "type": "object",
-            "required": ["detailedCounts", "opinionGroups"],
+            "required": ["detailedCounts", "opinionGroups", "personalLens"],
             "additionalProperties": false,
             "properties": {
               "detailedCounts": {"type": "boolean"},
-              "opinionGroups": {"type": "boolean"}
+              "opinionGroups": {"type": "boolean"},
+              "personalLens": {"type": "boolean"}
             }
           },
           "moderation": {
@@ -2622,7 +2623,7 @@
       },
       "ResultsStatement": {
         "type": "object",
-        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice"],
+        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice", "viewerGroupChoice", "viewerMatchesGroup", "personalDelta"],
         "additionalProperties": false,
         "properties": {
           "featuredStatementId": {"type": "integer", "minimum": 1},
@@ -2630,7 +2631,20 @@
           "initial": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
           "informed": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
           "agreementShift": {"type": ["number", "null"]},
-          "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]}
+          "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
+          "viewerGroupChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
+          "viewerMatchesGroup": {"type": ["boolean", "null"]},
+          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]}
+        }
+      },
+      "PersonalDelta": {
+        "type": "object",
+        "required": ["initial", "informed", "changed"],
+        "additionalProperties": false,
+        "properties": {
+          "initial": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "informed": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "changed": {"type": "boolean"}
         }
       },
       "VoteTally": {
