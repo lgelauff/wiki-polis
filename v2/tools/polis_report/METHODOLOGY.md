@@ -38,6 +38,10 @@ everything that applies to external exports:
 4. **Self-selected participants.** Counts describe the people who responded. Each page says so.
 5. **Privacy at a small event.** Counts only; no xid or participant id is ever written. Small cells are
    suppressed where they could identify someone (§9).
+6. **Descriptive first, statistics in fold-outs.** The main text gives counts and plain readings. Test details
+   (p-values, corrections, how close a label is to the line) sit in fold-out sections. The one statistical claim
+   is the test on shifts (§8), read against a model of response noise among these same participants; everything
+   else describes these participants and makes no claim about a wider population.
 
 **Planned (language review):** a semantic check of the report templates for overclaiming, run when templates
 change and before a report goes out. It covers implied causation, more certainty than the test supports,
@@ -70,6 +74,10 @@ Three kinds of input:
 | Labels, PCA map | yes | | yes | yes (pol.is format) |
 | Polis groups | yes, snapshot at export time | | yes, from the math record | yes (pol.is format) |
 | Leiden groups | computed from responses | | computed from responses | **Planned** |
+| Label sensitivity (responses that would change a label) | yes | | yes | not yet (an interval is shown today) |
+| Per-statement privacy minimum | yes | | yes | not yet |
+| Statistics in fold-outs | yes | | yes | not yet |
+| `*` for shifts significant at 95% | needs xid file | | needs xid file | not yet |
 | Linking participants across conversations | no | yes | no | yes (with xid files) |
 | wiki-polis phases, arguments, featured statements | no | no | no | no |
 
@@ -140,8 +148,12 @@ uses it has to name its source and how it was extracted.
 - A statement is labelled **≥70% agree**, **≥70% disagree** or **neither ≥70%**, counting agree + disagree only.
   The pass count is shown separately and is not in the denominator. The threshold is `label_share`.
 - The label is written as the rule itself, not as "consensus". It is not Polis's group-informed consensus.
-- **Close to the line.** When the 95% Wilson interval of the leading share crosses 70%, the report says so and
-  gives the interval. That is a description of uncertainty, not a test.
+- **Close to the line.** A fold-out gives how many responses would have to change for the label to change
+  (e.g. "6 responses changing from disagree to agree would change this label"). That describes these responses;
+  it is not a confidence interval, which would assume a sample from a wider population.
+- **No significance marker.** Labels are descriptive, so they never carry the `*` used for shifts (§8).
+- **No statistical minimum.** Labels describe counts, so they need none; the only minimum is the privacy
+  minimum per statement (§9).
 
 ## 7. Opinion groups
 
@@ -186,6 +198,11 @@ uses it has to name its source and how it was extracted.
     - otherwise: "No clear direction", with the probability of a split at least as uneven if movers were
       equally likely to go either way.
   - The report also counts how many statements could not reach significance with the movers they had.
+  - **Marker:** a shift that is significant at 95% (two-sided, after Holm correction) gets a `*` in the main text,
+    with a footnote saying so. Everything else about the test (p-values, the reading, how many movers) is in
+    the fold-out.
+    The marker belongs to the test only: descriptive labels (≥70% agree, ≥70% disagree, neither) and other
+    counts never carry it.
 - **Noise baselines.** The report counts how many matched participants answered a factual role question
   differently in the two polls, and how many statements' net movement went toward the middle. Changes in
   responses to opinion statements can be read against these. Rows are in statement order, not ranked by change,
@@ -196,6 +213,9 @@ uses it has to name its source and how it was extracted.
 
 ## 9. Small cells and privacy
 
+- **Per-statement minimum (privacy).** A statement with fewer than `min_responses` responses (default 5) is listed
+  with its text only: its counts and label are not shown, since the label reveals the split. Groups need no
+  extra minimum beyond the rules in §7.
 - Counts of 1–2 are shown as "<3" for the merged "Other" group, and wherever role answers are crossed with
   anything.
 - Role answers are never crossed with a group under 5.
