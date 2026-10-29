@@ -93,7 +93,7 @@ test('preliminary results rank informed-vote consensus and contention without ph
 test('under nl, percentages are written the Dutch way, with a decimal comma', async () => {
   // toFixed would write "62.5" whatever the language; the number, not the message, owns the %.
   server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(), () => HttpResponse.json(dutch)));
-  const tally = {counts: {agree: 5, pass: 1, disagree: 2, voters: 8}, percentages: {agree: 62.5, pass: 12.5, disagree: 25}};
+  const tally = {counts: {agree: 10, pass: 2, disagree: 4, voters: 16}, percentages: {agree: 62.5, pass: 12.5, disagree: 25}};
   serveResults([{...statement(1, null), initial: tally, informed: tally, agreementShift: -2.5}]);
   renderPanel('nl');
   await screen.findByRole('heading', {name: 'Meeste overeenstemming'});

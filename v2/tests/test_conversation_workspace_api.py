@@ -90,6 +90,13 @@ def test_workspace_has_no_preliminary_results_while_informed_voting_is_open(
         assert 'p6-results' not in [tab['key'] for tab in live['tabs']]
         assert 'results' not in live['links']
 
+        # An organizer can set Results alongside informed voting; the round is still open.
+        conversation.phase_public_results = True
+        db.session.commit()
+        overlap = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
+        assert 'p6-results' not in [tab['key'] for tab in overlap['tabs']]
+        assert 'results' not in overlap['links']
+
         conversation.phase_informed_voting = False
         conversation.phase_public_results = True
         db.session.commit()

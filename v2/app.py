@@ -2707,7 +2707,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
 
     phase6_results_available = False
     if (conv.phase_public_results and conv.phase6_polis_conversation_id
-            and participation is not None):
+            and participation is not None and not _informed_round_open(conv)):
         phase6_results = _build_phase6_results(conv, participation)
         phase6_results_available = bool(
             phase6_results and phase6_results.get('statements')
@@ -2731,7 +2731,8 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         links['intermediateResults'] = url_for(
             'api_v1.get_intermediate_results', slug=slug,
         )
-        links['results'] = url_for('api_v1.get_results_report', slug=slug)
+        if not _informed_round_open(conv):
+            links['results'] = url_for('api_v1.get_results_report', slug=slug)
     if can_moderate:
         links['manage'] = _path_admin_conversation(conv.id)
 
@@ -3265,12 +3266,20 @@ def _informed_vote_api_payload(
         _save_phase6_gateway(conv, gateway, key, states)
 
 
+def _informed_round_open(conv: Conversation) -> bool:
+    """True while the informed-vote round still takes responses: no results may show."""
+    return bool(conv.phase_informed_voting and not conv.closed_at)
+
+
 def _results_report_api_payload(slug: str) -> dict:
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     _check_conversation_access(conv, participant)
     # No live informed-round results: they appear once that round has ended (owner,
-    # 2026-10-13; spec_results-access C2), so informed voting alone opens nothing here.
+    # 2026-10-13; spec_results-access C2). While informed voting is open nothing opens
+    # here, whichever results flag an organizer has set alongside it.
+    if _informed_round_open(conv):
+        abort(409, description='Results are not published while informed voting is open.')
     if not (conv.phase_public_results or conv.phase_personal_results):
         abort(409, description='Results are not published for this conversation.')
     if conv.phase_personal_results and not conv.phase_public_results and participant is None:

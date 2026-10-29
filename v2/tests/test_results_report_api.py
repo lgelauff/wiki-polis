@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app import Phase6ResultsFilter
 from db import FeaturedStatement, Participation, db
 
@@ -102,7 +104,7 @@ def test_results_api_does_not_turn_database_outage_into_zero_tallies(
     client, conversation,
 ):
     conversation.phase_public_results = True
-    conversation.phase_informed_voting = True
+    conversation.phase_informed_voting = False  # report phase: the informed round has ended
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
     db.session.commit()
 
@@ -158,7 +160,7 @@ def test_preliminary_results_passes_participation_for_private_vote_overlay(
     auth_client, conversation, participant,
 ):
     conversation.phase_public_results = True
-    conversation.phase_informed_voting = True
+    conversation.phase_informed_voting = False  # report phase: the informed round has ended
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
     participation = Participation(
         participant_id=participant.id,
@@ -275,7 +277,7 @@ def test_preliminary_results_exposes_only_the_informed_round_publicly(
     client, conversation,
 ):
     conversation.phase_public_results = True
-    conversation.phase_informed_voting = True
+    conversation.phase_informed_voting = False  # report phase: the informed round has ended
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
     db.session.commit()
 
@@ -299,33 +301,41 @@ def test_preliminary_results_exposes_only_the_informed_round_publicly(
     assert statement['personalDelta'] is None
 
 
+@pytest.mark.parametrize('public_results, featured_selection', [
+    (False, False), (True, False), (False, True), (True, True),
+])
 def test_no_results_while_the_informed_round_is_open(
-    client, auth_client, conversation, participant,
+    client, auth_client, conversation, participant, public_results, featured_selection,
 ):
-    """No live informed-round results (owner, 2026-10-13): informed voting alone opens
-    nothing, for a joined participant as for a visitor."""
+    """No live informed-round results (owner, 2026-10-13). An organizer can set Results or
+    Featured selection (phase_personal_results) alongside informed voting; while that round
+    is open nothing is served, to a visitor, a logged-in non-member or a joined participant."""
     conversation.phase_informed_voting = True
+    conversation.phase_public_results = public_results
+    conversation.phase_personal_results = featured_selection
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
-    db.session.add(Participation(
-        participant_id=participant.id,
-        conversation_id=conversation.id,
-        pseudonym='patient-owl',
-    ))
     db.session.commit()
 
-    with patch('app._build_phase6_results', return_value=_results()):
+    with patch('app._build_phase6_results', return_value=_results()) as build:
         anonymous = client.get('/api/v1/conversations/test-conv/results')
+        not_joined = auth_client.get('/api/v1/conversations/test-conv/results')
+        db.session.add(Participation(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+            pseudonym='patient-owl',
+        ))
+        db.session.commit()
         joined = auth_client.get('/api/v1/conversations/test-conv/results')
 
-    assert anonymous.status_code == 409
-    assert joined.status_code == 409
+    assert [anonymous.status_code, not_joined.status_code, joined.status_code] == [409] * 3
+    build.assert_not_called()
 
 
 def test_preliminary_results_projects_a_private_group_view_and_personal_delta(
     auth_client, conversation, participant,
 ):
     conversation.phase_public_results = True
-    conversation.phase_informed_voting = True
+    conversation.phase_informed_voting = False  # report phase: the informed round has ended
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
     participation = Participation(
         participant_id=participant.id,
@@ -402,7 +412,7 @@ def test_preliminary_personal_view_omits_tied_group_choice(
     auth_client, conversation, participant,
 ):
     conversation.phase_public_results = True
-    conversation.phase_informed_voting = True
+    conversation.phase_informed_voting = False  # report phase: the informed round has ended
     conversation.phase6_polis_conversation_id = 'private-phase6-id'
     db.session.add(Participation(
         participant_id=participant.id,
