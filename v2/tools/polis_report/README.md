@@ -36,6 +36,12 @@ Outputs in `out/`:
   movers per statement, an exact sign test with Holm correction, and how those who voted in one poll only voted.
 - CSVs of every table. Counts only: no xid or participant id is written.
 
+Linking the two polls: Polis records, for each participant, the xid the organizer passed in (for example through the
+embed URL). The organizer decides what it is, so use the same xid for a person in both polls. The tool reads it from
+the `participant,xid` file named in `polls[].xid`. A participant with the same xid in both polls is counted as the same
+person; participants whose xid appears in one poll only are reported separately, as responding in one poll only. The
+xids are read only to make this link. No xid or participant id is written to any output.
+
 Rules (see METHODOLOGY.md for the reasons):
 - A vote by a statement's author on that statement at the second it was created is Polis's automatic vote and is not counted; all other votes count.
 - Current vote = the latest row per participant and statement; equal timestamps keep file order.
