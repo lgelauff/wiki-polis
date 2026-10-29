@@ -430,9 +430,10 @@ export async function deleteAdminFeaturedArgument(
 }
 
 /** canivote's eligibility policies an organizer may choose from (#530). The server caches
- *  canivote's answer for ten minutes, so this one is kept as long. */
+ *  canivote's answer for ten minutes, so a list that loaded is kept as long; "cannot be
+ *  loaded" is not kept, so the next page that needs the list asks again. */
 export const adminEligibilityPoliciesQuery = () => queryOptions({
   queryKey: ['admin-eligibility-policies'],
   queryFn: async () => (await requireApiData(api.GET('/admin/eligibility-policies'))).data,
-  staleTime: 600_000,
+  staleTime: (query) => (query.state.data?.available ? 600_000 : 0),
 });

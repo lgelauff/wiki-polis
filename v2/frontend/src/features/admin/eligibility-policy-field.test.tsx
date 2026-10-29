@@ -1,6 +1,6 @@
 import {Suspense, useState} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
@@ -10,6 +10,7 @@ import {AdminCatalogPage} from './admin-catalog-page';
 import {AdminSettingsPage} from './admin-settings-page';
 import {EligibilityPolicyField, ruleText, type EligibilityChoice} from './eligibility-policy-field';
 import {createMessage, MessageProvider} from '../../i18n/messages';
+import {adminEligibilityPoliciesQuery} from '../../api/queries';
 import {createQueryClient} from '../../query-client';
 import {testMessages, testPolicies} from '../../test/handlers';
 import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
@@ -271,6 +272,112 @@ test('without a canivote address the field says it is not configured, not "canno
   expect(screen.queryByText('(admin-access-policy-unavailable)')).toBeNull();
 });
 
+test('focusing the box selects the shown title, so typing replaces it', async () => {
+  renderField({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+
+  act(() => box.focus());
+  expectAllSelected(box);
+});
+
+function expectAllSelected(box: HTMLInputElement) {
+  expect(box.value).not.toBe('');
+  expect(box.selectionStart).toBe(0);
+  expect(box.selectionEnd).toBe(box.value.length);
+}
+
+test('a click on the box selects the shown title', async () => {
+  renderField({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+  act(() => box.focus());
+  box.setSelectionRange(box.value.length, box.value.length);
+
+  fireEvent.click(box);
+  expectAllSelected(box);
+});
+
+test('the click that focuses the box keeps its selection; a later click places the caret', async () => {
+  renderField({eventId: 'nlwiki-stemprocedure', label: 'Voting eligibility on Dutch Wikipedia'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+
+  // fireEvent returns false when a handler prevented the default action, which for a
+  // mouseup is where WebKit would collapse the selection to the click point.
+  fireEvent.mouseDown(box);
+  act(() => box.focus());
+  expect(fireEvent.mouseUp(box)).toBe(false);
+
+  fireEvent.mouseDown(box);
+  expect(fireEvent.mouseUp(box)).toBe(true);
+});
+
+test('after a choice or Escape the box still has focus and its title is selected again', async () => {
+  renderField({eventId: 'meta-global', label: 'Good standing'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+  act(() => box.focus());
+
+  fireEvent.change(box, {target: {value: 'nlwiki'}});
+  fireEvent.keyDown(box, {key: 'Enter'});
+  expect(box).toHaveValue('Voting eligibility on Dutch Wikipedia');
+  expectAllSelected(box);
+
+  fireEvent.change(box, {target: {value: 'meta'}});
+  fireEvent.click(screen.getByRole('option', {name: /movement/}));
+  expect(box).toHaveValue('Not blocked anywhere in the movement');
+  expectAllSelected(box);
+
+  fireEvent.change(box, {target: {value: 'nlw'}});
+  fireEvent.keyDown(box, {key: 'Escape'});
+  expect(box).toHaveValue('Not blocked anywhere in the movement');
+  expectAllSelected(box);
+});
+
+test('leaving the window does not leave a pending selection for the next key', async () => {
+  renderField({eventId: 'meta-global', label: 'Good standing'});
+  const box = await screen.findByRole('combobox', {name: 'Eligibility policy'}) as HTMLInputElement;
+  act(() => box.focus());
+
+  // A window blur: the box gets blur, but stays the active element.
+  fireEvent.blur(box);
+  expect(document.activeElement).toBe(box);
+  fireEvent.change(box, {target: {value: 'n'}});
+  expect(box).toHaveValue('n');
+  expect(box.selectionStart).toBe(box.selectionEnd);
+});
+
+/** The field in a page that is left and visited again, with one query client throughout. */
+async function visitTwice(available: boolean) {
+  let listReads = 0;
+  server.use(http.get(POLICIES_URL, () => {
+    listReads += 1;
+    return HttpResponse.json({data: {available, configured: true, policies: available ? testPolicies : []}});
+  }));
+  const client = createQueryClient();
+  const page = () => (
+    <QueryClientProvider client={client}>
+      <MessageProvider locale="en"><Harness initial={{eventId: '', label: ''}} /></MessageProvider>
+    </QueryClientProvider>
+  );
+  const first = render(page());
+  await screen.findByRole('combobox', {name: 'Eligibility policy'});
+  await waitFor(() => expect(listReads).toBe(1));
+  first.unmount();
+  render(page());
+  await screen.findByRole('combobox', {name: 'Eligibility policy'});
+  return {client, reads: () => listReads};
+}
+
+test('a list that loaded is kept when the page is visited again', async () => {
+  const {client, reads} = await visitTwice(true);
+  // A read would start as the field mounts; none is in flight and none happened.
+  expect(client.isFetching()).toBe(0);
+  expect(reads()).toBe(1);
+});
+
+test('"cannot be loaded" is not kept: the next visit asks again', async () => {
+  const {reads} = await visitTwice(false);
+  await waitFor(() => expect(reads()).toBe(2));
+});
+
 test('under qqx, nothing in the field is English', async () => {
   renderAsQqx();
   const {container} = renderField({eventId: 'nlwiki-stemprocedure', label: 'Stemgerechtigd'}, 'provider');
@@ -377,9 +484,9 @@ test('a refused policy is said at the field', async () => {
 
 const CREATE_URL = new URL('/api/v1/admin/conversations', globalThis.location.origin).toString();
 
-function renderCatalog() {
+function renderCatalog(client = createQueryClient()) {
   return render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/admin']}>
         <Suspense fallback={null}>
           <MessageProvider locale="en"><AdminCatalogPage csrfToken="test-csrf-token" /></MessageProvider>
@@ -397,6 +504,25 @@ async function openCreateForm() {
   fireEvent.change(within(form).getByLabelText('Title'), {target: {value: 'New one'}});
   return form;
 }
+
+test('Site admin reads canivote\'s list only once New consultation is opened', async () => {
+  let listReads = 0;
+  server.use(http.get(POLICIES_URL, () => {
+    listReads += 1;
+    return HttpResponse.json({data: {available: true, configured: true, policies: testPolicies}});
+  }));
+  const client = createQueryClient();
+  renderCatalog(client);
+  const heading = await screen.findByRole('heading', {name: 'New consultation', level: 2}, {timeout: 10_000});
+  // Nothing has asked for the list: no query for it exists yet, not even a pending one.
+  expect(screen.queryByRole('combobox', {name: 'Eligibility policy'})).toBeNull();
+  expect(client.getQueryState(adminEligibilityPoliciesQuery().queryKey)).toBeUndefined();
+  expect(listReads).toBe(0);
+
+  fireEvent.click(heading.closest('summary')!);
+  await within(heading.closest('details')!).findByRole('combobox', {name: 'Eligibility policy'});
+  expect(listReads).toBe(1);
+});
 
 test('a refused policy on New consultation is announced, in the catalogue\'s words, every time', async () => {
   let listReads = 0;
