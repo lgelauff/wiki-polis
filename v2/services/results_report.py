@@ -92,17 +92,29 @@ def _opinion_groups(groups: list | None) -> list[dict]:
     return projected
 
 
+
+class ReportPublished(RuntimeError):
+    """A preview was asked for after publication; the published report replaces it."""
+
+    def __init__(self, report_link: str):
+        super().__init__('The report is already published.')
+        self.report_link = report_link
+
 def build_results_report(
     *, conversation, phase6_results: dict | None, output_context: dict,
     participation, reveal_state: str | None,
     self_link: str, conversation_link: str, about_link: str,
     identity_reveal_link: str | None,
+    preview: bool = False,
 ) -> dict:
+    """Build the results report. ``preview`` marks a site-admin preview, never published."""
     results = phase6_results or {}
     detailed = bool(results.get('pg_available'))
-    is_final = bool(conversation.closed_at)
+    # The published report's full shape (cross-round comparison, opinion groups). A site
+    # admin's preview shows that shape too, so it looks as the report would if published now.
+    report_shape = bool(conversation.closed_at) or preview
     personal_lens = bool(
-        not is_final and participation and results.get('personal_lens_available')
+        not report_shape and participation and results.get('personal_lens_available')
     )
     statements = []
     for row in results.get('statements', []):
@@ -114,9 +126,9 @@ def build_results_report(
             'featuredStatementId': row['fs_id'],
             'statement': row['text'],
             # Cross-round aggregate comparison belongs to the published Report only.
-            'initial': _tally(row.get('p2')) if detailed and is_final else None,
+            'initial': _tally(row.get('p2')) if detailed and report_shape else None,
             'informed': _tally(row.get('p6')) if detailed else None,
-            'agreementShift': row.get('shift') if detailed and is_final else None,
+            'agreementShift': row.get('shift') if detailed and report_shape else None,
             # A participant's own round delta and group comparison stay private and live.
             'viewerChoice': viewer_choice,
             'viewerGroupChoice': group_choice,
@@ -137,24 +149,28 @@ def build_results_report(
     return {
         'slug': conversation.slug,
         'title': conversation.title,
-        'publication': 'final' if is_final else 'preliminary',
+        'publication': (
+            'preview' if preview
+            else 'final' if report_shape else 'preliminary'
+        ),
         'resultsAvailable': phase6_results is not None,
         'openedAt': _utc_iso(conversation.created_at),
         'closedAt': _utc_iso(conversation.closed_at),
         'context': {
             'phase': output_context['phase'],
-            'status': output_context['status'],
+            # A preview uses the report's output definition but is not final.
+            'status': 'provisional' if preview else output_context['status'],
             'method': output_context['method'],
         },
         'participation': {
             # Preliminary results are a single-round surface, not a partial Report.
-            'initialRound': results.get('p2_participants') if is_final else None,
+            'initialRound': results.get('p2_participants') if report_shape else None,
             'informedRound': results.get('p6_participants'),
-            'matchedRounds': results.get('matched_participants') if is_final else None,
+            'matchedRounds': results.get('matched_participants') if report_shape else None,
         },
         'dataAvailability': {
             'detailedCounts': detailed,
-            'opinionGroups': bool(is_final and results.get('clusters')),
+            'opinionGroups': bool(report_shape and results.get('clusters')),
             'personalLens': personal_lens,
         },
         'moderation': {
@@ -162,7 +178,7 @@ def build_results_report(
             'excludedParticipants': len(result_filter.excluded_pids) if result_filter else 0,
         },
         'statements': statements,
-        'opinionGroups': _opinion_groups(results.get('clusters')) if is_final else [],
+        'opinionGroups': _opinion_groups(results.get('clusters')) if report_shape else [],
         'viewer': {
             'participating': participation is not None,
             'pseudonym': participation.pseudonym if participation else None,

@@ -22,7 +22,7 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     statistics: {upstreamUnavailable: false, groups: [{key: 'preparation', label: 'Preparation', tiles: []}], informedVoting: null},
-    counts: {participants: 12, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+    counts: {participants: 12, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true, previewReport: true},
     links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
   };
 }
@@ -79,7 +79,7 @@ export function phaseAdvanceFixture(
         publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
         statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
         counts: {participants: 12, openFlags: 1, featuredStatements: 4},
-        capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+        capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true, previewReport: true},
         links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
       },
   } as components['schemas']['AdminPhaseAdvanceReceipt'];

@@ -139,6 +139,7 @@ def test_scoped_moderator_lifecycle_capabilities_are_read_only(
         'useAdvancedPhases': False,
         'initializePhase6': False,
         'archive': False,
+        'previewReport': False,
     }
 
 

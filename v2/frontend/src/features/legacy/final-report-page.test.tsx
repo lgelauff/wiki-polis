@@ -149,3 +149,47 @@ test('under nl, percentages are written the Dutch way, with a decimal comma', as
   expect(screen.getByText('+7,5%')).toBeVisible();
   expect(screen.getByText('82%')).toBeVisible();
 });
+
+const previewFixture: components['schemas']['ResultsReport'] = {
+  ...reportFixture,
+  publication: 'preview',
+  closedAt: null,
+  context: {...reportFixture.context, status: 'provisional'},
+  viewer: {participating: false, pseudonym: null, revealState: null},
+  links: {...reportFixture.links, conversation: '/admin/conversations/7'},
+};
+
+test('a site admin preview is marked as unpublished and never as final', async () => {
+  renderReport(previewFixture);
+
+  const banner = await screen.findByRole('note', {}, {timeout: 5000});
+  expect(banner).toHaveTextContent(stripTags(testMessages['report-preview-banner']!));
+  expect(document.querySelector('.report-badge--preview')).toHaveTextContent(testMessages['report-badge-preview']!);
+  expect(screen.getByText(testMessages['report-subtitle-preview']!)).toBeVisible();
+  expect(screen.getByText(testMessages['report-status-preview']!)).toBeVisible();
+  expect(screen.getByText(testMessages['report-method-preview']!)).toBeVisible();
+  for (const key of ['report-badge-final', 'report-status-final', 'report-subtitle', 'output-report-method'] as const) {
+    expect(screen.queryByText(testMessages[key]!)).toBeNull();
+  }
+  // The back link returns to the admin console, where the preview was opened.
+  expect(screen.getByRole('link', {name: /Community strategy/})).toHaveAttribute('href', '/admin/conversations/7');
+});
+
+test('a preview with no informed opinion results yet shows the empty state under the banner', async () => {
+  renderReport({...previewFixture, resultsAvailable: false, statements: [], opinionGroups: []});
+
+  expect(await screen.findByRole('note', {}, {timeout: 5000})).toBeVisible();
+  expect(screen.getByText(testMessages['report-no-results']!)).toBeVisible();
+});
+
+test('the published report carries no preview banner', async () => {
+  renderReport();
+
+  expect(await screen.findByRole('heading', {name: 'Methodology'}, {timeout: 5000})).toBeVisible();
+  expect(screen.queryByRole('note')).toBeNull();
+  expect(document.querySelector('.report-badge--preview')).toBeNull();
+});
+
+function stripTags(html: string) {
+  return html.replace(/<[^>]+>/g, '');
+}

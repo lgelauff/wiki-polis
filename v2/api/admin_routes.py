@@ -47,6 +47,7 @@ from services.admin_settings import (
     AccessSettingsLocked, DemoSwitchForbidden, InvalidAccessSettings,
 )
 from services.eligibility_policies import EligibilityPolicyRefused
+from services.results_report import ReportPublished
 
 
 def register_admin_routes(
@@ -93,6 +94,7 @@ def register_admin_routes(
     set_admin_schedule: Callable[[int, dict], dict],
     set_admin_phases: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
+    resolve_admin_report_preview: Callable[[int], dict],
 ) -> None:
     """Register admin-only HTTP adapters on the shared API blueprint."""
     _no_store = no_store
@@ -309,6 +311,19 @@ def register_admin_routes(
         return _no_store(jsonify({
             'data': resolve_admin_lifecycle(conversation_id),
         }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/report-preview')
+    @limiter.limit('60 per minute')
+    def get_admin_conversation_report_preview(conversation_id: int):
+        try:
+            data = resolve_admin_report_preview(conversation_id)
+        except ReportPublished as exc:
+            # The published report replaces the preview; the console page goes there.
+            return error_response(
+                'conversation_closed', 'The report is already published.', 409,
+                details={'report': exc.report_link},
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.get('/admin/conversations/<int:conversation_id>/settings')
     def get_admin_conversation_settings(conversation_id: int):

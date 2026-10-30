@@ -66,7 +66,7 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
-from services.results_report import build_results_report
+from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
     InvitationNotInConversation, add_conversation_invites, build_invitation_roster,
@@ -950,6 +950,14 @@ def _invalidate_phase6_results_cache(conv=None) -> None:
                 _phase6_agg_cache.pop(k, None)
 
 
+def _sort_by_shift(statements: list[dict]) -> None:
+    """Order report rows by the size of their cross-round shift, largest first."""
+    statements.sort(
+        key=lambda s: abs(s['shift']) if s['shift'] is not None else -1,
+        reverse=True,
+    )
+
+
 def _build_phase6_results(
     conv,
     participation,
@@ -1120,10 +1128,7 @@ def _build_phase6_results(
 
     if conv.closed_at:
         # The final Report may rank statements by its cross-round comparison.
-        statements.sort(
-            key=lambda s: abs(s['shift']) if s['shift'] is not None else -1,
-            reverse=True,
-        )
+        _sort_by_shift(statements)
     else:
         # Preliminary output is single-round; its order must not encode P2-to-P6 deltas.
         statements.sort(key=lambda s: s['fs_id'])
@@ -2628,6 +2633,7 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/admin/conversations/\d+/settings/vouchers',
     r'/admin/conversations/\d+/settings/roles',
     r'/admin/conversations/\d+/termination',
+    r'/admin/conversations/\d+/report-preview',
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
@@ -4912,6 +4918,62 @@ def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
     return {'lifecycle': _admin_lifecycle_api_payload(conv.id)}
 
 
+def _admin_report_preview_api_payload(conv_id: int) -> dict:
+    """Site-admin preview of the results report, in any phase, before publication.
+
+    Read-only by design: it reads the live moderation filter
+    (``_current_phase6_results_filter``), never ``_snapshot_report_filter``, which writes
+    the snapshot, and it never calls ``_publish_final_report``. The only write is the
+    audit row. It has the published report's full shape, sorted as the report is, even
+    while informed voting is open (where the public endpoint shows nothing). Once the
+    report is published there is nothing to preview: ``ReportPublished`` carries the
+    published report's link, and the console page goes there.
+
+    The conversation access check is skipped on purpose: it has no site-admin exception,
+    so a gated process would refuse a site admin who does not pass its gate. The site-admin
+    check below replaces it. The preview is built as a non-participant sees the report:
+    no personal vote overlay and no identity-reveal callout.
+    """
+    if not _is_global_admin():
+        _refuse_admin()
+    conv = Conversation.query.get_or_404(conv_id)
+    if conv.closed_at:
+        raise ReportPublished(_path_conversation(conv.slug, page='report'))
+    results = _build_phase6_results(
+        conv, participation=None, results_filter=_current_phase6_results_filter(conv),
+    )
+    if results:
+        # The builder orders an open process's rows by id; the report orders them by shift.
+        _sort_by_shift(results['statements'])
+    output_context = next(
+        item for item in _output_items(conv) if item['key'] == 'report'
+    )
+    reveal = _reveal_context(conv, participation=None)
+    payload = build_results_report(
+        conversation=conv,
+        phase6_results=results,
+        output_context=output_context,
+        participation=None,
+        reveal_state=reveal['state'] if reveal else None,
+        self_link=url_for(
+            'api_v1.get_admin_conversation_report_preview', conversation_id=conv.id,
+        ),
+        # The preview's back link returns to the admin console, where it was opened.
+        conversation_link=_admin_client_link(conv.id),
+        about_link=_path_conversation(conv.slug, page='about'),
+        identity_reveal_link=None,
+        preview=True,
+    )
+    # Ids and enums only (record_audit's privacy contract).
+    record_audit(
+        'report.preview', conv_id=conv.id,
+        target_type='conversation', target_id=conv.id,
+        phase=_phase_sequence_for(conv)[_current_stage_index(conv)]['key'],
+        results_available=results is not None,
+    )
+    return payload
+
+
 def _replace_admin_roles_api_payload(
     conv_id: int, participant_id: int, body: dict,
 ) -> dict:
@@ -6376,6 +6438,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_admin_schedule=_set_admin_schedule_api_payload,
         set_admin_phases=_set_admin_phases_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,
+        resolve_admin_report_preview=_admin_report_preview_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

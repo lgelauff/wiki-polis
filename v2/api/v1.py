@@ -130,6 +130,7 @@ def create_api_v1_blueprint(
     set_admin_schedule: Callable[[int, dict], dict],
     set_admin_phases: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
+    resolve_admin_report_preview: Callable[[int], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -276,6 +277,7 @@ def create_api_v1_blueprint(
         set_admin_schedule=set_admin_schedule,
         set_admin_phases=set_admin_phases,
         publish_admin_report=publish_admin_report,
+        resolve_admin_report_preview=resolve_admin_report_preview,
     )
 
     @bp.get('/conversations')

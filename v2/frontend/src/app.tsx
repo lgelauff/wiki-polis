@@ -37,6 +37,7 @@ const AdminSettingsVouchersRoute = lazy(() => loadAdminRoutes().then((module) =>
 const AdminSettingsRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsRolesRoute})));
 const AdminRedirectRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRedirectRoute})));
 const AdminTerminationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminTerminationRoute})));
+const AdminReportPreviewRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminReportPreviewRoute})));
 const AdminStatementsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminStatementsRoute})));
 const AdminParticipantsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminParticipantsRoute})));
 const AdminModerationQueueRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationQueueRoute})));
@@ -98,6 +99,7 @@ function DeferredRoutes() {
       <Route path="/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
       <Route path="/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+      <Route path="/admin/conversations/:conversationId/report-preview" element={<AdminReportPreviewRoute />} />
       <Route path="/admin/conversations/:conversationId/content" element={<AdminSectionIndexRoute firstTab="statements" />} />
       <Route path="/admin/conversations/:conversationId/content/statements" element={<AdminStatementsRoute />} />
       <Route path="/admin/conversations/:conversationId/content/participants" element={<AdminParticipantsRoute />} />
@@ -136,6 +138,7 @@ function DeferredRoutes() {
       <Route path="/app/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/report-preview" element={<AdminReportPreviewRoute />} />
       <Route path="/app/admin/conversations/:conversationId/content" element={<AdminSectionIndexRoute firstTab="statements" />} />
       <Route path="/app/admin/conversations/:conversationId/content/statements" element={<AdminStatementsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/content/participants" element={<AdminParticipantsRoute />} />
