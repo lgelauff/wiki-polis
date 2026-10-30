@@ -145,6 +145,9 @@ def build_admin_lifecycle(
                 and counts['featuredStatements'] > 0
             ),
             'archive': can_administer and conversation.closed_at is None,
+            # Site admins can preview the report in any phase until it is published;
+            # after that the published report itself is the thing to open.
+            'previewReport': can_administer and conversation.closed_at is None,
         },
         'links': links,
     }

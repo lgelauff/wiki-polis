@@ -32,6 +32,12 @@ test.each([
   expect(canonicalClientPath(path)).toBe(path);
 });
 
+test('the report preview is a client route, so its console link stays in the SPA', () => {
+  // A plain anchor here would reload the page on every open of the preview.
+  const path = '/admin/conversations/7/report-preview';
+  expect(canonicalClientPath(path)).toBe(path);
+});
+
 test.each([
   '/admin/conversations/7/moderation/queue',
   '/admin/conversations/7/moderation/flags',

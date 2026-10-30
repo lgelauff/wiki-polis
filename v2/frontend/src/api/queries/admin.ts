@@ -1,7 +1,7 @@
 import {queryOptions} from '@tanstack/react-query';
 
 import type {components} from '../schema';
-import {api, requireApiData} from '../client';
+import {ApiContractError, api, requireApiData} from '../client';
 
 export const adminParticipantRosterQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-participant-roster', conversationId],
@@ -288,6 +288,38 @@ export async function putAdminRecommendationTier(
     {params: {path: {conversationId}}, body, headers: {'X-CSRFToken': csrfToken}},
   ))).data;
 }
+
+/** A site admin's preview of the results report, or, once the report is published, the
+ *  published report's path to go to instead. */
+export type AdminReportPreview =
+  | {state: 'preview'; report: components['schemas']['ResultsReport']}
+  | {state: 'published'; reportPath: string};
+
+/** Every open of the page fetches once: nothing is kept after it closes (`gcTime: 0`), so
+ *  the numbers are live and each open writes one audit event. Focus and reconnect do not
+ *  refetch, so leaving the tab and coming back adds no rows. Read it with `useQuery`, not
+ *  `useSuspenseQuery`: suspense raises gcTime to at least a second, so a quick reopen
+ *  would be served from the cache. */
+export const adminReportPreviewQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-report-preview', conversationId],
+  queryFn: async (): Promise<AdminReportPreview> => {
+    try {
+      const {data} = await requireApiData(api.GET(
+        '/admin/conversations/{conversationId}/report-preview',
+        {params: {path: {conversationId}}},
+      ));
+      return {state: 'preview', report: data};
+    } catch (error) {
+      const report = error instanceof ApiContractError && error.code === 'conversation_closed'
+        ? (error.details as {report?: unknown} | undefined)?.report : undefined;
+      if (typeof report === 'string') return {state: 'published', reportPath: report};
+      throw error;
+    }
+  },
+  gcTime: 0,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+});
 
 export const adminTerminationQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-termination', conversationId],

@@ -205,7 +205,7 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
   );
 }
 
-/** `msg('conv-col-shift')`, or `msg('conv-participant-count', 3)` for parameters.
+/** `msg('conv-tab-preliminary')`, or `msg('conv-participant-count', 3)` for parameters.
  *  Throws outside a provider rather than silently rendering keys to users. */
 export function useMessage(): Message {
   const msg = useContext(MessageContext);

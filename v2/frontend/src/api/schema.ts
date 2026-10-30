@@ -751,6 +751,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/report-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Preview the results report in any phase, for site admins only
+         * @description Never publishes, snapshots or changes the conversation. Uses the live moderation filter. It has the published report's full shape (cross-round comparison, opinion groups, rows sorted by shift) even while informed voting is open, unlike the public results endpoint; context.status is always provisional. Once the report is published it answers 409 conversation_closed with details.report, the published report's path. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
+         */
+        get: operations["getAdminConversationReportPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/eligibility-policies": {
         parameters: {
             query?: never;
@@ -1415,6 +1437,8 @@ export interface components {
             guidance: {
                 recommendedCount: number;
                 note: string;
+                agreementFloor: number;
+                agreementMarkShare: number;
             };
             capabilities: {
                 manage: boolean;
@@ -1451,7 +1475,10 @@ export interface components {
                 pass: number;
                 disagree: number;
                 total: number;
+                /** @description Whole percent of agree among agree + disagree, rounded once by the server; null below guidance.agreementFloor agree + disagree responses. */
                 agreementPercent: number | null;
+                /** @description The agree share is at least guidance.agreementMarkShare; false when agreementPercent is null. */
+                agreementMarked: boolean;
             };
         };
         AdminStatementProvenance: {
@@ -1796,6 +1823,7 @@ export interface components {
                 useAdvancedPhases: boolean;
                 initializePhase6: boolean;
                 archive: boolean;
+                previewReport: boolean;
             };
             links: {
                 self: string;
@@ -2576,7 +2604,7 @@ export interface components {
             slug: string;
             title: string;
             /** @enum {string} */
-            publication: "preliminary" | "final";
+            publication: "preliminary" | "final" | "preview";
             resultsAvailable: boolean;
             /** Format: date-time */
             openedAt: string;
@@ -2596,6 +2624,7 @@ export interface components {
             dataAvailability: {
                 detailedCounts: boolean;
                 opinionGroups: boolean;
+                personalLens: boolean;
             };
             moderation: {
                 excludedStatements: number;
@@ -2619,6 +2648,17 @@ export interface components {
             agreementShift: number | null;
             /** @enum {string|null} */
             viewerChoice: "agree" | "pass" | "disagree" | null;
+            /** @enum {string|null} */
+            viewerGroupChoice: "agree" | "pass" | "disagree" | null;
+            viewerMatchesGroup: boolean | null;
+            personalDelta: components["schemas"]["PersonalDelta"] | null;
+        };
+        PersonalDelta: {
+            /** @enum {string} */
+            initial: "agree" | "pass" | "disagree";
+            /** @enum {string} */
+            informed: "agree" | "pass" | "disagree";
+            changed: boolean;
         };
         VoteTally: {
             counts: {
@@ -5263,6 +5303,64 @@ export interface operations {
             };
             /** @description Vote verification unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationReportPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsReportResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The report is already published; details.report is its path */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

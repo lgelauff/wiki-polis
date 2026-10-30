@@ -3413,6 +3413,26 @@ a { color: var(--pass); }
   border: 1px solid rgba(31,138,91,.2);
 }
 
+/* A site admin's preview of the report: amber, so it never reads as the green "Final".
+   Darker than --spot (#b45309), which lands ~4.3:1 on its own tint at 10px, under AA;
+   #7c2d12 clears 4.5:1 there, as in redesign.css (#165). */
+.report-badge--preview {
+  color: #7c2d12;
+  background: color-mix(in srgb, var(--spot) 9%, transparent);
+  border-color: color-mix(in srgb, var(--spot) 28%, transparent);
+}
+
+.report-preview-banner {
+  margin: 0 0 1.25rem;
+  padding: .75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--spot) 35%, transparent);
+  border-inline-start-width: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--spot) 7%, var(--surface));
+  color: var(--ink);
+  font-size: .875rem;
+}
+
 .report-section {
   margin-bottom: 2.5rem;
 }
