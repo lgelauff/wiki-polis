@@ -233,6 +233,7 @@
     "report-badge-preview": "Badge on a site admin's preview of the results report, in place of {{msg-proto|report-badge-final}}; shown in capitals by the style sheet. Text copied from MediaWiki core's {{msg-mw|preview}} (GPL-2.0-or-later; see i18n/ATTRIBUTION.md); keep the translation identical to that message's.",
     "report-status-preview": "Status value in the report's how-to-read box on a site admin's preview, in place of {{msg-proto|report-status-final}}. \"Live\" and \"not frozen\" describe the numbers: they still change, unlike the published report's.",
     "report-subtitle-preview": "Subtitle under the report title on a site admin's preview, in place of {{msg-proto|report-subtitle}}. Also $1 of {{msg-proto|output-doc-title}}, the preview's browser tab title.",
+    "report-method-preview": "Method line in the \"How to read this output\" box of the site-admin report preview. It replaces {{msg-proto|output-report-method}}, which describes the published report. Appears with {{msg-proto|report-status-preview}} and {{msg-proto|report-preview-banner}}. Only site admins see this page.",
     "report-preview-banner": "Notice at the top of a site admin's preview of the results report, so the page is never mistaken for the published report. Parsed as HTML: keep the <nowiki><strong></nowiki> tags around the first sentence.",
     "report-intro-heading": "Section heading for the report introduction.",
     "report-intro-placeholder": "Italic placeholder where the organizer introduction will go.",

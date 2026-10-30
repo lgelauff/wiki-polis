@@ -242,7 +242,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
               consultation is closed, "preliminary-results" before. */}
           <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>
           <div><dt>{msg('output-status-label')}</dt><dd>{msg(preview ? 'report-status-preview' : 'report-status-final')}</dd></div>
-          <div><dt>{msg('output-method-label')}</dt><dd>{outputMethod(msg, contextOutput, report.context.method)}</dd></div>
+          <div><dt>{msg('output-method-label')}</dt><dd>{preview ? msg('report-method-preview') : outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>
       <PlaceholderSections />

@@ -234,6 +234,7 @@
     "report-badge-preview": "Preview",
     "report-status-preview": "Preview · live, not frozen",
     "report-subtitle-preview": "Results report preview",
+    "report-method-preview": "These are intermediate results, shown as a preview only. They use the current tallies from the informed opinion round and the current moderation decisions, which can still change. The published report can differ from this preview.",
     "report-preview-banner": "<strong>Preview — not published.</strong> Only site admins can see this page. The numbers are live and can change until the report is published.",
     "report-intro-heading": "Introduction",
     "report-intro-placeholder": "The organizer has not added an introduction yet. It should explain what the consultation process was about, who ran it, and how the results will be used.",

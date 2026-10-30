@@ -167,7 +167,8 @@ test('a site admin preview is marked as unpublished and never as final', async (
   expect(document.querySelector('.report-badge--preview')).toHaveTextContent(testMessages['report-badge-preview']!);
   expect(screen.getByText(testMessages['report-subtitle-preview']!)).toBeVisible();
   expect(screen.getByText(testMessages['report-status-preview']!)).toBeVisible();
-  for (const key of ['report-badge-final', 'report-status-final', 'report-subtitle'] as const) {
+  expect(screen.getByText(testMessages['report-method-preview']!)).toBeVisible();
+  for (const key of ['report-badge-final', 'report-status-final', 'report-subtitle', 'output-report-method'] as const) {
     expect(screen.queryByText(testMessages[key]!)).toBeNull();
   }
   // The back link returns to the admin console, where the preview was opened.
