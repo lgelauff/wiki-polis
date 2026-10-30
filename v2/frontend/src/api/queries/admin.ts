@@ -156,6 +156,20 @@ export async function putGlobalAdmin(
   }))).data;
 }
 
+export const reminderTestQuery = () => queryOptions({
+  queryKey: ['admin-reminder-test'],
+  queryFn: async () => (await requireApiData(api.GET('/admin/reminder-test'))).data,
+  staleTime: 30_000,
+});
+
+export async function postReminderTestSend(
+  body: components['schemas']['ReminderTestSendRequest'], csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/reminder-test-sends', {
+    body, headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const adminLifecycleQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-lifecycle', conversationId],
   queryFn: async () => (

@@ -128,6 +128,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/reminder-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return what the reminder test can use: wikis, which are live, the test accounts, whether the bot login is set */
+        get: operations["getReminderTest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reminder-test-sends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send one test message from the Proto bot to a configured test account; a wiki that is not live, or a bot without a login, gives a dry run */
+        post: operations["postReminderTestSend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/termination": {
         parameters: {
             query?: never;
@@ -1210,6 +1244,37 @@ export interface components {
                 granted: boolean;
                 changed: boolean;
                 catalog: components["schemas"]["AdminCatalog"];
+            };
+        };
+        ReminderTestResponse: {
+            data: {
+                wikis: {
+                    key: string;
+                    host: string;
+                    live: boolean;
+                }[];
+                recipients: string[];
+                /** @description Whether the bot login for each channel is set */
+                credentialsSet: {
+                    email: boolean;
+                    talk: boolean;
+                };
+            };
+        };
+        ReminderTestSendRequest: {
+            wiki: string;
+            /** @enum {string} */
+            channel: "email" | "talk";
+            recipient: string;
+        };
+        ReminderTestSendResponse: {
+            data: {
+                /** @enum {string} */
+                outcome: "sent" | "dry_run" | "failed" | "unknown";
+                /** @enum {string|null} */
+                reason: "wiki_not_live" | "no_credentials" | "not_emailable" | "nobots" | "throttled" | "blocked" | "lagged" | "outcome_unknown" | "api_error" | null;
+                code: string | null;
+                sentVia: string | null;
             };
         };
         AdminTerminationResponse: {
@@ -3242,6 +3307,104 @@ export interface operations {
             };
             /** @description Refused, nothing changed: a site admin cannot remove their own site admin access (own_site_admin_protected); a site admin set in the server configuration cannot be removed here (configured_site_admin_protected); a username set in the server configuration cannot also be granted in the app (already_configured_site_admin) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getReminderTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reminder test state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderTestResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postReminderTestSend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderTestSendRequest"];
+            };
+        };
+        responses: {
+            /** @description Test result: sent, dry_run, failed, or unknown (the wiki did not answer a send in time, so it may have been delivered), with the reason */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderTestSendResponse"];
+                };
+            };
+            /** @description Invalid request, or a wiki, channel or account that is not configured (unknown_wiki, unknown_channel, recipient_not_allowed); nothing was attempted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many test sends */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

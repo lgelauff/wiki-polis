@@ -146,6 +146,11 @@ from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
+from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
+                                    ReminderSettings, ReminderTestMessage,
+                                    ReminderTestRefused, default_client_factory,
+                                    login_settings, missing_login_parts, send_test_message)
+from services.wiki_bot import WIKI_HOSTS
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -4004,6 +4009,69 @@ def _grant_global_admin_api_payload(body: dict) -> dict:
     }
 
 
+def _reminder_settings() -> ReminderSettings:
+    return ReminderSettings.from_config(current_app.config, user_agent=_MW_USER_AGENT)
+
+
+def _run_reminder_test(*, wiki: str, channel: str, recipient: str):
+    """One test message from the bot (#577): the API's test button and the CLI share this.
+
+    Raises `ReminderTestRefused` for a request that is not allowed; otherwise returns a
+    `ReminderTestResult`. Either way it writes one audit row (outcome, wiki, channel,
+    reason; never the recipient's name)."""
+    settings = _reminder_settings()
+    message = ReminderTestMessage(
+        subject=i18n.resolve('admin-reminder-test-mail-subject'),
+        body=i18n.resolve('admin-reminder-test-mail-body'),
+        summary=i18n.resolve('admin-reminder-test-talk-summary'),
+    )
+    # A command-line run has no signed-in actor; say so instead of leaving it unexplained.
+    origin = {} if has_request_context() else {'actor_kind': 'cli'}
+    # Only known values go into the audit row: a refused request may carry anything.
+    audited = {
+        'wiki': wiki if wiki in WIKI_HOSTS else 'other',
+        'channel': channel if channel in REMINDER_CHANNELS else 'other',
+    }
+    try:
+        result = send_test_message(
+            wiki=wiki, channel=channel, recipient=recipient, settings=settings,
+            message=message, client_factory=default_client_factory(settings),
+        )
+    except ReminderTestRefused as exc:
+        record_audit('reminder.test', outcome='refused', reason=exc.code, **audited, **origin)
+        raise
+    record_audit(
+        'reminder.test', outcome=result.outcome, reason=result.reason, code=result.code,
+        sent_via=result.sent_via, **audited, **origin,
+    )
+    return result
+
+
+def _reminder_test_api_payload() -> dict:
+    if not _is_global_admin():
+        _refuse_admin()
+    settings = _reminder_settings()
+    return {
+        'wikis': [{'key': wiki, 'host': host, 'live': wiki in settings.live_wikis}
+                  for wiki, host in WIKI_HOSTS.items()],
+        'recipients': list(settings.test_recipients),
+        'credentialsSet': {channel: settings.credentials_for(channel) is not None
+                           for channel in REMINDER_CHANNELS},
+    }
+
+
+def _send_reminder_test_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        _refuse_admin()
+    result = _run_reminder_test(
+        wiki=body['wiki'], channel=body['channel'], recipient=body['recipient'],
+    )
+    return {
+        'outcome': result.outcome, 'reason': result.reason, 'code': result.code,
+        'sentVia': result.sent_via,
+    }
+
+
 def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
         _refuse_admin()
@@ -6010,6 +6078,18 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = (
         os.environ.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', '0')
     )
+    # Participant reminders (#577). The bot's logins (bot passwords: one for wiki-mail, one
+    # for talk-page posts, each with only its own grants), and two guards that are empty by
+    # default: the wikis where real sends are switched on, and the only accounts that may
+    # receive anything while the bot is being tested (#581, #582).
+    app.config.update(login_settings(_read_secret))
+    for _channel, _empty in missing_login_parts(app.config).items():
+        # Names only, never values: a half-set login counts as not set (a dry run).
+        app.logger.warning('reminder bot login for %s is half set: %s is empty',
+                           _channel, _empty[0])
+    app.config['REMINDERS_LIVE_WIKIS'] = _split_csv(os.environ.get('REMINDERS_LIVE_WIKIS', ''))
+    app.config['REMINDERS_TEST_RECIPIENTS'] = _split_csv(
+        os.environ.get('REMINDERS_TEST_RECIPIENTS', ''))
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -6231,6 +6311,34 @@ def create_app(test_config: dict | None = None) -> Flask:
         if result['failed']:
             raise SystemExit(1)                # the job's failure email names the run; logs name the conversation
 
+    @app.cli.command('send-test-reminder')
+    @click.option('--wiki', required=True, type=click.Choice(sorted(WIKI_HOSTS)))
+    @click.option('--channel', required=True, type=click.Choice(REMINDER_CHANNELS))
+    @click.option('--to', 'recipient', required=True,
+                  help='A username listed in REMINDERS_TEST_RECIPIENTS.')
+    def send_test_reminder_cmd(wiki, channel, recipient):
+        """Send one test message from the Proto bot to a test account (#577)."""
+        try:
+            result = _run_reminder_test(wiki=wiki, channel=channel, recipient=recipient)
+        except ReminderTestRefused as exc:
+            click.echo(f'Refused: {exc.code}.')
+            raise SystemExit(2)
+        line = f'Test {channel} on {wiki}: {result.outcome}'
+        if result.sent_via:
+            line += f' (sent from {result.sent_via})'
+        if result.reason:
+            line += f', reason {result.reason}'
+        if result.code:
+            line += f' ({result.code})'
+        if result.reason == 'no_credentials':
+            half = missing_login_parts(current_app.config).get(channel)
+            prefix = LOGIN_PREFIX[channel]
+            line += (f': {half[0]} is empty' if half
+                     else f': set {prefix}_USERNAME and {prefix}_PASSWORD')
+        click.echo(line + '.')
+        if result.outcome == 'failed':
+            raise SystemExit(1)
+
     # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
     # English and the in-repo translations, so the language switcher is visible as
     # soon as a locale ships its first catalogue.  Set ENABLED_LOCALES to override.
@@ -6405,6 +6513,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         create_admin_conversation=_create_admin_conversation_api_payload,
         grant_global_admin=_grant_global_admin_api_payload,
         set_global_admin=_set_global_admin_api_payload,
+        resolve_reminder_test=_reminder_test_api_payload,
+        send_reminder_test=_send_reminder_test_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,

@@ -171,6 +171,35 @@ TAGS:
     - admin-policy-span-years
     - admin-provenance-aria
     - admin-provenance-title
+    - admin-reminder-test-btn
+    - admin-reminder-test-channel-email
+    - admin-reminder-test-channel-talk
+    - admin-reminder-test-dry-no-login
+    - admin-reminder-test-dry-not-live
+    - admin-reminder-test-empty
+    - admin-reminder-test-failed-blocked
+    - admin-reminder-test-failed-error
+    - admin-reminder-test-failed-lagged
+    - admin-reminder-test-failed-nobots
+    - admin-reminder-test-failed-not-bot-password
+    - admin-reminder-test-failed-not-emailable
+    - admin-reminder-test-failed-not-emailable-here
+    - admin-reminder-test-failed-throttled
+    - admin-reminder-test-heading
+    - admin-reminder-test-intro
+    - admin-reminder-test-label-channel
+    - admin-reminder-test-label-recipient
+    - admin-reminder-test-label-wiki
+    - admin-reminder-test-mail-body
+    - admin-reminder-test-mail-subject
+    - admin-reminder-test-rate-limited
+    - admin-reminder-test-refused
+    - admin-reminder-test-sending
+    - admin-reminder-test-sent
+    - admin-reminder-test-sent-fallback
+    - admin-reminder-test-talk-summary
+    - admin-reminder-test-unknown
+    - admin-reminder-test-wiki-dry
     - admin-roles-assigned
     - admin-roles-change
     - admin-roles-empty

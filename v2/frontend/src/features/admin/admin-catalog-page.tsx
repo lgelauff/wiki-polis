@@ -11,6 +11,7 @@ import {
   putGlobalAdmin,
 } from '../../api/queries';
 import {AdminComing} from './admin-coming';
+import {AdminReminderTest} from './admin-reminder-test';
 import {AdminShell} from './admin-shell';
 import {EligibilityPolicyField, refreshPoliciesAfterRefusal} from './eligibility-policy-field';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -298,6 +299,8 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             </div>
           </form>
         </details>
+
+        <AdminReminderTest csrfToken={csrfToken} />
 
         {/* What is not built yet, last on the page (see `AdminComing`). */}
         <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />
