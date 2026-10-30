@@ -18,8 +18,8 @@ const SEND_URL = new URL('/api/v1/admin/reminder-test-sends', globalThis.locatio
 
 const state: State = {
   wikis: [
-    {key: 'metawiki', host: 'meta.wikimedia.org', live: false},
-    {key: 'nlwiki', host: 'nl.wikipedia.org', live: true},
+    {key: 'metawiki', host: 'meta.wikimedia.org'},
+    {key: 'nlwiki', host: 'nl.wikipedia.org'},
   ],
   recipients: ['Tester', 'Tester two'],
   credentialsSet: {email: true, talk: true},
@@ -31,8 +31,9 @@ function serve(stateData: State, reply?: () => Response | Promise<Response>, see
   server.use(
     http.get(STATE_URL, () => HttpResponse.json({data: stateData})),
     http.post(SEND_URL, async ({request}) => {
-      seen.push(await request.json());
-      return reply ? reply() : HttpResponse.json({data: sent('nlwiki')});
+      const body = await request.json() as {wiki: string};
+      seen.push(body);
+      return reply ? reply() : HttpResponse.json({data: sent(body.wiki)});
     }),
   );
   return seen;
@@ -60,12 +61,14 @@ async function renderSection() {
   toggle(true);
 }
 
-test('defaults to a live wiki and sends to the chosen test account', async () => {
+test('lists every wiki by host, with no dry-run label, and sends to the chosen test account', async () => {
   const seen = serve(state);
   await renderSection();
   const wiki = await screen.findByRole('combobox', {name: 'Wiki'});
-  expect((wiki as HTMLSelectElement).value).toBe('nlwiki');
-  expect(screen.getByRole('option', {name: 'meta.wikimedia.org (dry run)'})).toBeTruthy();
+  expect((wiki as HTMLSelectElement).value).toBe('metawiki');
+  expect(screen.getAllByRole('option', {name: /wiki/}).map((o) => o.textContent))
+    .toEqual(['meta.wikimedia.org', 'nl.wikipedia.org']);
+  fireEvent.change(wiki, {target: {value: 'nlwiki'}});
   fireEvent.change(screen.getByRole('combobox', {name: 'Test account'}), {target: {value: 'Tester two'}});
   fireEvent.click(screen.getByRole('button', {name: 'Send test'}));
   expect(await screen.findByText('Sent from nl.wikipedia.org.')).toBeTruthy();
@@ -73,8 +76,7 @@ test('defaults to a live wiki and sends to the chosen test account', async () =>
 });
 
 test('says when wiki-mail went out from Meta instead', async () => {
-  serve({...state, wikis: state.wikis.map((row) => ({...row, live: true}))},
-    () => HttpResponse.json({data: sent('metawiki')}));
+  serve(state, () => HttpResponse.json({data: sent('metawiki')}));
   await renderSection();
   fireEvent.change(await screen.findByRole('combobox', {name: 'Wiki'}), {target: {value: 'nlwiki'}});
   fireEvent.click(screen.getByRole('button', {name: 'Send test'}));
@@ -83,13 +85,13 @@ test('says when wiki-mail went out from Meta instead', async () => {
   )).toBeTruthy();
 });
 
-test('says why a test was not sent, and that Meta was not tried', async () => {
+test('says why a test was not sent', async () => {
   serve(state, () => HttpResponse.json({data: {
-    outcome: 'failed', reason: 'not_emailable', code: 'fallback_not_live', sentVia: null,
+    outcome: 'failed', reason: 'not_emailable', code: null, sentVia: null,
   }}));
   await renderSection();
   fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
-  expect(await screen.findByText(/Meta is not switched on for real sends, so it was not tried/)).toBeTruthy();
+  expect(await screen.findByText(/can't receive wiki-mail, on this wiki or on Meta/)).toBeTruthy();
 });
 
 test('a talk page that keeps bots out is named as the reason', async () => {
@@ -103,7 +105,7 @@ test('a talk page that keeps bots out is named as the reason', async () => {
 test('shows that a send is under way, and keeps its result when the section is folded', async () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  serve(state, async () => { await gate; return HttpResponse.json({data: sent('nlwiki')}); });
+  serve(state, async () => { await gate; return HttpResponse.json({data: sent('metawiki')}); });
   await renderSection();
   fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
   expect(await screen.findByText(/^Sending…/)).toBeTruthy();
@@ -111,16 +113,16 @@ test('shows that a send is under way, and keeps its result when the section is f
   release();
   await waitFor(() => expect(screen.queryByText(/^Sending…/)).toBeNull());
   toggle(true);
-  expect(await screen.findByText('Sent from nl.wikipedia.org.')).toBeTruthy();
+  expect(await screen.findByText('Sent from meta.wikimedia.org.')).toBeTruthy();
 });
 
 test('changing the selection clears the previous result', async () => {
   serve(state);
   await renderSection();
   fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
-  expect(await screen.findByText('Sent from nl.wikipedia.org.')).toBeTruthy();
+  expect(await screen.findByText('Sent from meta.wikimedia.org.')).toBeTruthy();
   fireEvent.change(screen.getByRole('combobox', {name: 'Channel'}), {target: {value: 'talk'}});
-  expect(screen.queryByText('Sent from nl.wikipedia.org.')).toBeNull();
+  expect(screen.queryByText('Sent from meta.wikimedia.org.')).toBeNull();
 });
 
 test('a refused request is said in the console\'s own words', async () => {

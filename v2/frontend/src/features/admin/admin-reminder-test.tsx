@@ -31,11 +31,8 @@ function resultLine(msg: Message, result: Result, sent: Request, state: State | 
   }
   if (result.outcome === 'unknown') return failed(msg('admin-reminder-test-unknown'));
   switch (result.reason) {
-    case 'wiki_not_live': return {text: msg('admin-reminder-test-dry-not-live'), error: false};
     case 'no_credentials': return {text: msg('admin-reminder-test-dry-no-login'), error: false};
-    case 'not_emailable': return failed(result.code === 'fallback_not_live'
-      ? msg('admin-reminder-test-failed-not-emailable-here')
-      : msg('admin-reminder-test-failed-not-emailable'));
+    case 'not_emailable': return failed(msg('admin-reminder-test-failed-not-emailable'));
     case 'nobots': return failed(msg('admin-reminder-test-failed-nobots'));
     case 'throttled': return failed(msg('admin-reminder-test-failed-throttled'));
     case 'lagged': return failed(msg('admin-reminder-test-failed-lagged'));
@@ -113,7 +110,7 @@ function ReminderTestForm({state, failed, pending, line, onChange, onSend}: {
   if (!state) return <p>{msg('common-loading')}</p>;
   if (!state.recipients.length) return <p className="admin-empty">{msg('admin-reminder-test-empty')}</p>;
 
-  const chosenWiki = wiki ?? (state.wikis.find((row) => row.live) ?? state.wikis[0])?.key ?? '';
+  const chosenWiki = wiki ?? state.wikis[0]?.key ?? '';
   // A remembered pick that the server no longer lists falls back to the first test account.
   const chosenRecipient = recipient && state.recipients.includes(recipient)
     ? recipient : state.recipients[0] ?? '';
@@ -131,7 +128,7 @@ function ReminderTestForm({state, failed, pending, line, onChange, onSend}: {
       <p>{msg('admin-reminder-test-intro')}</p>
       <label className="admin-field admin-field--medium">{msg('admin-reminder-test-label-wiki')}<select value={chosenWiki} onChange={(event) => { setWiki(event.target.value); onChange(); }}>
         {state.wikis.map((row) => <option key={row.key} value={row.key}>
-          {row.live ? row.host : msg('admin-reminder-test-wiki-dry', row.host)}
+          {row.host}
         </option>)}
       </select></label>
       <label className="admin-field admin-field--medium">{msg('admin-reminder-test-label-channel')}<select value={channel} onChange={(event) => { setChannel(event.target.value as Channel); onChange(); }}>
