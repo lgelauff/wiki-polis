@@ -28,5 +28,7 @@
   }
  ],
  "timezone": "UTC",
- "min_participants_for_groups": 25
+ "min_participants_for_groups": 25,
+ "min_cell": 3,
+ "min_total": 10
 }

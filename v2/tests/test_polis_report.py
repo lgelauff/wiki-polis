@@ -49,7 +49,8 @@ def write_poll(d, text_by_id, votes, groups, xids, early=()):
         w = csv.writer(f); w.writerow(['participant', 'xid']); w.writerows(sorted(xids.items()))
 
 
-def build(tmp_path):
+def build(tmp_path, **settings):
+    """Known answers need exact counts, so the small-count rule is off unless a test sets it."""
     a_votes = dict(A_VOTES)
     write_poll(tmp_path / 'a', A_TEXT, a_votes, A_GROUP, A_XID, early=[(900, '', '0', '7', 1)])   # participant 7 voted only before the window
     # Poll A: participant 2 re-votes on statement 3 (pass, then agree... then pass again: latest is pass)
@@ -61,7 +62,7 @@ def build(tmp_path):
     b_votes = {p: [vs[int(next(a for a, t in A_TEXT.items() if t == b_text[str(i)]))] for i in range(5)] for p, vs in B_VOTES.items()}
     write_poll(tmp_path / 'b', b_text, b_votes, B_GROUP, B_XID)
     cfg = {'title': 'Test', 'banner': 'TEST', 'out': 'out', 'since': '1970-01-01T00:16:40Z', 'meta': ['I am staff.'],
-           'min_participants_for_groups': 3,
+           'min_participants_for_groups': 3, 'min_cell': 1, 'min_total': 1, **settings,
            'polls': [{'key': 'a', 'name': 'Poll A', 'dir': 'a', 'report': 'ra', 'url': 'u/a', 'xid': 'a/xid.csv'},
                      {'key': 'b', 'name': 'Poll B', 'dir': 'b', 'report': 'rb', 'url': 'u/b', 'xid': 'b/xid.csv'}]}
     (tmp_path / 'config.json').write_text(json.dumps(cfg))
@@ -128,16 +129,38 @@ def test_comparison_skipped_without_xid_files(tmp_path):
     assert (out / 'poll-a-report.html').exists() and not (out / 'poll-ab-transitions.html').exists()
 
 
-def test_small_groups_are_merged_and_never_crossed_with_roles(tmp_path):
-    out = build(tmp_path)
-    page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
-    # both synthetic groups have 3 members: merged into Other, so the group-difference measure is not computed
-    assert 'Not computed: fewer than two Polis groups have at least 5 members' in page
+def test_small_counts_are_hidden_and_cannot_be_worked_out_from_the_total():
+    cells = polis_report.cells
+    assert cells((2, 10, 5), 3)[0] == ['<3', '10', '≥3']     # one hidden: the next-smallest is hidden too
+    assert cells((1, 2, 15), 3)[0] == ['<3', '<3', '15']     # two hidden: nothing to add
+    assert cells((2, 0, 9), 3)[0] == ['<3', '0', '≥3']
+    assert cells((0, 4, 7), 3) == (['0', '4', '7'], [True, True, True])
+    assert cells((2, 10, 5), 1)[0] == ['2', '10', '5']       # min_cell 1: the rule is off
+
+
+def test_default_rule_hides_small_counts_and_small_columns(tmp_path):
+    out = build(tmp_path, min_cell=3, min_total=10)
     a = {r['statement']: r for r in rows(out / 'poll-a-statements.csv')}
-    assert a['4']['Other_agree'] == ''                       # role answers are not shown for Other
-    assert a['0']['Other_agree'] == '5'                      # opinion counts of 3+ are shown as they are
-    assert a['2']['Other_agree'] == '<3'        # counts of 1-2 are suppressed
+    # statement 0 is 5 agree, 1 disagree, 0 pass: the 1 is hidden, so the 5 is too
+    assert (a['0']['All_agree'], a['0']['All_disagree'], a['0']['All_pass']) == ('≥3', '<3', '0')
+    for r in a.values():
+        assert not {r['All_agree'], r['All_disagree'], r['All_pass']} & {'1', '2'}
+    # both Polis groups have 3 members and "Other" has 6: no column under 10 is shown
+    assert 'Other_agree' not in open(out / 'poll-a-statements.csv').readline()
+    page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
+    row = page[page.index('data-tip="#0:'):]
+    row = row[:row.index('class="nums"')]
+    assert 'width:0.0%' in row and 'width:16.7%' not in row and 'width:83.3%' not in row   # hidden counts are not drawn
+    assert 'Not shown: fewer than 10 people.' in page
     assert 'self-selected' in page.lower()
+    # the one-poll-only columns (2 and 1 people) and the matched 4 are under 10
+    comp = {r['statement']: r for r in rows(out / 'composition.csv')}
+    assert (comp['0']['A_only_agree'], comp['0']['A_only_n'], comp['0']['A_matched_agree']) == ('', '', '')
+    compared = (out / 'poll-ab-compared.html').read_text(encoding='utf-8')
+    assert 'fewer than 10: most counts are small' in compared
+    # per-person transitions and movers stay exact: they are the point of the pair
+    t = {(r['statement'], r['A_vote'], r['B_vote']): int(r['n']) for r in rows(out / 'transitions_by_statement.csv')}
+    assert t[('0', 'agree', 'disagree')] == 1
 
 
 def test_power_and_baseline_lines(tmp_path):

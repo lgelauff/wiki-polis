@@ -120,12 +120,17 @@ the deterministic test suite.
 
 ## 7. Small cells and privacy
 
-- Counts of 1–2 are shown as "<3" for the merged "Other" group, and wherever role answers are crossed with
-  anything.
-- Role answers are never crossed with a group under 5.
+- Counts of 1–2 are shown as "<3" in every table, chart and CSV (`min_cell`, default 3).
+- If that hides only one count of a row (agree · disagree · pass), the row's next-smallest count is shown as "≥3"
+  too. Otherwise the hidden count could be worked out from the row's total. Bars leave hidden counts out, and a
+  change in agree is shown only when both counts are exact.
+- A column or breakdown of fewer than 10 people is not shown (`min_total`, default 10): a Polis group, "Other", the
+  split by answer to a role question, and the one-poll-only columns. Polis groups under 10 are merged into "Other".
+- Role answers are never crossed with "Other".
 - Role answers over time are summarised as the number of differing answers, not tabulated per person.
-- Per-person opinion transitions are shown exactly. Seeing single agree↔disagree switches is the point of that
-  table, and it contains no role answers.
+- Per-person opinion transitions and movers are shown exactly. Seeing single agree↔disagree switches is the point
+  of that table, and it contains no role answers. Its row and column sums are the matched participants' counts in
+  each poll, so those counts can be read from it even where the comparison page hides them.
 - xids are used only to match people; they never appear in an output.
 
 ## 8. Known limits
