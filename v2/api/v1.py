@@ -17,7 +17,7 @@ import i18n
 from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
 from services.participations import (EligibilityDenied, InvalidPseudonym,
-                                     PseudonymUnavailable)
+                                     JoinClosed, PseudonymUnavailable)
 from services.explore import ExploreUpstreamError, StatementAlreadyExists
 from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
                                   InvalidIdempotencyKey,
@@ -407,6 +407,11 @@ def create_api_v1_blueprint(
             return error_response(
                 'pseudonym_unavailable',
                 'That pseudonym was just taken. Choose another.',
+                409,
+            )
+        except JoinClosed:
+            return error_response(
+                'join_closed', 'Joining has closed: there are no more rounds to take part in.',
                 409,
             )
         except EligibilityDenied as exc:

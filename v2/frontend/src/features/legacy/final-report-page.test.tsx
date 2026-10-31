@@ -25,13 +25,13 @@ const reportFixture: components['schemas']['ResultsReport'] = {
   // Deliberately unlike the catalogue's English, so a page echoing the server shows the marker.
   context: {phase: 'SERVER ENGLISH', status: 'final', method: 'SERVER ENGLISH'},
   participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
-  dataAvailability: {detailedCounts: true, opinionGroups: true, personalLens: false},
+  dataAvailability: {detailedCounts: true, opinionGroups: true, personalLens: false, responseFloor: 10},
   moderation: {excludedStatements: 1, excludedParticipants: 0},
   statements: [{
     featuredStatementId: 31,
     statement: 'Regional communities should share infrastructure funding.',
-    initial: {counts: {agree: 12, pass: 3, disagree: 5, voters: 20}, percentages: {agree: 60, pass: 15, disagree: 25}},
-    informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
+    initial: {counts: {agree: 12, pass: 3, disagree: 5, voters: 20}, percentages: {agree: 60, pass: 15, disagree: 25}, belowFloor: false},
+    informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}, belowFloor: false},
     agreementShift: 10,
     viewerChoice: null,
     viewerGroupChoice: null,
@@ -75,7 +75,7 @@ test('renders the final report from the catalogue English', async () => {
   expect(screen.getByText('1 group found in the informed opinion round')).toBeVisible();
   expect(screen.getByText('· 11 participants')).toBeVisible();
   expect(screen.getByText('Moderation applied: 1 statement excluded')).toBeVisible();
-  expect(screen.getAllByText('60.0% agree · 15.0% pass · 20 responses')[0]).toBeVisible();
+  expect(screen.getAllByText('60% agree · 15% pass · 20 responses')[0]).toBeVisible();
   expect(screen.getByText(/Your participation is recorded under pseudonym/)).toHaveTextContent('quiet-otter');
   // Participant- and organizer-authored content is never routed through the catalogue.
   expect(screen.getByRole('heading', {name: 'Community strategy'})).toBeVisible();
@@ -110,7 +110,7 @@ test('renders report text from the catalogue, not from source literals', async (
   expect(screen.getByRole('table', {name: 'CATALOGUE TABLE LABEL'})).toBeVisible();
   expect(screen.getByText('Featured count is 1')).toBeVisible();
   expect(screen.getByText('1 cluster found')).toBeVisible();
-  expect(screen.getAllByText('60.0% in favour, 15.0% abstaining, over 20 ballots')[0]).toBeVisible();
+  expect(screen.getAllByText('60% in favour, 15% abstaining, over 20 ballots')[0]).toBeVisible();
   expect(screen.getByText('in favour')).toBeVisible();
   expect(screen.getByText('CATALOGUE STATUS')).toBeVisible();
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
@@ -135,19 +135,43 @@ test('opinion groups are numbered from the catalogue, not the server label', asy
   expect(document.body.textContent).not.toContain('SERVER GROUP');
 });
 
-test('under nl, percentages are written the Dutch way, with a decimal comma', async () => {
-  // toFixed would write "62.5" whatever the language; the number, not the message, owns the %.
+test('under nl, the whole percentages from the server are written the Dutch way', async () => {
+  // The server rounds once to whole percent (#233); the page adds no decimals of its own.
   server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(), () => HttpResponse.json(dutch)));
   const first = reportFixture.statements[0]!;
   renderReport({
     ...reportFixture,
-    statements: [{...first, initial: {counts: first.initial!.counts, percentages: {agree: 62.5, pass: 15, disagree: 22.5}}, agreementShift: 7.5}],
+    statements: [{...first, initial: {counts: first.initial!.counts, percentages: {agree: 63, pass: 15, disagree: 22}, belowFloor: false}, agreementShift: 8}],
   }, 'nl');
 
-  expect((await screen.findAllByText('62,5% eens · 15,0% overgeslagen · 20 antwoorden', {}, {timeout: 5000}))[0]).toBeVisible();
-  expect(screen.getAllByTitle('Eens 62,5% · Oneens 22,5% · Overgeslagen 15,0%')[0]).toBeInTheDocument();
-  expect(screen.getByText('+7,5%')).toBeVisible();
+  expect((await screen.findAllByText('63% eens · 15% overgeslagen · 20 antwoorden', {}, {timeout: 5000}))[0]).toBeVisible();
+  expect(screen.getAllByTitle('Eens 63% · Oneens 22% · Overgeslagen 15%')[0]).toBeInTheDocument();
+  expect(screen.getByText('+8%')).toBeVisible();
   expect(screen.getByText('82%')).toBeVisible();
+});
+
+test('a tally the server withheld shows "fewer than" and no bar or number', async () => {
+  const first = reportFixture.statements[0]!;
+  const withheld = {counts: null, percentages: null, belowFloor: true};
+  renderReport({...reportFixture, statements: [{...first, initial: withheld, informed: withheld, agreementShift: null}]});
+
+  const table = await screen.findByRole('table', {name: 'Aggregate opinion shift per statement'}, {timeout: 5000});
+  expect(within(table).getAllByText('fewer than 10 responses')).toHaveLength(2);
+  expect(table.querySelector('.p6-vote-bar')).toBeNull();
+  expect(table).not.toHaveTextContent('%');
+});
+
+test('the public view shows percentages without the number of responses', async () => {
+  const first = reportFixture.statements[0]!;
+  renderReport({
+    ...reportFixture,
+    statements: [{...first, initial: {...first.initial!, counts: null}, informed: {...first.informed!, counts: null}}],
+    opinionGroups: [],
+    viewer: {participating: false, pseudonym: null, revealState: null},
+  });
+
+  expect((await screen.findAllByText('60% agree · 15% pass', {}, {timeout: 5000}))[0]).toBeVisible();
+  expect(document.body.textContent).not.toMatch(/\d+ responses/);
 });
 
 const previewFixture: components['schemas']['ResultsReport'] = {

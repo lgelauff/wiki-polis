@@ -136,10 +136,10 @@ function SelectedRow({
   );
 }
 
-/** The agreement share as the server sends it: withheld (null) below the floor, a whole
- *  percent otherwise, and marked at the mark share. The server applies the floor and rounds;
- *  the page only shows the result. The agree, disagree and pass counts in the same row are
- *  not floored yet, so on this table the floor does not hide the share. */
+/** A row as the server sends it. Below the floor the agreement share and the agree,
+ *  disagree and pass counts are all withheld (null), so the share cannot be worked back from
+ *  the counts (#233); only the total stays. Otherwise the share is a whole percent, marked at
+ *  the mark share. The server applies the floor and rounds; the page only shows the result. */
 function CandidateRow({candidate, guidance, pending, onConfirm}: {
   candidate: Candidate;
   guidance: Workspace['guidance'];
@@ -150,6 +150,11 @@ function CandidateRow({candidate, guidance, pending, onConfirm}: {
   const percentage = usePercentFormat();
   const {agreementPercent, agreementMarked} = candidate.votes;
   const markLabel = msg('featured-agreement-mark', percentage(guidance.agreementMarkShare * 100, {digits: 0}));
+  const few = msg('featured-agreement-few', guidance.agreementFloor);
+  // A withheld count: the dash is for the eye, the reason is read out and shown on hover.
+  const count = (value: number | null) => value ?? <>
+    <span aria-hidden="true" title={few}>—</span><span className="sr-only">{few}</span>
+  </>;
   return (
     <tr>
       <td className="admin-num">{candidate.statementId}</td>
@@ -159,13 +164,13 @@ function CandidateRow({candidate, guidance, pending, onConfirm}: {
       </td>
       {/* A seed statement is marked with a check that names itself. */}
       <td>{candidate.seed && <span title={msg('featured-th-seed')} aria-label={msg('featured-th-seed')} role="img">✓</span>}</td>
-      <td className="admin-num">{candidate.votes.agree}</td>
-      <td className="admin-num">{candidate.votes.disagree}</td>
-      <td className="admin-num">{candidate.votes.pass}</td>
+      <td className="admin-num">{count(candidate.votes.agree)}</td>
+      <td className="admin-num">{count(candidate.votes.disagree)}</td>
+      <td className="admin-num">{count(candidate.votes.pass)}</td>
       <td className="admin-num">{candidate.votes.total}</td>
       <td className="admin-num">
         {agreementPercent === null
-          ? msg('featured-agreement-few', guidance.agreementFloor)
+          ? few
           : percentage(agreementPercent, {digits: 0})}
         {/* A high agree share is marked with a symbol that names itself. */}
         {agreementMarked && <> <span title={markLabel} aria-label={markLabel} role="img">▲</span></>}

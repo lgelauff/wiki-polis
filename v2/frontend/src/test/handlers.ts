@@ -141,7 +141,7 @@ export const handlers = [
   http.get(new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     selected: [{featuredId: 61, statementId: 12, text: 'An approved seed statement.', systemSuggested: true, provenance: null, arguments: [{id: 71, side: 'pro', body: 'A useful supporting argument.', proposerPseudonym: 'quiet-otter', hidden: false, createdAt: '2026-08-13T10:00:00Z'}]}],
-    candidates: [{statementId: 13, text: 'A candidate preserving another viewpoint.', seed: false, votes: {agree: 3, pass: 2, disagree: 1, total: 6, agreementPercent: null, agreementMarked: false}, provenance: null}],
+    candidates: [{statementId: 13, text: 'A candidate preserving another viewpoint.', seed: false, votes: {agree: null, pass: null, disagree: null, total: 6, agreementPercent: null, agreementMarked: false}, provenance: null}],
     dataAvailability: {candidates: true}, phase: {argumentMappingActive: false, informedVotingLive: false}, guidance: {recommendedCount: 15, note: 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.', agreementFloor: 10, agreementMarkShare: 0.7}, capabilities: {manage: true},
     links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/admin/conversations/7'},
   }})),
@@ -592,18 +592,18 @@ export const handlers = [
           method: 'Informed-voting tallies frozen at publication.',
         },
         participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
-        dataAvailability: {detailedCounts: true, opinionGroups: true, personalLens: false},
+        dataAvailability: {detailedCounts: true, opinionGroups: true, personalLens: false, responseFloor: 10},
         moderation: {excludedStatements: 1, excludedParticipants: 0},
         statements: [{
           featuredStatementId: 31,
           statement: 'Regional communities should share infrastructure funding.',
           initial: {
             counts: {agree: 12, pass: 3, disagree: 5, voters: 20},
-            percentages: {agree: 60, pass: 15, disagree: 25},
+            percentages: {agree: 60, pass: 15, disagree: 25}, belowFloor: false,
           },
           informed: {
             counts: {agree: 14, pass: 4, disagree: 2, voters: 20},
-            percentages: {agree: 70, pass: 20, disagree: 10},
+            percentages: {agree: 70, pass: 20, disagree: 10}, belowFloor: false,
           },
           agreementShift: 10,
           viewerChoice: null,

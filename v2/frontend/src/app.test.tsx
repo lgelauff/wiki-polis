@@ -339,7 +339,9 @@ test('matches legacy featured-statement administration and commands', async () =
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
   // The suggestions are the page's one table; the confirmed statements are rows.
   const candidates = screen.getByRole('table');
-  expect(within(candidates).getByText('2')).toBeVisible();
+  // 3 agree + 1 disagree is below the floor: the split is withheld, only the total shows.
+  expect(within(candidates).getAllByText('—')).toHaveLength(3);
+  expect(candidates.querySelectorAll('.admin-num .sr-only')).toHaveLength(3);
   expect(within(candidates).getByText('6')).toBeVisible();
   expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', {name: /^Confirm/}));
@@ -858,13 +860,13 @@ test('routes preliminary results through the legacy workspace tab', async () => 
         openedAt: '2026-05-01T12:00:00Z', closedAt: null,
         context: {phase: 'Informed voting', status: 'provisional', method: 'Live comparison.'},
         participation: {initialRound: null, informedRound: 22, matchedRounds: null},
-        dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false},
+        dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false, responseFloor: 10},
         moderation: {excludedStatements: 0, excludedParticipants: 0},
         statements: [{
           featuredStatementId: 31,
           statement: 'Regional communities should share infrastructure funding.',
           initial: null,
-          informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
+          informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}, belowFloor: false},
           agreementShift: null,
           viewerChoice: 'agree',
           viewerGroupChoice: null,
@@ -901,7 +903,7 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   expect(await screen.findByRole('heading', {name: 'Highest agreement'})).toBeVisible();
   expect(screen.getByRole('heading', {name: 'Most divisive'})).toBeVisible();
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
-  expect(screen.getAllByText('70.0% agree · 20.0% pass')).toHaveLength(2);
+  expect(screen.getAllByText('70% agree · 20% pass')).toHaveLength(2);
   // No own-vote line until the personal lens (owner, 2026-10-17).
   expect(document.querySelector('.p6-my-vote')).toBeNull();
 });
@@ -952,13 +954,13 @@ test('renders preliminary results from the message catalogue, not from source li
         openedAt: '2026-05-01T12:00:00Z', closedAt: null,
         context: {phase: 'Informed voting', status: 'provisional', method: 'Live comparison.'},
         participation: {initialRound: null, informedRound: 22, matchedRounds: null},
-        dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false},
+        dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false, responseFloor: 10},
         moderation: {excludedStatements: 0, excludedParticipants: 0},
         statements: [{
           featuredStatementId: 31,
           statement: 'Regional communities should share infrastructure funding.',
           initial: null,
-          informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
+          informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}, belowFloor: false},
           agreementShift: null,
           viewerChoice: 'agree',
           viewerGroupChoice: null,
@@ -997,8 +999,8 @@ test('renders preliminary results from the message catalogue, not from source li
   expect(screen.getByRole('heading', {name: 'CATALOGUE CONTENTION'})).toBeVisible();
   expect(screen.getByText('CATALOGUE SINGLE-ROUND INTRO')).toBeVisible();
   // $1/$2 substitution, and the original English is gone
-  expect(screen.getAllByText('70.0% in favour and 20.0% abstaining')).toHaveLength(2);
-  expect(screen.queryAllByText('70.0% agree · 20.0% pass')).toHaveLength(0);
+  expect(screen.getAllByText('70% in favour and 20% abstaining')).toHaveLength(2);
+  expect(screen.queryAllByText('70% agree · 20% pass')).toHaveLength(0);
   // {{PLURAL:}} selects the plural form for 22 participants
   expect(screen.getByText('22 voters')).toBeVisible();
 });
@@ -1015,9 +1017,9 @@ test('renders the legacy final report from the typed results contract', async ()
   expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
   expect(screen.getByText('Final')).toBeVisible();
   expect(screen.getByText('Final · frozen at publication')).toBeVisible();
-  expect(screen.getByText('+10.0%')).toBeVisible();
-  expect(screen.getAllByTitle('Agree 60.0% · Disagree 25.0% · Pass 15.0%')).toHaveLength(3);
-  expect(screen.getByTitle('Agree 70.0% · Disagree 10.0% · Pass 20.0%')).toBeVisible();
+  expect(screen.getByText('+10%')).toBeVisible();
+  expect(screen.getAllByTitle('Agree 60% · Disagree 25% · Pass 15%')).toHaveLength(3);
+  expect(screen.getByTitle('Agree 70% · Disagree 10% · Pass 20%')).toBeVisible();
   expect(screen.getByRole('heading', {name: /^Opinion groups/})).toBeVisible();
   expect(screen.getByText(/recorded under pseudonym/)).toHaveTextContent('quiet-otter');
 });

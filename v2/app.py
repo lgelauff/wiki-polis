@@ -66,6 +66,7 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
+from services import reporting_rules
 from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
@@ -874,10 +875,6 @@ class Phase6ResultsFilter:
         )
 
 
-def _pct(n: int, total: int) -> float:
-    return round(n / total * 100, 1) if total else 0.0
-
-
 # ── Phase 6 results aggregate cache ───────────────────────────────────────────
 # The results / report surfaces recompute ~5 Postgres + Particiapi round trips per
 # view, and the aggregate is identical for every viewer. Memoise the fetched
@@ -976,9 +973,11 @@ def _build_phase6_results(
       {
         'statements': [{
           'text', 'fs_id',
-          'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
-          'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
-          'shift': float | None,     # aggregate: p6_pct_agree - p2_pct_agree (population comparison,
+          'p2': {n_agree, n_disagree, n_pass, n_voters} | None,   # exact counts, unfloored:
+          'p6': {n_agree, n_disagree, n_pass, n_voters},          #   never serve them as they are;
+                                     #   services.results_report applies the reporting rules
+          'shift': int | None,       # aggregate: P6 minus P2 agree share in whole points, None
+                                     #   below the floor in either round (population comparison,
                                      #   NOT individual-level delta — see 'matched_participants')
           'my_p2_vote': int | None,  # raw Polis vote; None if participation absent or PG unavail
           'my_p6_vote': int | None,
@@ -986,8 +985,6 @@ def _build_phase6_results(
         'p6_participants': int | None,
         'p2_participants': int | None,
         'matched_participants': None,  # Report-only matched-round aggregate; not computed here.
-        'p2_consensus': list,   # top-3 statements by Phase 2 agree rate (population consensus)
-        'p2_divisive':  list,   # top-3 statements by balanced agree/disagree split (most divisive)
         'filter': Phase6ResultsFilter,
         'source_divergence': float | None,  # abs diff between PG count and Particiapi count
         'is_preliminary': bool,   # True while conversation is still active
@@ -1103,28 +1100,18 @@ def _build_phase6_results(
         p6_row = (p6_counts or {}).get(p6_tid, {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0})
         p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid is not None else None
 
-        p6_n = p6_row['n_voters']
-        p6_pct_agree    = _pct(p6_row['n_agree'],    p6_n)
-        p6_pct_disagree = _pct(p6_row['n_disagree'], p6_n)
-        p6_pct_pass     = _pct(p6_row['n_pass'],     p6_n)
-
-        p2_pct_agree = p2_pct_disagree = p2_pct_pass = None
-        if p2_row:
-            p2_n = p2_row['n_voters']
-            p2_pct_agree    = _pct(p2_row['n_agree'],    p2_n)
-            p2_pct_disagree = _pct(p2_row['n_disagree'], p2_n)
-            p2_pct_pass     = _pct(p2_row['n_pass'],     p2_n)
-
-        shift = round(p6_pct_agree - p2_pct_agree, 1) if p2_pct_agree is not None else None
+        # From the exact shares, rounded once; withheld unless both rounds pass the floor.
+        shift = (
+            reporting_rules.shift(
+                p2_row['n_agree'], p2_row['n_voters'], p6_row['n_agree'], p6_row['n_voters'],
+            ) if p2_row else None
+        )
 
         statements.append({
             'text':        fs.statement_text,
             'fs_id':       fs.id,
-            'p6': {**p6_row, 'pct_agree': p6_pct_agree,
-                   'pct_disagree': p6_pct_disagree, 'pct_pass': p6_pct_pass},
-            'p2': ({**p2_row, 'pct_agree': p2_pct_agree,
-                    'pct_disagree': p2_pct_disagree, 'pct_pass': p2_pct_pass}
-                   if p2_row else None),
+            'p6': dict(p6_row),
+            'p2': dict(p2_row) if p2_row else None,
             'shift':       shift,
             'my_p2_vote':  my_p2_votes.get(p2_tid),
             'my_p6_vote': my_p6_votes.get(p6_tid),
@@ -1138,22 +1125,12 @@ def _build_phase6_results(
         # Preliminary output is single-round; its order must not encode P2-to-P6 deltas.
         statements.sort(key=lambda s: s['fs_id'])
 
-    # Phase 2 consensus / divisiveness derived from the same data.
-    p2_with_data = [s for s in statements if s['p2'] is not None and s['p2']['n_voters'] > 0]
-    p2_consensus = sorted(p2_with_data,
-                          key=lambda s: s['p2']['pct_agree'] or 0, reverse=True)[:3]
-    # Most divisive = smallest gap between agree and disagree (most 50/50 split).
-    p2_divisive  = sorted(p2_with_data,
-                          key=lambda s: abs((s['p2']['pct_agree'] or 0) - (s['p2']['pct_disagree'] or 0)))[:3]
-
     return {
         'statements':            statements,
         'p6_participants':       p6_total_participants,
         'p2_participants':       p2_total_participants,
         'matched_participants': None,  # report-only aggregate, not computed in this slice.
         'personal_lens_available': personal_lens_available,
-        'p2_consensus':          p2_consensus,
-        'p2_divisive':           p2_divisive,
         'filter':                filt,
         'source_divergence':     source_divergence,
         'is_preliminary':        bool(conv.active),
@@ -1330,6 +1307,28 @@ def _active_phases(conv) -> set:
     if conv.closed_at:
         phases.add('closed')
     return phases
+
+
+# Stages in which a participant takes part: voting in Explore or the informed vote, and
+# adding or rating arguments (owner, 2026-10-31).
+_PARTICIPATION_STAGES = frozenset({'submission', 'argument_mapping', 'informed_voting'})
+
+
+def _joining_open(conv) -> bool:
+    """Whether someone new may still join (owner, 2026-10-31).
+
+    Open while the route still has a stage at or after the current one in which people take
+    part; closed once the last such stage is over, and always after close. Joining later would
+    give nothing to do and only the participants' full report (#233). In advanced mode the
+    current stage is the furthest-along phase that is on, so this errs towards closing early.
+    """
+    if conv.closed_at is not None:
+        return False
+    sequence = _phase_sequence_for(conv)
+    return any(
+        stage['key'] in _PARTICIPATION_STAGES
+        for stage in sequence[_current_stage_index(conv):]
+    )
 
 
 def _is_linear_phase_state(conv) -> bool:
@@ -2999,6 +2998,7 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
                           and participant.account_kind != ACCOUNT_KIND_VOUCHER),
         emailable=bool(session.get('emailable')),
         check_eligibility=_check_join_eligibility,
+        joining_open=_joining_open(conv),
     )
     participation = result.participation
     return ({
@@ -3369,6 +3369,10 @@ def _results_report_api_payload(slug: str) -> dict:
             _path_conversation(slug, page='reveal')
             if reveal else None
         ),
+        # Participants, the process's organizers and site admins see the full report (exact
+        # counts, groups); everyone else the public one (owner, 2026-10-31). No one gets a
+        # personalised view of someone else's.
+        full_view=participation is not None or _can_organize(conv, participant),
     )
 
 
@@ -4601,21 +4605,15 @@ def _admin_featured_api_payload(conv_id: int) -> dict:
 
 
 def _featured_agreement_floor() -> int:
-    """FEATURED_AGREEMENT_FLOOR: fewest agree + disagree responses before a candidate's
-    agreement share is shown (default 10, the floor for opinion data)."""
-    try:
-        return max(1, int(current_app.config.get('FEATURED_AGREEMENT_FLOOR', 10)))
-    except (TypeError, ValueError):
-        return 10
+    """REPORTING_MIN_TOTAL: fewest agree + disagree responses before a candidate's
+    agreement share or split is shown (default 10, the floor for opinion data)."""
+    return reporting_rules.min_total()
 
 
 def _featured_agreement_mark_share() -> float:
-    """FEATURED_AGREEMENT_MARK_SHARE: agree share of agree + disagree at which a candidate
-    is marked (default 0.7, as polis_report's label share)."""
-    try:
-        return max(0.0, min(1.0, float(current_app.config.get('FEATURED_AGREEMENT_MARK_SHARE', 0.7))))
-    except (TypeError, ValueError):
-        return 0.7
+    """REPORTING_LABEL_SHARE: agree share of agree + disagree at which a candidate is
+    marked (default 0.7, as polis_report's label share)."""
+    return reporting_rules.label_share()
 
 
 def _select_admin_featured_api_payload(
@@ -5029,6 +5027,7 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
         conversation_link=_admin_client_link(conv.id),
         about_link=_path_conversation(conv.slug, page='about'),
         identity_reveal_link=None,
+        full_view=True,
         preview=True,
     )
     # Ids and enums only (record_audit's privacy contract).

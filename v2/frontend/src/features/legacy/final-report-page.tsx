@@ -16,10 +16,14 @@ function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
 }
 
-function LegacyVoteBar({tally}: {tally: Tally}) {
+/** A tally as the server sends it: withheld below `floor` responses, and without counts in
+ *  the public view (#233). Percentages are whole numbers, rounded by the server. */
+function LegacyVoteBar({tally, floor}: {tally: Tally; floor: number}) {
   const {percentages, counts} = tally;
   const msg = useMessage();
-  const percentage = usePercentFormat();
+  const format = usePercentFormat();
+  if (!percentages) return <span className="p6-bar-label muted">{msg('results-tally-few', floor)}</span>;
+  const percentage = (value: number) => format(value, {digits: 0});
   const title = msg('report-bar-title', percentage(percentages.agree), percentage(percentages.disagree), percentage(percentages.pass));
   return <>
     <div className="p6-vote-bar" title={title}>
@@ -27,7 +31,9 @@ function LegacyVoteBar({tally}: {tally: Tally}) {
       <div className="p6-bar-disagree" style={{width: `${percentages.disagree}%`}} />
       <div className="p6-bar-pass" style={{width: `${percentages.pass}%`}} />
     </div>
-    <span className="p6-bar-label">{msg('report-bar-label', percentage(percentages.agree), percentage(percentages.pass), counts.voters)}</span>
+    <span className="p6-bar-label">{counts
+      ? msg('report-bar-label', percentage(percentages.agree), percentage(percentages.pass), counts.voters)
+      : msg('conv-bar-label', percentage(percentages.agree), percentage(percentages.pass))}</span>
   </>;
 }
 
@@ -91,7 +97,7 @@ function ParticipationSummary({report}: {report: Report}) {
   </div>;
 }
 
-function InitialOpinions({statements}: {statements: Statement[]}) {
+function InitialOpinions({statements, floor}: {statements: Statement[]; floor: number}) {
   const msg = useMessage();
   const {consensus, divisive} = rankOpinionStatements(statements, 'initial');
   if (consensus.length === 0 && divisive.length === 0) return null;
@@ -102,7 +108,7 @@ function InitialOpinions({statements}: {statements: Statement[]}) {
       <h3 className="report-section-sub-heading">{msg('report-highest-agreement')}</h3>
       {consensus.map((statement) => <div className="report-stmt-row" key={`consensus-${statement.featuredStatementId}`}>
         <p className="report-stmt-text">{statement.statement}</p>
-        <LegacyVoteBar tally={statement.initial!} />
+        <LegacyVoteBar tally={statement.initial!} floor={floor} />
       </div>)}
     </>}
     {divisive.length > 0 && <>
@@ -110,13 +116,13 @@ function InitialOpinions({statements}: {statements: Statement[]}) {
       <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>{msg('report-divisive-intro')}</p>
       {divisive.map((statement) => <div className="report-stmt-row" key={`divisive-${statement.featuredStatementId}`}>
         <p className="report-stmt-text">{statement.statement}</p>
-        <LegacyVoteBar tally={statement.initial!} />
+        <LegacyVoteBar tally={statement.initial!} floor={floor} />
       </div>)}
     </>}
   </div>;
 }
 
-function OpinionShift({statements}: {statements: Statement[]}) {
+function OpinionShift({statements, floor}: {statements: Statement[]; floor: number}) {
   const msg = useMessage();
   const percentage = usePercentFormat();
   if (statements.length === 0) return null;
@@ -132,11 +138,11 @@ function OpinionShift({statements}: {statements: Statement[]}) {
       </tr></thead>
       <tbody>{statements.map((statement) => <tr className="p6-results-row" key={statement.featuredStatementId}>
         <td className="p6-col-stmt">{statement.statement}</td>
-        <td className="p6-col-phase">{statement.initial ? <LegacyVoteBar tally={statement.initial} /> : <span className="muted">—</span>}</td>
-        <td className="p6-col-phase">{statement.informed && <LegacyVoteBar tally={statement.informed} />}</td>
+        <td className="p6-col-phase">{statement.initial ? <LegacyVoteBar tally={statement.initial} floor={floor} /> : <span className="muted">—</span>}</td>
+        <td className="p6-col-phase">{statement.informed && <LegacyVoteBar tally={statement.informed} floor={floor} />}</td>
         <td className="p6-col-shift">{statement.agreementShift === null
           ? <span className="muted">—</span>
-          : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{percentage(statement.agreementShift, {signed: true})}</span>}
+          : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{percentage(statement.agreementShift, {signed: true, digits: 0})}</span>}
         </td>
       </tr>)}</tbody>
     </table>
@@ -187,12 +193,12 @@ function ResultsBody({report}: {report: Report}) {
       <p className="report-placeholder"><em>{msg('report-statements-placeholder')}</em></p>
       <p className="muted" style={{fontSize: 13}}>{msg('report-featured-count', report.statements.length)}</p>
     </div>
-    <InitialOpinions statements={report.statements} />
+    <InitialOpinions statements={report.statements} floor={report.dataAvailability.responseFloor} />
     <div className="report-section">
       <h2 className="report-section-heading">{msg('report-argmap-heading')}</h2>
       <p className="report-placeholder"><em>{msg('report-argmap-placeholder')}</em></p>
     </div>
-    {report.dataAvailability.detailedCounts && <OpinionShift statements={report.statements} />}
+    {report.dataAvailability.detailedCounts && <OpinionShift statements={report.statements} floor={report.dataAvailability.responseFloor} />}
     <div className="report-section">
       <h2 className="report-section-heading">{msg('report-matched-heading')}</h2>
       <p className="report-placeholder"><em>{msg('report-matched-placeholder')}</em></p>

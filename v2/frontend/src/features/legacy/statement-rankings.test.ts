@@ -1,17 +1,21 @@
 import {expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
-import {RANKING_FLOOR, rankOpinionStatements} from './statement-rankings';
+import {rankOpinionStatements} from './statement-rankings';
 
 type Statement = components['schemas']['ResultsStatement'];
 
+// The tally as the server sends it: withheld below the reporting floor of 10 responses.
 function row(id: number, agree: number, pass: number, disagree: number): Statement {
   const voters = agree + pass + disagree;
-  const share = (n: number) => (voters ? (100 * n) / voters : 0);
-  const tally = {
-    counts: {agree, pass, disagree, voters},
-    percentages: {agree: share(agree), pass: share(pass), disagree: share(disagree)},
-  };
+  const share = (n: number) => Math.round((100 * n) / voters);
+  const tally = voters < 10
+    ? {counts: null, percentages: null, belowFloor: true}
+    : {
+      counts: {agree, pass, disagree, voters},
+      percentages: {agree: share(agree), pass: share(pass), disagree: share(disagree)},
+      belowFloor: false,
+    };
   return {
     featuredStatementId: id, statement: `Statement ${id}`, initial: tally, informed: tally,
     agreementShift: null, viewerChoice: null, viewerGroupChoice: null, viewerMatchesGroup: null,
@@ -21,9 +25,9 @@ function row(id: number, agree: number, pass: number, disagree: number): Stateme
 
 const ids = (statements: Statement[]) => statements.map((s) => s.featuredStatementId);
 
-test('a statement below the floor is never ranked, however one-sided', () => {
+test('a tally the server withheld is never ranked', () => {
   const {consensus, divisive} = rankOpinionStatements(
-    [row(1, RANKING_FLOOR - 1, 0, 0), row(2, 4, 0, 5), row(3, 7, 0, 3)],
+    [row(1, 9, 0, 0), row(2, 4, 0, 5), row(3, 7, 0, 3)],
     'informed',
   );
 

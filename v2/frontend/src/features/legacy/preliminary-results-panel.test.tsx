@@ -17,8 +17,8 @@ type Statement = components['schemas']['ResultsReport']['statements'][number];
 function statement(id: number, viewerChoice: Statement['viewerChoice']): Statement {
   return {
     featuredStatementId: id, statement: `Statement ${id}`,
-    initial: {counts: {agree: 1, pass: 1, disagree: 1, voters: 3}, percentages: {agree: 33, pass: 33, disagree: 34}},
-    informed: {counts: {agree: 1, pass: 1, disagree: 1, voters: 3}, percentages: {agree: 33, pass: 33, disagree: 34}},
+    initial: {counts: {agree: 4, pass: 3, disagree: 3, voters: 10}, percentages: {agree: 40, pass: 30, disagree: 30}, belowFloor: false},
+    informed: {counts: {agree: 4, pass: 3, disagree: 3, voters: 10}, percentages: {agree: 40, pass: 30, disagree: 30}, belowFloor: false},
     agreementShift: 0, viewerChoice, viewerGroupChoice: null, viewerMatchesGroup: null, personalDelta: null,
   };
 }
@@ -28,8 +28,8 @@ function serveResults(statements: Statement[]) {
     slug: 'community-strategy', title: 'Community strategy', publication: 'preliminary', resultsAvailable: true,
     openedAt: '2026-05-01T12:00:00Z', closedAt: null,
     context: {phase: 'Informed vote', status: 'provisional', method: 'Live comparison.'},
-    participation: {initialRound: null, informedRound: 3, matchedRounds: null},
-    dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false},
+    participation: {initialRound: null, informedRound: 10, matchedRounds: null},
+    dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false, responseFloor: 10},
     moderation: {excludedStatements: 0, excludedParticipants: 0},
     statements,
     opinionGroups: [],
@@ -52,7 +52,7 @@ function renderPanel(locale = 'en') {
 
 const tally = (agree: number, pass: number, disagree: number): NonNullable<Statement['informed']> => ({
   counts: {agree, pass, disagree, voters: agree + pass + disagree},
-  percentages: {agree: agree * 5, pass: pass * 5, disagree: disagree * 5},
+  percentages: {agree: agree * 5, pass: pass * 5, disagree: disagree * 5}, belowFloor: false,
 });
 
 test('no own-vote line on the results, even for a participant with a recorded choice', async () => {
@@ -66,7 +66,7 @@ test('no own-vote line on the results, even for a participant with a recorded ch
 test('preliminary results rank informed-vote consensus and contention without phase comparisons', async () => {
   const tallies = (agree: number, pass: number, disagree: number): NonNullable<Statement['informed']> => ({
     counts: {agree: 10, pass: 2, disagree: 8, voters: 20},
-    percentages: {agree, pass, disagree},
+    percentages: {agree, pass, disagree}, belowFloor: false,
   });
   const rows = [
     {...statement(1, null), initial: tallies(95, 0, 5), informed: tallies(10, 10, 80), agreementShift: -65},
@@ -90,15 +90,25 @@ test('preliminary results rank informed-vote consensus and contention without ph
   expect(screen.queryByRole('columnheader', {name: 'Shift'})).not.toBeInTheDocument();
 });
 
-test('under nl, percentages are written the Dutch way, with a decimal comma', async () => {
-  // toFixed would write "62.5" whatever the language; the number, not the message, owns the %.
+test('under nl, the whole percentages from the server are written the Dutch way', async () => {
+  // The server rounds once, half up, to whole percent (#233): 10, 2 and 4 of 16 give 63, 13, 25.
   server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(), () => HttpResponse.json(dutch)));
-  const tally = {counts: {agree: 10, pass: 2, disagree: 4, voters: 16}, percentages: {agree: 62.5, pass: 12.5, disagree: 25}};
-  serveResults([{...statement(1, null), initial: tally, informed: tally, agreementShift: -2.5}]);
+  const tally = {counts: {agree: 10, pass: 2, disagree: 4, voters: 16}, percentages: {agree: 63, pass: 13, disagree: 25}, belowFloor: false};
+  serveResults([{...statement(1, null), initial: tally, informed: tally, agreementShift: -3}]);
   renderPanel('nl');
   await screen.findByRole('heading', {name: 'Meeste overeenstemming'});
 
-  expect(screen.getAllByText('62,5% eens · 12,5% overgeslagen')).toHaveLength(2);
-  expect(screen.getAllByTitle('Eens 62,5% · Oneens 25,0% · Overgeslagen 12,5%')).toHaveLength(2);
-  expect(screen.queryByText('-2,5%')).not.toBeInTheDocument();
+  expect(screen.getAllByText('63% eens · 13% overgeslagen')).toHaveLength(2);
+  expect(screen.getAllByTitle('Eens 63% · Oneens 25% · Overgeslagen 13%')).toHaveLength(2);
+  expect(screen.queryByText('-3%')).not.toBeInTheDocument();
+});
+
+test('when every statement is still below the floor, the panel says so instead of "no results"', async () => {
+  const withheld = {counts: null, percentages: null, belowFloor: true};
+  serveResults([{...statement(1, null), informed: withheld}, {...statement(2, null), informed: withheld}]);
+  renderPanel();
+
+  expect(await screen.findByText('fewer than 10 responses')).toBeVisible();
+  expect(screen.queryByText('No informed-vote results are available yet.')).toBeNull();
+  expect(document.querySelector('.p6-vote-bar')).toBeNull();
 });

@@ -1470,9 +1470,10 @@ export interface components {
             seed: boolean;
             provenance: null | components["schemas"]["AdminStatementProvenance"];
             votes: {
-                agree: number;
-                pass: number;
-                disagree: number;
+                /** @description Null below guidance.agreementFloor agree + disagree responses, with pass and disagree: the split would give back the withheld share. */
+                agree: number | null;
+                pass: number | null;
+                disagree: number | null;
                 total: number;
                 /** @description Whole percent of agree among agree + disagree, rounded once by the server; null below guidance.agreementFloor agree + disagree responses. */
                 agreementPercent: number | null;
@@ -2624,6 +2625,8 @@ export interface components {
                 detailedCounts: boolean;
                 opinionGroups: boolean;
                 personalLens: boolean;
+                /** @description Fewest responses a tally needs to be shown, for the "fewer than" text of a tally with belowFloor. */
+                responseFloor: number;
             };
             moderation: {
                 excludedStatements: number;
@@ -2644,6 +2647,7 @@ export interface components {
             statement: string;
             initial: components["schemas"]["VoteTally"] | null;
             informed: components["schemas"]["VoteTally"] | null;
+            /** @description Informed minus initial agree share, whole points from the exact shares; null unless both rounds have at least 10 responses. */
             agreementShift: number | null;
             /** @enum {string|null} */
             viewerChoice: "agree" | "pass" | "disagree" | null;
@@ -2660,17 +2664,21 @@ export interface components {
             changed: boolean;
         };
         VoteTally: {
+            /** @description Fewer responses than the reporting floor (10): counts and percentages are null. */
+            belowFloor: boolean;
+            /** @description Exact counts; null below the floor and in the public view. */
             counts: {
                 agree: number;
                 pass: number;
                 disagree: number;
                 voters: number;
-            };
+            } | null;
+            /** @description Whole percent of all responses, rounded half up once by the server; null below the floor. */
             percentages: {
                 agree: number;
                 pass: number;
                 disagree: number;
-            };
+            } | null;
         };
         ResultsOpinionGroup: {
             label: string;

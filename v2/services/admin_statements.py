@@ -24,6 +24,8 @@ def build_statement_workspace(
             'moderation': status,
             'seed': bool(row.get('is_seed')),
             'featured': tid in featured_tids,
+            # Exact at any count: the one named exception to the reporting floor, because
+            # moderators need the raw counts (owner, 2026-10-30, D6; reporting_rules).
             'votes': {
                 'agree': int(row.get('agree_count') or 0),
                 'pass': int(row.get('pass_count') or 0),

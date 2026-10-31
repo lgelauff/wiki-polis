@@ -89,10 +89,17 @@ test('a share at or above the mark share carries a mark that names itself', asyn
 
 test('a share the server withheld says so, with the floor it sent', async () => {
   renderAsQqx();
-  serve(workspace([candidate({agree: 6, pass: 9, disagree: 3, total: 18, agreementPercent: null, agreementMarked: false})]));
+  // Below the floor the server withholds the split too (#233); only the total is sent.
+  serve(workspace([candidate({agree: null, pass: null, disagree: null, total: 18, agreementPercent: null, agreementMarked: false})]));
   renderPage();
 
   const cell = await agreementCell();
   expect(cell).toHaveTextContent('(featured-agreement-few: 10)');
   expect(within(cell).queryByRole('img')).toBeNull();
+  // Each withheld count shows a dash to the eye and gives a screen reader the reason.
+  const row = within(cell.closest('tr')!);
+  const withheld = row.getAllByRole('cell').filter((td) => td.querySelector('[aria-hidden="true"]')?.textContent === '—');
+  expect(withheld).toHaveLength(3);
+  for (const td of withheld) expect(td.querySelector('.sr-only')).toHaveTextContent('(featured-agreement-few: 10)');
+  expect(row.getByRole('cell', {name: '18'})).toBeInTheDocument();
 });
