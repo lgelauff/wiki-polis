@@ -135,7 +135,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Return what the reminder test can use: wikis, which are live, the test accounts, whether the bot login is set */
+        /** Return what the reminder test can use: wikis, the test accounts, whether the bot login is set */
         get: operations["getReminderTest"];
         put?: never;
         post?: never;
@@ -154,7 +154,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send one test message from the Proto bot to a configured test account; a wiki that is not live, or a bot without a login, gives a dry run */
+        /** Send one test message from the Proto bot to a configured test account, on any wiki the bot knows; a channel without a bot login gives a dry run */
         post: operations["postReminderTestSend"];
         delete?: never;
         options?: never;
@@ -1251,7 +1251,6 @@ export interface components {
                 wikis: {
                     key: string;
                     host: string;
-                    live: boolean;
                 }[];
                 recipients: string[];
                 /** @description Whether the bot login for each channel is set */
@@ -1272,7 +1271,7 @@ export interface components {
                 /** @enum {string} */
                 outcome: "sent" | "dry_run" | "failed" | "unknown";
                 /** @enum {string|null} */
-                reason: "wiki_not_live" | "no_credentials" | "not_emailable" | "nobots" | "throttled" | "blocked" | "lagged" | "outcome_unknown" | "api_error" | null;
+                reason: "no_credentials" | "not_emailable" | "nobots" | "throttled" | "blocked" | "lagged" | "outcome_unknown" | "api_error" | null;
                 code: string | null;
                 sentVia: string | null;
             };

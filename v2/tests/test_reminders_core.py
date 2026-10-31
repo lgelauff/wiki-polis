@@ -10,11 +10,12 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 
+import db as db_module
 from db import (
     ACCOUNT_KIND_VOUCHER, Conversation, ConversationBan, Participant, Participation, Reminder,
     ReminderDelivery, db,
 )
-from services import reminder_wikis
+from services import reminder_wikis, wiki_bot
 from services.reminders import (
     PHASE_CLOSING, PHASE_OPENED, RESULTS, can_send_reminders, is_expired, recipients,
 )
@@ -205,6 +206,68 @@ def test_delivery_rows_keep_to_the_closed_vocabulary(conversation, fields):
     db.session.rollback()
 
 
+def test_one_reminder_per_moment_including_the_final_message(conversation):
+    _reminder(conversation)
+    db.session.add(Reminder(conversation_id=conversation.id, reminder_type=PHASE_OPENED,
+                            phase_key='submission', send_day=date(2026, 11, 2)))
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+    for _ in range(2):
+        db.session.add(Reminder(conversation_id=conversation.id, reminder_type=RESULTS,
+                                send_day=date(2026, 11, 9)))
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+
+
+def test_the_same_type_on_another_day_or_phase_is_another_reminder(conversation):
+    _reminder(conversation)
+    for fields in ({'phase_key': 'submission', 'send_day': date(2026, 11, 3)},
+                   {'phase_key': 'argument_mapping', 'send_day': date(2026, 11, 2)}):
+        db.session.add(Reminder(conversation_id=conversation.id, reminder_type=PHASE_OPENED,
+                                **fields))
+    db.session.commit()
+    assert Reminder.query.count() == 3
+
+
+def test_every_reason_the_bot_client_raises_can_be_recorded():
+    raised = {value for name, value in vars(wiki_bot).items()
+              if name.isupper() and isinstance(value, str) and value.islower()
+              and name not in ('FALLBACK_WIKI',)}
+    assert raised <= set(db_module.REMINDER_FAILURE_REASONS)
+
+
+@pytest.mark.parametrize('values, column', [
+    (db_module.REMINDER_CHANNELS, ReminderDelivery.__table__.c.channel),
+    (db_module.REMINDER_DELIVERY_STATUSES, ReminderDelivery.__table__.c.status),
+    (db_module.REMINDER_FAILURE_REASONS, ReminderDelivery.__table__.c.reason),
+])
+def test_every_closed_list_value_fits_its_column(values, column):
+    # MariaDB in strict mode refuses a longer value; SQLite does not check.
+    assert max(len(v) for v in values) <= column.type.length
+
+
+def test_an_error_code_is_kept_only_on_a_failure(conversation):
+    reminder = _reminder(conversation)
+    joined = _join(conversation, email=True)
+    db.session.add(ReminderDelivery(reminder_id=reminder.id, participation_id=joined.id,
+                                    channel='email', status='sent', error_code='x'))
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+
+
+@pytest.mark.parametrize('reason', ['lagged', 'outcome_unknown'])
+def test_the_client_only_reasons_are_accepted(conversation, reason):
+    reminder = _reminder(conversation)
+    joined = _join(conversation, email=True)
+    db.session.add(ReminderDelivery(reminder_id=reminder.id, participation_id=joined.id,
+                                    channel='email', status='failed', reason=reason,
+                                    error_code='timeout'))
+    db.session.commit()
+
+
 def test_a_failed_delivery_records_its_reason(conversation):
     reminder = _reminder(conversation)
     joined = _join(conversation, email=True)
@@ -283,9 +346,31 @@ def test_the_migration_upgrades_and_downgrades_cleanly():
         row = conn.execute(sa.text(
             'SELECT reminder_wiki, reminder_talk_names_consultation FROM conversations')).one()
         assert row == ('metawiki', 0)
+        # The migrated schema enforces its own constraints, not only the models'.
+        conn.execute(sa.text("INSERT INTO reminders (id, conversation_id, reminder_type, "
+                             "send_day, created_at) VALUES (1, 1, 'results', '2026-11-02', "
+                             "'2026-11-01')"))
+        for bad in ("'delivered', NULL, NULL", "'failed', NULL, NULL", "'sent', NULL, 'x'",
+                    "'failed', 'unknown', NULL"):
+            with pytest.raises(sa.exc.IntegrityError):
+                with conn.begin_nested():
+                    conn.execute(sa.text(
+                        "INSERT INTO reminder_deliveries (reminder_id, channel, status, reason, "
+                        f"error_code) VALUES (1, 'email', {bad})"))
+        with pytest.raises(sa.exc.IntegrityError):
+            with conn.begin_nested():
+                conn.execute(sa.text("INSERT INTO reminders (conversation_id, reminder_type, "
+                                     "send_day, created_at) VALUES (1, 'results', "
+                                     "'2026-11-02', '2026-11-01')"))
         migration.downgrade()
         inspector = sa.inspect(conn)
         assert set(inspector.get_table_names()) == {'conversations', 'participants',
                                                     'participations'}
         assert {c['name'] for c in inspector.get_columns('conversations')} == {'id', 'title'}
         assert conn.execute(sa.text('SELECT title FROM conversations')).scalar() == 'Old'
+
+
+def test_the_migration_keeps_the_same_closed_lists_as_the_models():
+    migration = _migration()
+    assert migration._STATUSES == db_module.REMINDER_DELIVERY_STATUSES
+    assert migration._REASONS == db_module.REMINDER_FAILURE_REASONS

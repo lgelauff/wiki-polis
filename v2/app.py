@@ -4054,8 +4054,7 @@ def _reminder_test_api_payload() -> dict:
         _refuse_admin()
     settings = _reminder_settings()
     return {
-        'wikis': [{'key': wiki, 'host': host, 'live': wiki in settings.live_wikis}
-                  for wiki, host in WIKI_HOSTS.items()],
+        'wikis': [{'key': wiki, 'host': host} for wiki, host in WIKI_HOSTS.items()],
         'recipients': list(settings.test_recipients),
         'credentialsSet': {channel: settings.credentials_for(channel) is not None
                            for channel in REMINDER_CHANNELS},
@@ -6093,7 +6092,6 @@ def create_app(test_config: dict | None = None) -> Flask:
         # Names only, never values: a half-set login counts as not set (a dry run).
         app.logger.warning('reminder bot login for %s is half set: %s is empty',
                            _channel, _empty[0])
-    app.config['REMINDERS_LIVE_WIKIS'] = _split_csv(os.environ.get('REMINDERS_LIVE_WIKIS', ''))
     app.config['REMINDERS_TEST_RECIPIENTS'] = _split_csv(
         os.environ.get('REMINDERS_TEST_RECIPIENTS', ''))
     # The daily batch (#577): an emergency stop read at every run, and the wiki-mail
