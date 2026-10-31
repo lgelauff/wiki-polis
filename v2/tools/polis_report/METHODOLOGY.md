@@ -72,9 +72,9 @@ Three kinds of input:
 | Statements, moderation, creation time, author | yes | | yes | yes (pol.is format) |
 | Responses with time; current response | yes | | yes | yes (pol.is format) |
 | Automatic responses (author + creation time) | yes | | yes | excluded, total counted |
-| Exclusions listed with rule, reason and count | yes | | yes | not yet (counts only) |
+| Exclusions listed with rule, reason and count | yes | | yes | in #563 |
 | Settings change log, checked by the builder | yes | | yes | **Planned** (its own pull request) |
-| Automatic responses by value (pass / agree) | yes | | yes | not yet |
+| Automatic responses by value (pass / agree) | yes | | yes | in #563 |
 | Seed vs participant-written statement | no | | yes (`is_seed`) | not yet |
 | Role questions | named by text in the config | | yes (`is_meta`) | by config text |
 | Labels, PCA map | yes | | yes | yes (pol.is format) |
@@ -286,8 +286,8 @@ Whether a place qualifies has been decided; the tests have not.
 | Overall drift; drift toward pass; movement toward the middle | later | a person-level test, decided in advance |
 | Shifts by Polis group in the first poll | later | none yet: to be designed with confidence for groupings (§7), since groups formed from the first poll's responses regress toward the middle |
 
-**How it would plug in.** At each place the report already computes and shows the observed counts a test would
-need. Adding significance would add a test on those counts and show its result in a main-text marker and a
+**How it would plug in.** At the four places marked "first", the report already computes and shows the observed
+counts a test would need; at the others, the counts would have to be added first (see each place below). Adding significance would add a test on those counts and show its result in a main-text marker and a
 fold-out, without changing any count or reading. One setting would switch it on, off by default.
 
 ### Questions for every place
@@ -330,7 +330,7 @@ fold-out, without changing any count or reading. One setting would switch it on,
 - Open: does a move from "no response" into pass count?
 
 **Polis group membership by role answer** (later)
-- Counts already shown: group × role answer.
+- Counts: not shown today. Role answers are not split by Polis group; the counts would have to be added first.
 - Suggested, not reviewed: Fisher's exact test, χ² for larger tables.
 - Open: is this circular? Role questions are left out of clustering, so probably not, but this needs checking. How
   does "Other" enter?
@@ -342,5 +342,5 @@ fold-out, without changing any count or reading. One setting would switch it on,
 - Open: per person or per statement; how to weigh statements; how to fix it in advance.
 
 **Shifts by Polis group in the first poll** (later)
-- Counts already shown: movers per group per statement.
+- Counts: not shown today. Movers per group per statement would have to be added first.
 - No test suggested: it needs the confidence-for-groupings work first (§7).
