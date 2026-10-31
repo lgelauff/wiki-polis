@@ -72,9 +72,9 @@ Three kinds of input:
 | Statements, moderation, creation time, author | yes | | yes | yes (pol.is format) |
 | Responses with time; current response | yes | | yes | yes (pol.is format) |
 | Automatic responses (author + creation time) | yes | | yes | excluded, total counted |
-| Exclusions listed with rule, reason and count | yes | | yes | not yet (counts only) |
+| Exclusions listed with rule, reason and count | yes | | yes | in #563 |
 | Settings change log, checked by the builder | yes | | yes | not yet |
-| Automatic responses by value (pass / agree) | yes | | yes | not yet |
+| Automatic responses by value (pass / agree) | yes | | yes | in #563 |
 | Seed vs participant-written statement | no | | yes (`is_seed`) | not yet |
 | Role questions | named by text in the config | | yes (`is_meta`) | by config text |
 | Labels, PCA map | yes | | yes | yes (pol.is format) |
@@ -119,8 +119,8 @@ stay with their data, outside the repository.
     who can also take part as ordinary participants.
   - **Reported as well as excluded.** Excluded responses are counted, so a reader can see what was left out and
     add it back. The line reconciles the report with Polis's own counts, e.g. "Automatic responses: 39 excluded
-    (39 passes, 0 agrees). Polis's own counts include them." **Planned:** the split by value, and in production,
-    where `is_seed` is available, by seed versus participant-written statement.
+    (39 passes, 0 agrees). Polis's own counts include them." **Planned:** in production, where `is_seed` is
+    available, the split by seed versus participant-written statement.
   - **What produces them,** as checked in code:
     - **Seed statements** (written by the moderator): the Polis server records a pass from the author, unless the
       author submitted a response (`lgelauff/polis` fork, `server/src/routes/comments.ts:507-513` and `:940-942`).

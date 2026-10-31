@@ -3,6 +3,7 @@
  "banner": "PRELIMINARY",
  "out": "out",
  "since": "2026-10-01T23:00:00Z",
+ "since_reason": "test responses before the session opened",
  "label_share": 0.7,
  "n_differ": 5,
  "meta": [

@@ -119,6 +119,7 @@ class Poll:
         self.since = int(dt.datetime.fromisoformat(cfg['since'].replace('Z', '+00:00')).timestamp())
         self.exclude = set(pcfg.get('exclude_participants', []))
         self.exclude_reason = pcfg.get('exclude_reason', cfg.get('exclude_reason', 'listed in the config'))
+        self.since_reason = pcfg.get('since_reason', cfg.get('since_reason', ''))
 
         # statements, renumbered to the reference poll by text
         rows = read_csv(d / 'comments.csv')
@@ -159,10 +160,13 @@ class Poll:
         is_auto = lambda r: (r['voter-id'], r['comment-id'], int(r['timestamp'])) in auto_key
         raw = [r for r in raw_all if not is_auto(r)]
         self.auto_votes = len(raw_all) - len(raw)
+        auto_values = Counter(int(r['vote']) for r in raw_all if is_auto(r))
+        self.auto_by_value = {name: auto_values.get(v, 0) for v, name in ((0, 'pass'), (1, 'agree'), (-1, 'disagree'))}
         self.auto_only = sorted({r['voter-id'] for r in raw_all if is_auto(r)} - {r['voter-id'] for r in raw}, key=int)
         kept = [r for r in raw if int(r['timestamp']) >= self.since]
         self.removed_rows = len(raw) - len(kept)
         self.removed_only_early = sorted({r['voter-id'] for r in raw} - {r['voter-id'] for r in kept}, key=int)
+        self.excluded_rows = sum(1 for r in kept if r['voter-id'] in self.exclude)
         ts = [int(r['timestamp']) for r in kept if r['voter-id'] not in self.exclude]
         self.first_ts, self.last_ts = (min(ts), max(ts)) if ts else (None, None)
         self.last_export_vote = max(int(r['timestamp']) for r in raw_all)
@@ -471,6 +475,24 @@ def repro_block(cfg, cfgp, polls):
 
 
 # ------------------------------------------------------------------ single-poll report
+def excluded_html(P):
+    """Every response counts unless excluded; one line per exclusion with its rule, reason and count (METHODOLOGY §4)."""
+    v = P.auto_by_value
+    lines = [
+        f'<li><b>Automatic responses</b> (rule: a response by a statement\'s author on that statement, at the second the statement was created; '
+        f'reason: Polis records it automatically, it is not a choice): {plural(P.auto_votes, "response")} excluded '
+        f'({v["pass"]} pass · {v["agree"]} agree · {v["disagree"]} disagree); {plural(len(P.auto_only), "participant")} cast only automatic responses. '
+        f'Polis\'s own counts include them. All other responses count, including those of statement authors.</li>',
+        f'<li><b>Before {esc(P.local(P.since))}</b> (rule: <code>since</code>; reason: {esc(P.since_reason) or "none given in the config"}): '
+        f'{plural(P.removed_rows, "response")} excluded; '
+        f'{plural(len([p for p in P.removed_only_early if p not in P.exclude]), "participant")} responded only before it.</li>',
+    ]
+    if P.exclude:
+        lines.append(f'<li><b>Listed participants</b> (rule: <code>exclude_participants</code>; reason: {esc(P.exclude_reason)}): '
+                     f'{plural(P.excluded_rows, "response")} from {plural(len(P.exclude), "participant")} excluded.</li>')
+    return f'<ul class="caveats">{"".join(lines)}</ul>'
+
+
 def poll_report(P, cfg, out, repro, other_labels=None):
     share = cfg.get('label_share', 0.7)
     k = P.min_total
@@ -493,7 +515,6 @@ def poll_report(P, cfg, out, repro, other_labels=None):
                 sh.append((a - d) / (a + d + s))
         return max(sh) - min(sh) if len(sh) >= 2 else 0
     differ = sorted(P.opinion, key=lambda c: (-spread(c), skey(c)))[:cfg.get('n_differ', 5)] if measure_ok else []
-    split = min(P.opinion, key=lambda c: (abs(overall[c][0] - overall[c][1]) / max(1, sum(overall[c])), skey(c)))
 
     # chart 1: statements by label
     ch1 = ''
@@ -542,7 +563,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
             rec = [c, P.text[c], 'role' if role else label_text(lab[c], share), '' if role or lab[c] == 'few' else to_change(overall[c], share)]
             for _, w, kind in cols:
                 a, d, s = P.tally(c, w)
-                if kind == 'other' and role:
+                if role and kind != 'all':      # role answers are not split by group (METHODOLOGY §7, §11)
                     body += '<td class="first pc">—</td><td class="pc">—</td><td class="pc">—</td>'
                     rec += ['', '', '']
                     continue
@@ -560,19 +581,13 @@ def poll_report(P, cfg, out, repro, other_labels=None):
     pts, cutoff = project(P)
     svg = map_svg(P, pts)
 
-    # roles: overall, and the split statement by answer to the first role question (small cells suppressed)
-    role_html = split_html = ''
+    # roles: their own counts only; no other result is split by a role answer (METHODOLOGY §7)
+    role_html = ''
     if P.roles:
         for c in P.roles:
             a, d, s = P.tally(c)
             role_html += (f'<div class="row role"><div class="stmt"><span class="num">#{c}</span> {esc(P.text[c])}</div>'
                           f'{stack(a, d, s, "stack wide", f"{a} yes, {d} no, {s} pass", k=k)}<div class="nums">{a} yes · {d} no · {s} pass</div></div>')
-        r0 = P.roles[0]
-        for nm, val in ((f'Yes to #{r0}', 1), (f'No to #{r0}', -1)):
-            who = [p for p in P.people if P.vote.get((p, r0)) == val]
-            a, d, s = P.tally(split, who)
-            split_html += (f'<div class="grow"><div class="glabel wide-label">{esc(nm)} <span class="muted">({len(who)})</span></div>'
-                           f'{stack(a, d, s, k=k)}<div class="gnums">{a} · {d} · {s}</div></div>')
 
     # text
     reconcile = ''
@@ -598,19 +613,15 @@ def poll_report(P, cfg, out, repro, other_labels=None):
                    if measure_ok else
                    (f'<p class="note">Not computed: fewer than two Polis groups have at least {k} members ({sizes}).</p>' if P.groups_computed else
                     f'<p class="note">Not computed: {len(P.people)} participants, fewer than the {P.group_floor} needed before opinion groups are shown.</p>'))
-    excl = (f'{plural(P.auto_votes, "automatic vote")} not counted (a vote by a statement\'s author on that statement at the second it was created); '
-            f'{plural(len(P.auto_only), "participant")} cast only automatic votes. All other votes count, including those of statement authors.'
-            + (f' Manually excluded in the config ({esc(P.exclude_reason)}): {plural(len(P.exclude), "participant")}.' if P.exclude else ''))
+    excl = excluded_html(P)
     late = ('; '.join(f'#{c} created {esc(P.local(t))}, after {n} participant(s) had cast their last vote' for c, t, n in P.late) or 'none')
     stmt_line = (f'<li><b>Statements:</b> {len(P.opinion)} opinion and {plural(len(P.roles), "role question")} counted; '
                  f'{P.n_rejected} rejected and {P.n_unmoderated} unmoderated statement(s) '
                  f'{"included" if cfg.get("include_unmoderated") else "left out"}{" (unmoderated ones included)" if cfg.get("include_unmoderated") else ""}. '
                  f'Statements created after voting in the window had started: {late}. Each statement is reported with its own number of votes.</li>')
     caveats = [
-        f'<li><b>Window:</b> votes from {esc(P.local(P.since))}. {P.removed_rows} earlier vote rows are left out; '
-        f'{plural(len([p for p in P.removed_only_early if p not in P.exclude]), "participant")} voted only before the window. '
+        f'<li><b>Window:</b> votes from {esc(P.local(P.since))}. '
         f'Opinion votes in the window: first {esc(P.local(P.first_ts))}, last {esc(P.local(P.last_ts))}. Exported {esc(P.pulled)}.</li>',
-        f'<li><b>Automatic votes:</b> {excl}</li>',
         stmt_line,
         f'<li><b>Current vote</b> = each participant\'s latest row per statement in votes.csv ({P.revotes} earlier re-vote rows superseded; '
         f'{plural(P.tie_rows, "row shares", "rows share")} a timestamp with another row for the same participant and statement and {"is" if P.tie_rows == 1 else "are"} ordered by file position). '
@@ -633,10 +644,9 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         caveats.append(f'<li><b>Warning:</b> {esc(w)}.</li>')
     role_sec = ''
     if P.roles:
-        role_sec = (f'<h2>Role questions</h2><p class="note">Left out of everything above. Answers are self-reported. Numbers are yes · no · pass.</p>'
-                    f'{legend([("agr", "Yes"), ("dis", "No"), ("pas", "Pass")])}<div class="card">{role_html}</div>'
-                    f'<div class="keep"><h3>#{split} by answer to #{P.roles[0]}</h3><p class="note">#{split} is the opinion statement with the smallest gap between '
-                    f'agree and disagree. {ORDER_NOTE}</p>{legend(LEG_ADP)}<div class="card">{split_html}</div></div>')
+        role_sec = (f'<h2>Role questions</h2><p class="note">Left out of everything above, and not used to split other results. Answers are self-reported. '
+                    f'Numbers are yes · no · pass.</p>'
+                    f'{legend([("agr", "Yes"), ("dis", "No"), ("pas", "Pass")])}<div class="card">{role_html}</div>')
     body = f'''{tiles}{summary}
 <h2>How each statement was voted</h2>
 <p class="note">Bars run left for disagree and right for agree, as a share of all votes on the statement; the remainder is passes. {ORDER_NOTE}</p>
@@ -653,6 +663,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
 Axes have no units and their orientation is arbitrary; closeness means similar vote patterns. Participants with at least {cutoff} opinion votes are placed: {len(pts)} of {len(P.people)}.</p>
 {map_legend(P)}<div class="card map-card">{svg}</div>
 {role_sec}
+<h2>Excluded responses</h2>{excl}
 <h2>Method and caveats</h2><ul class="caveats">{''.join(caveats)}</ul>
 {repro}'''
     sub = (f'Polis conversation {esc(P.url)} · report {esc(P.report)}'
@@ -700,7 +711,7 @@ def compare_reports(PA, PB, cfg, out, repro):
         return CODE[P.vote.get((idx[x], c))]
 
     tabs = {}
-    for c in common + roles:
+    for c in common:
         t = Counter()
         for x in both:
             t[(cat(PA, ia, x, c), cat(PB, ib, x, c))] += 1
@@ -748,8 +759,6 @@ def compare_reports(PA, PB, cfg, out, repro):
     allA = {c: label(PA.tally(c), share, k) for c in common}; allB = {c: label(PB.tally(c), share, k) for c in common}
 
     # noise baselines
-    role_diff = {c: sum(n for (a, b), n in tabs[c].items() if a != b and a in RANK and b in RANK) for c in roles}
-    role_both = {c: sum(n for (a, b), n in tabs[c].items() if a in RANK and b in RANK) for c in roles}
     net = {c: mv[c][0] - mv[c][1] for c in common}
     with_net = [c for c in common if net[c]]
 
@@ -783,7 +792,7 @@ def compare_reports(PA, PB, cfg, out, repro):
                  f'{f"; from the last {PA.name} vote to the first {PB.name} vote: {gap_h:.1f} h" if gap_h is not None else ""}. '
                  f'The two conversations number the statements differently (matched by text) and Polis chooses the order in which each participant sees them.</p>{role_table}')
 
-    # CSVs (counts only; role answers are summarised, not tabulated)
+    # CSVs (counts only; role answers are not compared between polls)
     write_csv(out / 'transitions_by_statement.csv', ['statement', 'text', 'A_vote', 'B_vote', 'n'],
               [[c, PA.text[c], a, b, tabs[c][(a, b)]] for c in common for a in cats for b in cats])
     write_csv(out / 'transitions_pooled.csv', ['A_vote'] + [f'B_{b}' for b in cats], [[a] + [pooled[(a, b)] for b in cats] for a in cats])
@@ -808,8 +817,7 @@ def compare_reports(PA, PB, cfg, out, repro):
                   f'{len(no_holm)} of {m} could not reach the first Holm threshold 0.05/{m} ({ids(no_holm)}).')
     plain_p = ('p is the probability of a split between toward-agree and toward-disagree at least this uneven if each mover were equally likely to go either way; '
                'below 0.05 is the usual threshold, and Holm raises the bar to allow for testing every statement.')
-    noise_line = (f'Baselines: {", ".join(f"{role_diff[c]} of {role_both[c]} matched participants answered role question #{c} differently" for c in roles) or "no role question in both polls"}. '
-                  f'Of {len(with_net)} statements with net movement, {len(toward_mid)} moved away from the side that led in {esc(PA.name)} among these participants '
+    noise_line = (f'Baseline: of {len(with_net)} statements with net movement, {len(toward_mid)} moved away from the side that led in {esc(PA.name)} among these participants '
                   f'(toward the middle).')
     test_note = (f'<li><b>Test:</b> exact two-sided sign test per statement on the direction of movement on the order agree · pass · disagree '
                  f'(agree→pass counts the same as agree→disagree), Holm-corrected for {m} statements. Uncorrected p &lt; 0.05: {ids(raw_sig)}; after correction: {ids(sig)}. '
@@ -901,7 +909,7 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
     crow = ''.join(f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(PA.text[c])}</th><td class="first">{fr(comp[c][0], comp[c][1])}</td><td>{fr(comp[c][2], comp[c][3])}</td>'
                    f'<td class="first">{fr(comp[c][4], comp[c][5])}</td><td>{fr(comp[c][6], comp[c][7])}</td></tr>' for c in common)
     body = f'''<div class="tiles"><div class="tile"><b>{N}</b><span>matched participants ({files_both} xids in both files)</span></div>
-<div class="tile"><b>{share_of(ps, pu + pdn + ps, k)}</b><span>of paired opinion votes unchanged{"; " + ", ".join(f"#{c} answered differently by {role_diff[c]}" for c in roles) if roles else ""}</span></div>
+<div class="tile"><b>{share_of(ps, pu + pdn + ps, k)}</b><span>of paired opinion votes unchanged</span></div>
 <div class="tile"><b>{pu} · {pdn}</b><span>moved toward agree · toward disagree; agree↔disagree switches: {pooled[('agree', 'disagree')]} agree→disagree, {pooled[('disagree', 'agree')]} disagree→agree</span></div>
 <div class="tile"><b>{len(only_a)} · {len(only_b)}</b><span>voted only in {esc(PA.name)} · only in {esc(PB.name)}</span></div></div>
 <div class="card"><b>Summary.</b> Movement in both directions: {ids(two_way)}. One direction only: {ids(one_way)}. No observed movement: {ids(none)}.
@@ -920,7 +928,7 @@ The {m} statements are summed, so one person counts up to {m} times; no test is 
 {who_block}
 <h2>Method and caveats</h2><ul class="caveats">{scope_note}{test_note}
 <li><b>Order used for "toward":</b> agree · pass · disagree; pass is treated as the middle.</li>
-<li>Only counts are shown; xids are used for matching only. Role answers are summarised as counts of differing answers, not tabulated per person.</li></ul>
+<li>Only counts are shown; xids are used for matching only. Role answers are not compared between polls.</li></ul>
 {repro}'''
     write_page(out / 'poll-ab-transitions.html', page(f'{cfg.get("banner", "")} {PA.name} to {PB.name}, same people'.strip(),
                                                       f'{PA.name} to {PB.name}: votes of the same people', sub_common, body, footer, cfg.get('banner')))

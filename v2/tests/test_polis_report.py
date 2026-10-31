@@ -84,7 +84,7 @@ def test_counts_window_exclusion_and_renumbering(tmp_path):
     # automatic votes are not counted, but the author's own later vote is: statement 1 has 5 agrees from 1..6 plus the author's
     assert (a['1']['All_agree'], a['1']['All_disagree'], a['1']['All_pass']) == ('6', '1', '0')
     page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
-    assert '5 automatic votes not counted' in page
+    assert '5 responses excluded (5 pass · 0 agree · 0 disagree)' in page   # automatic responses, split by value
     # Poll B is reported with Poll A's numbers: 'S zero' is B's own id 1 but appears as #0
     b = {r['statement']: r for r in rows(out / 'poll-b-statements.csv')}
     assert b['0']['text'] == 'S zero'
@@ -174,7 +174,7 @@ def test_power_and_baseline_lines(tmp_path):
     m = {r['statement']: r for r in rows(out / 'movers.csv')}
     assert m['0']['movers'] == '1' and m['0']['smallest_reachable_p'] == '1.0000'
     assert 'could not reach p &lt; 0.05 even without correction' in page
-    assert 'answered role question #4 differently' in page
+    assert 'answered role question' not in page and 'toward the middle' in page   # no role baseline; the middle count stays
 
 
 def test_groups_need_the_minimum_number_of_participants(tmp_path):
@@ -210,3 +210,27 @@ def test_comparison_tiles_divide_each_poll_by_its_own_responses(tmp_path):
     # agree: 9 of 16 in A, 9 of 15 in B; pass: 2 of 16 in A, 1 of 15 in B
     assert '<b>56% → 60%</b><span>of opinion votes agree' in page
     assert '<b>12% → 7%</b><span>of opinion votes pass' in page
+
+
+def test_role_answers_split_nothing(tmp_path):
+    out = build(tmp_path, min_total=5)
+    page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
+    assert 'by answer to #4' not in page and 'not used to split other results' in page
+    a = {r['statement']: r for r in rows(out / 'poll-a-statements.csv')}
+    assert a['4']['All_agree'] != '' and a['4']['Other_agree'] == ''    # a role row has its own count only
+    t = {r['statement'] for r in rows(out / 'transitions_by_statement.csv')}
+    assert '4' not in t                                                   # role answers are not compared between polls
+
+
+def test_each_exclusion_has_its_rule_reason_and_count(tmp_path):
+    build(tmp_path)
+    cfg = json.loads((tmp_path / 'config.json').read_text())
+    cfg['since_reason'] = 'test responses before the session opened'
+    cfg['polls'][0].update(exclude_participants=['6'], exclude_reason='asked to be left out')
+    cfg['out'] = 'out2'
+    (tmp_path / 'config.json').write_text(json.dumps(cfg))
+    page = (polis_report.run(tmp_path / 'config.json', pdf=False) / 'poll-a-report.html').read_text(encoding='utf-8')
+    excluded = page[page.index('<h2>Excluded responses</h2>'):page.index('<h2>Method and caveats</h2>')]
+    assert 'reason: test responses before the session opened): 1 response excluded; 1 participant responded only before it' in excluded
+    assert 'reason: asked to be left out): 5 responses from 1 participant excluded' in excluded
+    assert excluded.count('<li>') == 3

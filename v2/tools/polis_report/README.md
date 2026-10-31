@@ -15,6 +15,7 @@ this repository.
 | config key | meaning |
 |---|---|
 | `since` | UTC time; vote rows before it are dropped before taking each participant's latest vote |
+| `since_reason` | why responses before `since` are left out; printed in the report's "Excluded responses" list |
 | `meta` | role/demographic statements, by exact text; left out of opinion totals, labels and the map |
 | `timezone` | IANA zone for local times in the reports (default UTC) |
 | `polls[].exclude_participants` | optional manual override: participant ids left out entirely, with `exclude_reason` (automatic votes are already removed by rule) |
