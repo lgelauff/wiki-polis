@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass
 from datetime import timezone
-from fractions import Fraction
 
 from sqlalchemy.exc import SQLAlchemyError
+
+from services import reporting_rules
 
 
 class FeaturedStatementNotFound(ValueError):
@@ -44,15 +45,10 @@ def agreement(agree: int, disagree: int, *, floor: int, mark_share: float) -> tu
     """The agreement share of agree + disagree responses, as the API serves it.
 
     Withheld (None) below `floor` agree + disagree responses: it is opinion data, which
-    follows the floor in admin views too (owner, 2026-10-15). Otherwise a whole percent,
-    rounded half up once, here, so no client rounds it again. Marked when the exact share
-    is at least `mark_share`. TODO(#233): take the floor from the shared floor helper.
+    follows the floor in admin views too (owner, 2026-10-15). See
+    services.reporting_rules.agreement.
     """
-    position = agree + disagree
-    if position < max(1, floor):
-        return None, False
-    percent = (200 * agree + position) // (2 * position)
-    return percent, Fraction(agree, position) >= Fraction(str(mark_share))
+    return reporting_rules.agreement(agree, disagree, floor=floor, mark_share=mark_share)
 
 
 def build_featured_workspace(
@@ -101,14 +97,17 @@ def build_featured_workspace(
         percent, marked = agreement(
             agree, disagree, floor=agreement_floor, mark_share=agreement_mark_share,
         )
+        # Below the floor the split is withheld too, not only the share: the counts would
+        # give the share straight back (owner, 2026-10-30, D6). Total responses stay.
+        split = agree + disagree >= max(1, agreement_floor)
         projected_candidates.append({
             'statementId': int(row['tid']),
             'text': str(row.get('text') or ''),
             'seed': bool(row.get('is_seed')),
             'votes': {
-                'agree': agree,
-                'pass': int(row.get('n_pass') or 0),
-                'disagree': disagree,
+                'agree': agree if split else None,
+                'pass': int(row.get('n_pass') or 0) if split else None,
+                'disagree': disagree if split else None,
                 'total': int(row.get('n_votes') or 0),
                 'agreementPercent': percent,
                 'agreementMarked': marked,

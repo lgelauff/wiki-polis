@@ -159,9 +159,10 @@ function CandidateRow({candidate, guidance, pending, onConfirm}: {
       </td>
       {/* A seed statement is marked with a check that names itself. */}
       <td>{candidate.seed && <span title={msg('featured-th-seed')} aria-label={msg('featured-th-seed')} role="img">✓</span>}</td>
-      <td className="admin-num">{candidate.votes.agree}</td>
-      <td className="admin-num">{candidate.votes.disagree}</td>
-      <td className="admin-num">{candidate.votes.pass}</td>
+      {/* Below the floor the server withholds the split as well as the share (#233). */}
+      <td className="admin-num">{candidate.votes.agree ?? '—'}</td>
+      <td className="admin-num">{candidate.votes.disagree ?? '—'}</td>
+      <td className="admin-num">{candidate.votes.pass ?? '—'}</td>
       <td className="admin-num">{candidate.votes.total}</td>
       <td className="admin-num">
         {agreementPercent === null

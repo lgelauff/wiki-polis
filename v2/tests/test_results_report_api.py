@@ -70,24 +70,22 @@ def test_final_results_api_uses_snapshot_and_preserves_pass_tallies(
     assert data['moderation'] == {
         'excludedStatements': 1, 'excludedParticipants': 2,
     }
-    assert data['statements'][0]['initial']['counts'] == {
-        'agree': 12, 'pass': 3, 'disagree': 5, 'voters': 20,
+    # A logged-out reader gets the public view (decision 4, D8): whole percentages and the
+    # shift, but no exact counts and no opinion groups.
+    assert data['statements'][0]['initial'] == {
+        'counts': None,
+        'percentages': {'agree': 60, 'pass': 15, 'disagree': 25},
+        'belowFloor': False,
     }
     assert data['statements'][0]['informed']['percentages'] == {
-        'agree': 70.0, 'pass': 20.0, 'disagree': 10.0,
+        'agree': 70, 'pass': 20, 'disagree': 10,
     }
+    assert data['statements'][0]['informed']['counts'] is None
     assert data['statements'][0]['agreementShift'] == 10.0
     assert data['statements'][0]['viewerChoice'] is None
-    assert data['opinionGroups'][0] == {
-        'label': 'Group 1',
-        'memberCount': 11,
-        'positions': [
-            {'choice': 'agree', 'statement': 'Shared maintenance matters',
-             'percentage': 82.0},
-            {'choice': 'disagree', 'statement': 'Centralize every budget',
-             'percentage': 64.0},
-        ],
-    }
+    assert data['opinionGroups'] == []
+    assert data['dataAvailability']['opinionGroups'] is False
+    assert data['dataAvailability']['responseFloor'] == 10
     assert data['viewer'] == {
         'participating': False, 'pseudonym': None, 'revealState': 'pending',
     }
@@ -288,7 +286,9 @@ def test_preliminary_results_exposes_only_the_informed_round_publicly(
 
     statement = data['statements'][0]
     assert statement['initial'] is None
-    assert statement['informed']['counts']['voters'] == 20
+    # A logged-out reader: percentages, no exact counts (D8).
+    assert statement['informed']['counts'] is None
+    assert statement['informed']['percentages']['agree'] == 70
     assert statement['agreementShift'] is None
     assert data['participation']['initialRound'] is None
     assert data['participation']['informedRound'] == 22
@@ -548,6 +548,7 @@ def test_preliminary_results_order_does_not_depend_on_cross_round_shift(
         conversation_link='/c/test-conv',
         about_link='/about',
         identity_reveal_link=None,
+        full_view=False,
     )
 
     # Identical informed tallies must not let different P2→P6 shifts choose which

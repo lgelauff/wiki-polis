@@ -66,6 +66,7 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
+from services import reporting_rules
 from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
@@ -874,8 +875,9 @@ class Phase6ResultsFilter:
         )
 
 
-def _pct(n: int, total: int) -> float:
-    return round(n / total * 100, 1) if total else 0.0
+def _pct(n: int, total: int) -> int:
+    """Whole percent, rounded half up once (services.reporting_rules); 0 for no responses."""
+    return reporting_rules.percent(n, total) or 0
 
 
 # ── Phase 6 results aggregate cache ───────────────────────────────────────────
@@ -978,7 +980,8 @@ def _build_phase6_results(
           'text', 'fs_id',
           'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
           'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
-          'shift': float | None,     # aggregate: p6_pct_agree - p2_pct_agree (population comparison,
+          'shift': int | None,       # aggregate: P6 minus P2 agree share in whole points, None
+                                     #   below the floor in either round (population comparison,
                                      #   NOT individual-level delta — see 'matched_participants')
           'my_p2_vote': int | None,  # raw Polis vote; None if participation absent or PG unavail
           'my_p6_vote': int | None,
@@ -1115,7 +1118,12 @@ def _build_phase6_results(
             p2_pct_disagree = _pct(p2_row['n_disagree'], p2_n)
             p2_pct_pass     = _pct(p2_row['n_pass'],     p2_n)
 
-        shift = round(p6_pct_agree - p2_pct_agree, 1) if p2_pct_agree is not None else None
+        # From the exact shares, rounded once; withheld unless both rounds pass the floor.
+        shift = (
+            reporting_rules.shift(
+                p2_row['n_agree'], p2_row['n_voters'], p6_row['n_agree'], p6_n,
+            ) if p2_row else None
+        )
 
         statements.append({
             'text':        fs.statement_text,
@@ -3369,6 +3377,10 @@ def _results_report_api_payload(slug: str) -> dict:
             _path_conversation(slug, page='reveal')
             if reveal else None
         ),
+        # Participants, the process's organizers and site admins see the full report (exact
+        # counts, groups); everyone else the public one (owner, 2026-10-31). No one gets a
+        # personalised view of someone else's.
+        full_view=participation is not None or _can_organize(conv, participant),
     )
 
 
@@ -4602,21 +4614,15 @@ def _admin_featured_api_payload(conv_id: int) -> dict:
 
 
 def _featured_agreement_floor() -> int:
-    """FEATURED_AGREEMENT_FLOOR: fewest agree + disagree responses before a candidate's
-    agreement share is shown (default 10, the floor for opinion data)."""
-    try:
-        return max(1, int(current_app.config.get('FEATURED_AGREEMENT_FLOOR', 10)))
-    except (TypeError, ValueError):
-        return 10
+    """REPORTING_MIN_TOTAL: fewest agree + disagree responses before a candidate's
+    agreement share or split is shown (default 10, the floor for opinion data)."""
+    return reporting_rules.min_total()
 
 
 def _featured_agreement_mark_share() -> float:
-    """FEATURED_AGREEMENT_MARK_SHARE: agree share of agree + disagree at which a candidate
-    is marked (default 0.7, as polis_report's label share)."""
-    try:
-        return max(0.0, min(1.0, float(current_app.config.get('FEATURED_AGREEMENT_MARK_SHARE', 0.7))))
-    except (TypeError, ValueError):
-        return 0.7
+    """REPORTING_LABEL_SHARE: agree share of agree + disagree at which a candidate is
+    marked (default 0.7, as polis_report's label share)."""
+    return reporting_rules.label_share()
 
 
 def _select_admin_featured_api_payload(
@@ -5030,6 +5036,7 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
         conversation_link=_admin_client_link(conv.id),
         about_link=_path_conversation(conv.slug, page='about'),
         identity_reveal_link=None,
+        full_view=True,
         preview=True,
     )
     # Ids and enums only (record_audit's privacy contract).

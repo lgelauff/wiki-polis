@@ -23,7 +23,7 @@ const preview: components['schemas']['ResultsReport'] = {
   closedAt: null,
   context: {phase: 'x', status: 'provisional', method: 'x'},
   participation: {initialRound: null, informedRound: null, matchedRounds: null},
-  dataAvailability: {detailedCounts: false, opinionGroups: false, personalLens: false},
+  dataAvailability: {detailedCounts: false, opinionGroups: false, personalLens: false, responseFloor: 10},
   moderation: {excludedStatements: 0, excludedParticipants: 0},
   statements: [],
   opinionGroups: [],

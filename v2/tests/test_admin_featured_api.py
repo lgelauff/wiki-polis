@@ -57,9 +57,10 @@ def test_featured_workspace_reports_transparent_candidate_metrics(
     assert data['guidance']['recommendedCount'] == 15
     assert data['guidance']['agreementFloor'] == 10
     assert data['guidance']['agreementMarkShare'] == 0.7
-    # 3 agree + 1 disagree is below the floor: the share is withheld by the API itself.
+    # 3 agree + 1 disagree is below the floor: the API withholds the share and the split
+    # it could be worked back from (D6); only the total stays.
     assert data['candidates'][0]['votes'] == {
-        'agree': 3, 'pass': 2, 'disagree': 1, 'total': 6,
+        'agree': None, 'pass': None, 'disagree': None, 'total': 6,
         'agreementPercent': None, 'agreementMarked': False,
     }
     assert data['selected'][0]['arguments'][0]['proposerPseudonym'] == 'quiet-otter'
@@ -261,8 +262,8 @@ def test_agreement_mark_uses_the_exact_share():
 
 
 def test_agreement_floor_and_mark_share_are_settings(admin_client, conversation, app):
-    app.config['FEATURED_AGREEMENT_FLOOR'] = 4
-    app.config['FEATURED_AGREEMENT_MARK_SHARE'] = 0.75
+    app.config['REPORTING_MIN_TOTAL'] = 4
+    app.config['REPORTING_LABEL_SHARE'] = 0.75
     server = MagicMock()
     server.get_featured_candidates.return_value = [_candidate()]
     try:
@@ -271,10 +272,34 @@ def test_agreement_floor_and_mark_share_are_settings(admin_client, conversation,
                 f'/api/v1/admin/conversations/{conversation.id}/featured-statements',
             ).get_json()['data']
     finally:
-        app.config.pop('FEATURED_AGREEMENT_FLOOR')
-        app.config.pop('FEATURED_AGREEMENT_MARK_SHARE')
+        app.config.pop('REPORTING_MIN_TOTAL')
+        app.config.pop('REPORTING_LABEL_SHARE')
 
     assert data['guidance']['agreementFloor'] == 4
     assert data['guidance']['agreementMarkShare'] == 0.75
     assert data['candidates'][0]['votes']['agreementPercent'] == 75
     assert data['candidates'][0]['votes']['agreementMarked'] is True
+    # At the floor the split is shown again.
+    assert data['candidates'][0]['votes']['agree'] == 3
+
+
+def test_featured_split_is_shown_from_the_floor(admin_client, conversation):
+    server = MagicMock()
+    server.get_featured_candidates.return_value = [
+        {**_candidate(12), 'n_agree': 7, 'n_pass': 30, 'n_disagree': 2, 'n_votes': 39},
+        {**_candidate(13), 'n_agree': 7, 'n_pass': 0, 'n_disagree': 3, 'n_votes': 10},
+    ]
+    with patch('app._polis_server_client', return_value=server):
+        votes = [row['votes'] for row in admin_client.get(
+            f'/api/v1/admin/conversations/{conversation.id}/featured-statements',
+        ).get_json()['data']['candidates']]
+
+    # 9 agree or disagree among 39 responses: the base of the split is 9, so it is withheld.
+    assert votes[0] == {
+        'agree': None, 'pass': None, 'disagree': None, 'total': 39,
+        'agreementPercent': None, 'agreementMarked': False,
+    }
+    assert votes[1] == {
+        'agree': 7, 'pass': 0, 'disagree': 3, 'total': 10,
+        'agreementPercent': 70, 'agreementMarked': True,
+    }

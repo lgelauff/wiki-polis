@@ -9,9 +9,11 @@ import {rankOpinionStatements} from './statement-rankings';
 type Statement = components['schemas']['ResultsStatement'];
 type Tally = components['schemas']['VoteTally'];
 
+// Only ranked rows reach this bar, and the ranking skips withheld tallies (#233).
 function VoteBar({tally, msg}: {tally: Tally; msg: Message}) {
-  const {percentages} = tally;
-  const percentage = usePercentFormat();
+  const percentages = tally.percentages!;
+  const format = usePercentFormat();
+  const percentage = (value: number) => format(value, {digits: 0});
   const title = msg('conv-bar-title', percentage(percentages.agree), percentage(percentages.disagree), percentage(percentages.pass));
   return <>
     <div className="p6-vote-bar" title={title}>

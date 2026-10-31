@@ -2,6 +2,8 @@
 
 from datetime import timezone
 
+from services import reporting_rules
+
 
 def _utc_iso(value) -> str | None:
     if value is None:
@@ -10,22 +12,9 @@ def _utc_iso(value) -> str | None:
     return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
-def _tally(value: dict | None) -> dict | None:
-    if value is None:
-        return None
-    return {
-        'counts': {
-            'agree': int(value.get('n_agree') or 0),
-            'pass': int(value.get('n_pass') or 0),
-            'disagree': int(value.get('n_disagree') or 0),
-            'voters': int(value.get('n_voters') or 0),
-        },
-        'percentages': {
-            'agree': float(value.get('pct_agree') or 0),
-            'pass': float(value.get('pct_pass') or 0),
-            'disagree': float(value.get('pct_disagree') or 0),
-        },
-    }
+def _tally(value: dict | None, *, exact_counts: bool) -> dict | None:
+    """Floor, round and (for the public) drop the counts; see services.reporting_rules."""
+    return reporting_rules.tally(value, exact_counts=exact_counts)
 
 
 def _choice(vote: int | None) -> str | None:
@@ -105,9 +94,15 @@ def build_results_report(
     participation, reveal_state: str | None,
     self_link: str, conversation_link: str, about_link: str,
     identity_reveal_link: str | None,
+    full_view: bool,
     preview: bool = False,
 ) -> dict:
-    """Build the results report. ``preview`` marks a site-admin preview, never published."""
+    """Build the results report. ``preview`` marks a site-admin preview, never published.
+
+    ``full_view`` is for participants of the process, its organizers and site admins: exact
+    counts and opinion groups. Everyone else gets the public view (decision 4, D8):
+    percentages only, no groups. Neither view carries numbers below the floor.
+    """
     results = phase6_results or {}
     detailed = bool(results.get('pg_available'))
     # The published report's full shape (cross-round comparison, opinion groups). A site
@@ -126,8 +121,11 @@ def build_results_report(
             'featuredStatementId': row['fs_id'],
             'statement': row['text'],
             # Cross-round aggregate comparison belongs to the published Report only.
-            'initial': _tally(row.get('p2')) if detailed and report_shape else None,
-            'informed': _tally(row.get('p6')) if detailed else None,
+            'initial': (
+                _tally(row.get('p2'), exact_counts=full_view)
+                if detailed and report_shape else None
+            ),
+            'informed': _tally(row.get('p6'), exact_counts=full_view) if detailed else None,
             'agreementShift': row.get('shift') if detailed and report_shape else None,
             # A participant's own round delta and group comparison stay private and live.
             'viewerChoice': viewer_choice,
@@ -170,15 +168,18 @@ def build_results_report(
         },
         'dataAvailability': {
             'detailedCounts': detailed,
-            'opinionGroups': bool(report_shape and results.get('clusters')),
+            'opinionGroups': bool(report_shape and full_view and results.get('clusters')),
             'personalLens': personal_lens,
+            'responseFloor': reporting_rules.min_total(),
         },
         'moderation': {
             'excludedStatements': len(result_filter.excluded_tids) if result_filter else 0,
             'excludedParticipants': len(result_filter.excluded_pids) if result_filter else 0,
         },
         'statements': statements,
-        'opinionGroups': _opinion_groups(results.get('clusters')) if report_shape else [],
+        'opinionGroups': (
+            _opinion_groups(results.get('clusters')) if report_shape and full_view else []
+        ),
         'viewer': {
             'participating': participation is not None,
             'pseudonym': participation.pseudonym if participation else None,
