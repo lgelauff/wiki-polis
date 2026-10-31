@@ -166,3 +166,31 @@ def test_builder_shift_needs_the_floor_in_both_rounds_and_rounds_once(app, conve
     shifts = {row['text']: row['shift'] for row in results['statements']}
     # 33.33 - 12.5 = 20.83 -> 21; the rounded shares (33 - 13) would give 20.
     assert shifts == {'Statement 1': 21, 'Statement 2': None, 'Statement 3': None}
+
+
+def _join(client):
+    return client.post('/api/v1/conversations/test-conv/participation',
+                       json={'consent': True, 'pseudonym': 'late-otter'})
+
+
+def test_nobody_new_can_join_a_closed_process_to_get_the_full_view(auth_client, closed, participant):
+    # The full view follows a participation, so joining after close must not be a way in.
+    refused = _join(auth_client)
+
+    assert refused.status_code == 409
+    assert refused.get_json()['error']['code'] == 'join_closed'
+    assert Participation.query.filter_by(participant_id=participant.id).count() == 0
+    assert _is_public(_report(auth_client))
+
+
+def test_an_existing_participation_still_replays_after_close(auth_client, closed, participant):
+    db.session.add(Participation(
+        participant_id=participant.id, conversation_id=closed.id, pseudonym='late-otter',
+    ))
+    db.session.commit()
+
+    assert _join(auth_client).status_code == 200
+
+
+def test_joining_an_open_process_still_works(auth_client, conversation):
+    assert _join(auth_client).status_code == 201

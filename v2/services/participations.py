@@ -20,6 +20,15 @@ class PseudonymUnavailable(RuntimeError):
     """Another participant already owns the requested pseudonym."""
 
 
+class JoinClosed(RuntimeError):
+    """The conversation has closed: nobody new can join it.
+
+    Joining after close would turn a public reader into a participant, and participants get
+    the full report (exact counts, opinion groups; #233). An existing participation still
+    replays.
+    """
+
+
 class EligibilityDenied(RuntimeError):
     """The configured eligibility policy denied or could not verify the join."""
 
@@ -56,6 +65,8 @@ def join_conversation(
     ).first()
     if existing is not None:
         return JoinResult(participation=existing, created=False)
+    if conversation.closed_at is not None:
+        raise JoinClosed()
 
     pseudonym = pseudonym.strip()
     if PSEUDONYM_RE.fullmatch(pseudonym) is None:

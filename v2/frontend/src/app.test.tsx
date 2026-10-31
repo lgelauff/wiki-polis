@@ -341,6 +341,7 @@ test('matches legacy featured-statement administration and commands', async () =
   const candidates = screen.getByRole('table');
   // 3 agree + 1 disagree is below the floor: the split is withheld, only the total shows.
   expect(within(candidates).getAllByText('—')).toHaveLength(3);
+  expect(candidates.querySelectorAll('.admin-num .sr-only')).toHaveLength(3);
   expect(within(candidates).getByText('6')).toBeVisible();
   expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', {name: /^Confirm/}));

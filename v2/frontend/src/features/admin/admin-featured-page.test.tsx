@@ -96,7 +96,10 @@ test('a share the server withheld says so, with the floor it sent', async () => 
   const cell = await agreementCell();
   expect(cell).toHaveTextContent('(featured-agreement-few: 10)');
   expect(within(cell).queryByRole('img')).toBeNull();
-  const cells = within(cell.closest('tr')!).getAllByRole('cell').map((td) => td.textContent);
-  expect(cells.filter((text) => text === '—')).toHaveLength(3);
-  expect(cells).toContain('18');
+  // Each withheld count shows a dash to the eye and gives a screen reader the reason.
+  const row = within(cell.closest('tr')!);
+  const withheld = row.getAllByRole('cell').filter((td) => td.querySelector('[aria-hidden="true"]')?.textContent === '—');
+  expect(withheld).toHaveLength(3);
+  for (const td of withheld) expect(td.querySelector('.sr-only')).toHaveTextContent('(featured-agreement-few: 10)');
+  expect(row.getByRole('cell', {name: '18'})).toBeInTheDocument();
 });

@@ -243,6 +243,7 @@ const WORKSPACE_ERROR_MESSAGES: Record<string, string> = {
  *  never reach this: they replace the form with the not-eligible page. */
 const JOIN_ERROR_MESSAGES: Record<string, string> = {
   pseudonym_unavailable: 'accept-js-taken',
+  join_closed: 'accept-err-closed',
   // The session expired while the form was open.
   unauthorized: 'common-err-nologin',
   _fallback: 'accept-err-join',
