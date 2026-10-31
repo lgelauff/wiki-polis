@@ -23,3 +23,20 @@ afterEach(() => {
   }
 });
 afterAll(() => server.close());
+
+/** jsdom implements no `matchMedia`, so a component that asks about a viewport width
+ *  throws a TypeError instead of rendering. The stub answers "no match" — the desktop
+ *  case, which is the default the suites were written against — and a test that needs the
+ *  other answer replaces it (see `features/admin/admin-shell.test.tsx`). */
+if (typeof globalThis.matchMedia !== 'function') {
+  globalThis.matchMedia = ((query: string) => ({
+    media: query,
+    matches: false,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof globalThis.matchMedia;
+}

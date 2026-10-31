@@ -35,12 +35,25 @@ def test_react_owned_forms_do_not_fall_back_to_legacy_posts():
             '<form method="post" action={session.links.logout} className="account-form">',
         ),
         (
+            Path('features/admin/admin-shell.tsx'),
+            '<form method="GET" action={location.pathname} className="admin-shell__lang">',
+        ),
+        (
+            Path('features/admin/admin-shell.tsx'),
+            '<form method="post" action={session.links.logout} className="admin-shell__logout">',
+        ),
+        (
             Path('features/legacy/legacy-shell.tsx'),
             '<form method="GET" action={location.pathname} className="lang-select-form">',
         ),
         (
             Path('features/legacy/legacy-shell.tsx'),
             "<form method=\"post\" action={session.links.logout} style={{display: 'inline'}}>",
+        ),
+        (
+            # Log out of a voucher account before a page that needs another login (#514).
+            Path('features/legacy/logout-choice.tsx'),
+            "<form method=\"post\" action={session.links.logout} style={{margin: '18px 0 1.5rem'}}>",
         ),
     ]
 

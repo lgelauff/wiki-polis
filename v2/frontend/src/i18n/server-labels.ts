@@ -179,6 +179,20 @@ const ACCESS_POLICY_MESSAGES: Record<string, string> = {
 export const accessPolicyLabel = (msg: Message, id: string | null | undefined) =>
   resolve(ACCESS_POLICY_MESSAGES, msg, id, id);
 
+/** The operator's role on one consultation, as `_conversation_role_label` (app.py) words
+ *  it. The server string is the display label as well as the identifier, and the console
+ *  does not use it: it says "Site admin" where the server says "Global admin" (spec: the
+ *  interface never shows the internal name of a role). The server is untouched, so the
+ *  two ends keep disagreeing on purpose and the mapping lives here. */
+const ROLE_MESSAGES: Record<string, string> = {
+  'Global admin': 'admin-shell-role-site-admin',
+  Organizer: 'admin-shell-role-organizer',
+  Moderator: 'admin-shell-role-moderator',
+};
+
+export const roleLabel = (msg: Message, id: string | null | undefined) =>
+  resolve(ROLE_MESSAGES, msg, id, id);
+
 /** Rule 4 of `plan_i18n.md`: an API error's `message` is for developers, never for the page.
  *
  *  Each form that can fail maps the error's `code` to its own copy, and anything it does not
@@ -196,6 +210,9 @@ const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
   statement_quota_exceeded: 'conv-err-proposal-limit',
   derivative_similarity_too_low: 'conv-err-similarity',
   unknown_parent_statement: 'conv-err-original-unavailable',
+  // Identical text is already in the consultation, so nothing was added and resending the
+  // same wording is refused every time. Say it is already there rather than inviting a retry.
+  statement_exists: 'conv-err-statement-exists',
   // The statement was sent and may have landed. Nothing reconciles the pending attempt, so
   // pressing submit again only brings this message back, and edited text under the same key
   // comes back as an idempotency conflict: the same case, so the same message. It tells the

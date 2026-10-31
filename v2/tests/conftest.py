@@ -152,3 +152,18 @@ def admin_client(client, admin_participant):
     """Test client logged in as the global admin."""
     login(client, 'adminuser')
     return client
+
+
+def particiapi_state(cookie, csrf_token, *, bound_at=None):
+    """A cached Particiapi session as wiki-polis stores it, fresh unless told otherwise.
+
+    State cached without ``boundAt`` is re-bound on first use (its age is unknown), so a
+    test that means "the participant already has a usable session" must seed this shape.
+    """
+    import time
+
+    return {
+        'cookie': cookie,
+        'csrfToken': csrf_token,
+        'boundAt': time.time() if bound_at is None else bound_at,
+    }

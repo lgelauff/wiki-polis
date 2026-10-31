@@ -1,18 +1,22 @@
 import {useSuspenseQuery} from '@tanstack/react-query';
-import {useParams} from 'react-router-dom';
+import {Navigate, useLocation, useParams} from 'react-router-dom';
 import type {ReactNode} from 'react';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
+import {useMessage} from '../../i18n/messages';
 import {AdminAccessBoundary} from './admin-access-boundary';
 import {AdminCatalogPage} from './admin-catalog-page';
+import {AdminHomePage} from './admin-home-page';
 import {AdminFeaturedPage} from './admin-featured-page';
 import {AdminInvitationsPage} from './admin-invitations-page';
 import {AdminLifecyclePage} from './admin-lifecycle-page';
-import {AdminModerationPage} from './admin-moderation-page';
+import {AdminModerationFlagsPage} from './admin-moderation-flags-page';
+import {AdminModerationPeoplePage} from './admin-moderation-people-page';
+import {AdminModerationQueuePage} from './admin-moderation-queue-page';
 import {AdminParticipantsPage} from './admin-participants-page';
 import {AdminRolesPage} from './admin-roles-page';
-import {AdminSettingsPage} from './admin-settings-page';
+import {AdminSettingsPage, AdminSettingsVouchersPage} from './admin-settings-page';
 import {AdminStatementsPage} from './admin-statements-page';
 import {AdminTerminationPage} from './admin-termination-page';
 import {useLoginHref} from '../../login-href';
@@ -28,6 +32,7 @@ function OrbitMark() {
 }
 
 function AdminHeader() {
+  const msg = useMessage();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const login = useLoginHref(session.links.login);
   return (
@@ -46,7 +51,7 @@ function AdminHeader() {
           <InternalLink className="account-link" href={login}>Log in</InternalLink>
         ) : (
           <form method="post" action={session.links.logout} className="account-form">
-            <span>{session.user?.username ?? 'Demo session'}</span>
+            <span>{session.state === 'voucher' ? msg('base-single-consultation-account') : session.user?.username ?? 'Demo session'}</span>
             <input type="hidden" name="csrf_token" value={session.csrfToken} />
             <button type="submit">Log out</button>
           </form>
@@ -67,13 +72,18 @@ function Protected({children}: {children: ReactNode}) {
 
 type AdminRouteKind =
   | 'catalog'
-  | 'featured'
-  | 'invitations'
+  | 'home'
   | 'lifecycle'
-  | 'moderation'
+  | 'moderation-featured'
+  | 'moderation-flags'
+  | 'moderation-people'
+  | 'moderation-queue'
   | 'participants'
-  | 'roles'
-  | 'settings'
+  | 'settings-access'
+  | 'settings-basics'
+  | 'settings-invitations'
+  | 'settings-roles'
+  | 'settings-vouchers'
   | 'statements'
   | 'termination';
 
@@ -81,27 +91,36 @@ function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
   const {conversationId: rawConversationId} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
   if (kind === 'catalog') return <AdminCatalogPage csrfToken={session.csrfToken} />;
+  if (kind === 'home') return <AdminHomePage />;
 
   const conversationId = requiredConversationId(rawConversationId);
   switch (kind) {
     case 'lifecycle':
       return <AdminLifecyclePage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'settings':
-      return <><AdminHeader /><AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
+    case 'settings-basics':
+      return <AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} tab="basics" />;
+    case 'settings-access':
+      return <AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} tab="access" />;
     case 'termination':
       return <><AdminHeader /><AdminTerminationPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
     case 'statements':
       return <AdminStatementsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'featured':
-      return <AdminFeaturedPage conversationId={conversationId} csrfToken={session.csrfToken} />;
     case 'participants':
       return <AdminParticipantsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'moderation':
-      return <AdminModerationPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'invitations':
+    case 'moderation-queue':
+      return <AdminModerationQueuePage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-flags':
+      return <AdminModerationFlagsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-featured':
+      return <AdminFeaturedPage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'moderation-people':
+      return <AdminModerationPeoplePage conversationId={conversationId} csrfToken={session.csrfToken} />;
+    case 'settings-invitations':
       return <AdminInvitationsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'roles':
-      return <><AdminHeader /><AdminRolesPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
+    case 'settings-vouchers':
+      return <AdminSettingsVouchersPage conversationId={conversationId} />;
+    case 'settings-roles':
+      return <AdminRolesPage conversationId={conversationId} csrfToken={session.csrfToken} />;
   }
 }
 
@@ -109,13 +128,49 @@ function AdminRoute({kind}: {kind: AdminRouteKind}) {
   return <Protected><AdminRouteContent kind={kind} /></Protected>;
 }
 
+/** `/site-admin`: the site admin dashboard (#479), at its own address since #538. */
 export const AdminCatalogRoute = () => <AdminRoute kind="catalog" />;
+/** `/admin`: Admin home (#538), for everyone with a role and for site admins. */
+export const AdminHomeRoute = () => <AdminRoute kind="home" />;
 export const AdminLifecycleRoute = () => <AdminRoute kind="lifecycle" />;
-export const AdminSettingsRoute = () => <AdminRoute kind="settings" />;
+export const AdminSettingsBasicsRoute = () => <AdminRoute kind="settings-basics" />;
+export const AdminSettingsAccessRoute = () => <AdminRoute kind="settings-access" />;
+export const AdminSettingsInvitationsRoute = () => <AdminRoute kind="settings-invitations" />;
+export const AdminSettingsVouchersRoute = () => <AdminRoute kind="settings-vouchers" />;
+export const AdminSettingsRolesRoute = () => <AdminRoute kind="settings-roles" />;
+
+/** An old admin path that now lives under a section: `<Navigate replace>` to the new one,
+ *  so the links the server still builds keep working without a second copy of every path
+ *  in `v2/app.py`. */
+export function AdminRedirectRoute({to}: {to: (conversationId: string) => string}) {
+  const {conversationId} = useParams();
+  const {search, hash} = useLocation();
+  if (!conversationId) throw new Error('Missing route parameter: conversationId');
+  // The query string and fragment go along, as with the settings index below.
+  return <Navigate replace to={{pathname: to(conversationId), search, hash}} />;
+}
+
+/** `…/settings` is the URL the lifecycle page and the sidebar still link to; Settings has
+ *  tabs, so the bare path lands on Basics. `<Navigate replace>` keeps the old path out of the
+ *  history: Back returns to wherever the organizer came from, not to this hop. The target is
+ *  relative, so `/app/admin/…` stays in its own route group; the query string (a
+ *  `?uselang=`) and the fragment go along, as they would through a server redirect. */
+export function AdminSettingsIndexRoute() {
+  return <AdminSectionIndexRoute firstTab="basics" />;
+}
+
+/** The bare path of a tabbed section lands on the first tab of its strip, the way
+ *  `…/settings` lands on Basics: `…/moderation` on Queue (`moderationTabs`) and `…/content`
+ *  on Statements (`contentTabs`). Relative, so `/app/admin/…` stays in its own group, and
+ *  the query string and fragment go along. */
+export function AdminSectionIndexRoute({firstTab}: {firstTab: string}) {
+  const {search, hash} = useLocation();
+  return <Navigate replace to={{pathname: firstTab, search, hash}} />;
+}
 export const AdminTerminationRoute = () => <AdminRoute kind="termination" />;
 export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;
-export const AdminFeaturedRoute = () => <AdminRoute kind="featured" />;
 export const AdminParticipantsRoute = () => <AdminRoute kind="participants" />;
-export const AdminModerationRoute = () => <AdminRoute kind="moderation" />;
-export const AdminInvitationsRoute = () => <AdminRoute kind="invitations" />;
-export const AdminRolesRoute = () => <AdminRoute kind="roles" />;
+export const AdminModerationQueueRoute = () => <AdminRoute kind="moderation-queue" />;
+export const AdminModerationFlagsRoute = () => <AdminRoute kind="moderation-flags" />;
+export const AdminModerationFeaturedRoute = () => <AdminRoute kind="moderation-featured" />;
+export const AdminModerationPeopleRoute = () => <AdminRoute kind="moderation-people" />;

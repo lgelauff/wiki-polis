@@ -2,7 +2,8 @@
 
 > **Class: tracks-code reference.** Verified against `bf07842` (2026-09-28) by enumerating
 > the live `app.url_map` and reading the app-layer function each endpoint delegates to.
-> Every `app.py:<line>` below was checked to point at the `def` it names.
+> Every `app.py:<line>` below was checked to point at the `def` it names. Rows changed since
+> then cite the function name alone, since line numbers drift with every edit.
 >
 > **Planned:** a generator that walks `app.url_map` and fails with a non-zero exit on a
 > route it cannot classify, so drift is a red build rather than a stale paragraph. Until it
@@ -10,7 +11,8 @@
 > trustworthy.
 
 This is the security reference for reviewing route additions and authorization
-changes. It is a *reference to the code*, not a design document — for why the system
+changes. Which admin page lives at which address, and what each role sees
+there, is in [`admin_site_map.md`](admin_site_map.md). It is a *reference to the code*, not a design document — for why the system
 is shaped this way see [`../spec_architecture.md`](../spec_architecture.md) and
 [`../adr/0004-versioned-browser-api-and-spa.md`](../adr/0004-versioned-browser-api-and-spa.md).
 
@@ -63,7 +65,7 @@ Two properties these preserve, both worth keeping in mind when reviewing a chang
 - **Roles are conversation-scoped and non-transitive.** `_require_mod_for_conv` looks up
   `AdminRole` filtered on `conversation_id`, so a moderator of conversation A gets 403 on
   conversation B. There is no "moderator of a conversation can see the admin index" path:
-  the admin catalog is `_is_global_admin()` only (`app.py:3492`).
+  the admin catalog (`_admin_catalog_api_payload`, `app.py:3492`) is `_is_global_admin()` only.
 - **A participation is not an access shortcut.** `app.py:4532-4537` states this
   explicitly: the access decision is made from the conversation's policy, and an existing
   participation is checked separately by the `_require_*_api_context` helpers.
@@ -71,6 +73,13 @@ Two properties these preserve, both worth keeping in mind when reviewing a chang
 ### Error codes
 
 `401 unauthorized` means no Flask session. `403 forbidden` means a role check failed.
+On the admin API the two are told apart by `_refuse_admin()`: every admin guard above
+(`_is_global_admin()` checks in the admin payloads, `_require_mod_for_conv`,
+`_require_organizer_for_conv`) refuses with 401 when the caller is signed out (no session
+username, and no participant or only a practice session's demo participant:
+`_admin_caller_signed_out()`) and with 403 for a signed-in user without the role, so the
+console sends a signed-out visitor to the login (`?next=`) instead of its access page.
+`GET /api/v1/admin/home` treats a practice session the same way.
 `403 access_required` means the conversation's access policy refused you. `409 conflict`
 means you passed the checks but the conversation is not in a phase that permits the
 action. The distinction between the two 403s is deliberate and the SPA depends on it:
@@ -95,23 +104,23 @@ on those routes — send a schema-valid body when sweeping.
 | `/api/v1/conversations` | GET | public; personalised when logged in | `_conversation_lane_api_payload` (app.py:2395) |
 | `/api/v1/conversations/<slug>/about` | GET | conversation access policy; no login check of its own | `_conversation_about_api_payload` (app.py:2531) |
 | `/api/v1/conversations/<slug>/workspace` | GET | conversation access policy + logged-in participant | `_conversation_workspace_api_payload` (app.py:2421) |
-| `/api/v1/conversations/<slug>/moderation-log` | GET | conversation access policy; no login check of its own | `_moderation_log_api_payload` (app.py:2542) |
+| `/api/v1/conversations/<slug>/moderation-log` | GET | conversation access policy; no login check of its own. Returns ban/unban events with pseudonym and moderator name, never the private reason | `_moderation_log_api_payload` (app.py:2542) |
 | `/api/v1/conversations/<slug>/outputs/<output_key>` | GET | conversation access policy + logged-in participant | `_conversation_output_api_payload` (app.py:2574) |
 | `/api/v1/conversations/<slug>/participation-entry` | GET | conversation access policy + logged-in participant | `_participation_entry_api_payload` (app.py:2694) |
 | `/api/v1/conversations/<slug>/pseudonym-suggestions` | GET | conversation access policy + logged-in participant | `_pseudonym_suggestions_api_payload` (app.py:2703) |
-| `/api/v1/conversations/<slug>/participation` | POST | conversation access policy; runs the join-eligibility check | `_join_conversation_api_payload` (app.py:2710) |
+| `/api/v1/conversations/<slug>/participation` | POST | conversation access policy; runs the join-eligibility check. Rate-limited 10/min | `_join_conversation_api_payload` (app.py:2710) |
 | `/api/v1/conversations/<slug>/results` | GET | conversation access policy; **no login needed once `phase_public_results` is set** — 401 only while the conversation is personal-results-only, 409 before results are published | `_results_report_api_payload` (app.py:3023) |
 | `/api/v1/conversations/<slug>/intermediate-results` | GET | conversation access policy; **no login needed once `phase_public_results` is set** — 401 only while the conversation is personal-results-only, 409 before results are published | `_intermediate_results_api_payload` (app.py:3065) |
-| `/api/v1/conversations/<slug>/flags` | POST | logged-in participant + access policy + joined, flags open, not banned | `_submit_content_flag_api_payload` (app.py:3200) |
-| `/api/v1/conversations/<slug>/identity-reveal` | GET | conversation access policy + logged-in participant | `_identity_reveal_api_payload` (app.py:2659) |
-| `/api/v1/conversations/<slug>/identity-reveal` | POST | conversation access policy + logged-in participant | `_reveal_identity_api_payload` (app.py:2663) |
+| `/api/v1/conversations/<slug>/flags` | POST | logged-in participant + access policy + joined, flags open, not banned. Category must be in the allowlist; the note is HTML-stripped and cut to 1000 characters | `_submit_content_flag_api_payload` (app.py:3200) |
+| `/api/v1/conversations/<slug>/identity-reveal` | GET | conversation access policy + logged-in participant who joined; 409 until the conversation is closed | `_identity_reveal_api_payload` (app.py:2659) |
+| `/api/v1/conversations/<slug>/identity-reveal` | POST | as the GET, plus: body must be exactly `{"confirm": true}`, accepted only while the reveal window is open, rate-limited 5/min | `_reveal_identity_api_payload` (app.py:2663) |
 | `/api/v1/conversations/<slug>/explore` | GET | participation + explore phase open | `_explore_api_payload` (app.py:2817) |
 | `/api/v1/conversations/<slug>/statements/<int:statement_id>/vote` | PUT | participation + explore phase open | `_explore_vote_api_payload` (app.py:2828) |
-| `/api/v1/conversations/<slug>/statements` | POST | participation + explore phase open | `_statement_api_payload` (app.py:3253) |
+| `/api/v1/conversations/<slug>/statements` | POST | participation + explore phase open; 1–280 characters; per-participant quota (`new_stmt_max`, default 3) | `_statement_api_payload` (app.py:3253) |
 | `/api/v1/conversations/<slug>/arguments` | GET | participation + argument phase open | `_argument_mapping_api_payload` (app.py:3085) |
 | `/api/v1/conversations/<slug>/featured-statements/<int:featured_statement_id>/arguments` | POST | participation + argument phase open | `_submit_argument_api_payload` (app.py:3133) |
 | `/api/v1/conversations/<slug>/featured-statements/<int:featured_statement_id>/contributions/<side>/skip` | PUT | participation + argument phase open | `_skip_argument_api_payload` (app.py:3161) |
-| `/api/v1/conversations/<slug>/arguments/<int:argument_id>/priority` | PUT | participation + argument phase open | `_set_argument_priority_api_payload` (app.py:3180) |
+| `/api/v1/conversations/<slug>/arguments/<int:argument_id>/priority` | PUT | participation + argument phase open; the argument must not be hidden, and the per-side contribution gate and priority budget apply | `_set_argument_priority_api_payload` (app.py:3180) |
 | `/api/v1/conversations/<slug>/informed-voting` | GET | participation + informed-voting phase open | `_informed_voting_api_payload` (app.py:2952) |
 | `/api/v1/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote` | PUT | participation + informed-voting phase open | `_informed_vote_api_payload` (app.py:2989) |
 
@@ -131,24 +140,28 @@ The public bootstrap routes — `/api/v1/session`, `/api/v1/i18n/<locale>`,
 ## Admin API — `/api/v1/admin/*`
 
 36 routes. Note the tiering: this is **not** a flat "admin" surface. Site-wide acts are
-global-admin-only, conversation-scoped acts are moderator-or-better, and three settings
-routes are organizer-or-better. Publishing the final report, pausing, archiving,
+global-admin-only, conversation-scoped acts are moderator-or-better, and seven routes (phase, recommendation
+tier, settings, statement-moderation policy, Phase 6 initialization, and adding or
+removing invitations) are organizer-or-better. Publishing the final report, pausing, archiving,
 scheduling a transition and setting the phase set are deliberately *not* available to a
 conversation organizer — a conversation-scoped organizer cannot end a consultation.
 
-Two rows carry a clarification a table of routes cannot know: role *grant* is
+One row carries a clarification a table of routes cannot know: role *grant* is
 global-admin-only even though role *listing* is moderator-gated
 (`_replace_admin_roles_api_payload` calls `_require_mod_for_conv` and then
-`_is_global_admin()` itself, `app.py:4428-4429`), and `POST …/participation`
-additionally runs the join-time eligibility check.
+`_is_global_admin()` itself, `app.py:4428-4429`).
+
+Nothing prevents the last app-granted site admin from being removed (two app-granted site
+admins can remove each other). The way back in is the `admin-users` secret (`ADMIN_USERS`):
+a username named there is a site admin regardless of the database, and the app cannot remove it.
 
 | Route | Method | Authorization | Enforced by |
 |---|---|---|---|
-| `/api/v1/admin` | GET | **global admin only** | `_admin_catalog_api_payload` (app.py:3492) |
-| `/api/v1/admin/conversations` | POST | **global admin only** | `_create_admin_conversation_api_payload` (app.py:3507) |
-| `/api/v1/admin/global-admin-grants` | POST | **global admin only** | `_grant_global_admin_api_payload` (app.py:3559) |
-| `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only** | `_set_global_admin_api_payload` (app.py:3580) |
-| `/api/v1/admin/conversations/<id>` | DELETE | **global admin only** | `_delete_admin_conversation_api_payload` (app.py:4206) |
+| `/api/v1/admin` | GET | **global admin only** | `_admin_catalog_api_payload` (app.py) |
+| `/api/v1/admin/conversations` | POST | **global admin only** | `_create_admin_conversation_api_payload` (app.py) |
+| `/api/v1/admin/global-admin-grants` | POST | **global admin only**; a username set in the server configuration (`ADMIN_USERS`, the `admin-users` secret) is refused with 409 `already_configured_site_admin`, nothing granted, no audit row | `_grant_global_admin_api_payload` (app.py), `set_global_admin` (services/admin_catalog.py) |
+| `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only**; refused with 409, nothing changed, no audit row: removing a site admin set in the server configuration (`configured_site_admin_protected`, checked first), removing the caller's own access (`own_site_admin_protected`), or granting a configured username (`already_configured_site_admin`) | `_set_global_admin_api_payload` (app.py), `set_global_admin` (services/admin_catalog.py) |
+| `/api/v1/admin/conversations/<id>` | DELETE | **global admin only**; deletes only when Polis reports zero valid votes (`delete_empty_conversation`), otherwise refuses | `_delete_admin_conversation_api_payload` (app.py:4206) |
 | `/api/v1/admin/conversations/<id>/termination` | GET | **global admin only** | `_admin_termination_api_payload` (app.py:3776) |
 | `/api/v1/admin/conversations/<id>/pause` | PUT | **global admin only** | `_set_admin_pause_api_payload` (app.py:4332) |
 | `/api/v1/admin/conversations/<id>/archive` | PUT | **global admin only** | `_set_admin_archive_api_payload` (app.py:4347) |
@@ -157,20 +170,20 @@ additionally runs the join-time eligibility check.
 | `/api/v1/admin/conversations/<id>/publication` | POST | **global admin only** | `_publish_admin_report_api_payload` (app.py:4407) |
 | `/api/v1/admin/conversations/<id>/phase` | PUT | conversation **organizer** or global admin | `_advance_admin_phase_api_payload` (app.py:4295) |
 | `/api/v1/admin/conversations/<id>/recommendation-tier` | PUT | conversation **organizer** or global admin | `_update_admin_recommendation_tier_api_payload` (app.py:4264) |
-| `/api/v1/admin/conversations/<id>/settings` | PUT | conversation **organizer** or global admin | `_update_admin_settings_api_payload` (app.py:4230) |
-| `/api/v1/admin/conversations/<id>/settings` | GET | moderator or global admin; the demo-access switch is global-admin only | `_admin_settings_api_payload` (app.py:3758) |
+| `/api/v1/admin/conversations/<id>/settings` | PUT | conversation **organizer** or global admin; moving a consultation into or out of the Practice Environment (`demo`) is global-admin only | `_update_admin_settings_api_payload` (app.py:4230) |
+| `/api/v1/admin/conversations/<id>/settings` | GET | moderator or global admin | `_admin_settings_api_payload` (app.py:3758) |
 | `/api/v1/admin/conversations/<id>` | GET | moderator or global admin | `_admin_lifecycle_api_payload` (app.py:3622) |
 | `/api/v1/admin/conversations/<id>/roles` | GET | moderator or global admin; role grant/revoke is global-admin only | `_admin_role_roster_api_payload` (app.py:3600) |
 | `/api/v1/admin/conversations/<id>/roles/<int:participant_id>` | PUT | moderator **and** global admin | `_replace_admin_roles_api_payload` (app.py:4425) |
 | `/api/v1/admin/conversations/<id>/participants` | GET | moderator or global admin | `_admin_participant_roster_api_payload` (app.py:3420) |
 | `/api/v1/admin/conversations/<id>/participants/<int:participant_id>/access` | PUT | moderator or global admin | `_set_admin_participant_access_api_payload` (app.py:3432) |
-| `/api/v1/admin/conversations/<id>/invitations` | GET | moderator or global admin | `_admin_invitation_roster_api_payload` (app.py:3476) |
-| `/api/v1/admin/conversations/<id>/invitations` | PUT | moderator or global admin | `_add_admin_invitations_api_payload` (app.py:4456) |
-| `/api/v1/admin/conversations/<id>/invitations/<int:invite_id>` | DELETE | moderator or global admin | `_remove_admin_invitation_api_payload` (app.py:4479) |
+| `/api/v1/admin/conversations/<id>/invitations` | GET | moderator or global admin; a moderator reads the roster with `capabilities.manageInvitations=false` (adding and removing invitations is organizer-only) | `_admin_invitation_roster_api_payload` (app.py:3476) |
+| `/api/v1/admin/conversations/<id>/invitations` | PUT | conversation **organizer** or global admin | `_add_admin_invitations_api_payload` (app.py:4456) |
+| `/api/v1/admin/conversations/<id>/invitations/<int:invite_id>` | DELETE | conversation **organizer** or global admin | `_remove_admin_invitation_api_payload` (app.py:4479) |
 | `/api/v1/admin/conversations/<id>/statements` | GET | moderator or global admin | `_admin_statements_api_payload` (app.py:3812) |
 | `/api/v1/admin/conversations/<id>/statements` | POST | moderator or global admin | `_add_admin_seed_statement_api_payload` (app.py:3975) |
 | `/api/v1/admin/conversations/<id>/statements/<int:statement_id>/moderation` | PUT | moderator or global admin | `_moderate_admin_statement_api_payload` (app.py:3895) |
-| `/api/v1/admin/conversations/<id>/statement-moderation-policy` | PUT | moderator or global admin | `_set_admin_statement_policy_api_payload` (app.py:3884) |
+| `/api/v1/admin/conversations/<id>/statement-moderation-policy` | PUT | conversation **organizer** or global admin | `_set_admin_statement_policy_api_payload` (app.py:3884) |
 | `/api/v1/admin/conversations/<id>/statement-imports` | POST | moderator or global admin | `_import_admin_seed_statements_api_payload` (app.py:3939) |
 | `/api/v1/admin/conversations/<id>/featured-statements` | GET | moderator or global admin | `_admin_featured_api_payload` (app.py:4011) |
 | `/api/v1/admin/conversations/<id>/featured-statements/<int:statement_id>` | PUT | moderator or global admin | `_select_admin_featured_api_payload` (app.py:4062) |
@@ -179,9 +192,9 @@ additionally runs the join-time eligibility check.
 | `/api/v1/admin/conversations/<id>/featured-arguments/<int:argument_id>` | DELETE | moderator or global admin | `_delete_admin_featured_argument_api_payload` (app.py:4179) |
 | `/api/v1/admin/conversations/<id>/flags` | GET | moderator or global admin | `_admin_flag_queue_api_payload` (app.py:4811) |
 | `/api/v1/admin/conversations/<id>/flags/<int:flag_id>/resolution` | PUT | moderator or global admin | `_resolve_admin_flag_api_payload` (app.py:4824) |
-| `/api/v1/admin/conversations/<id>/phase6-initialization` | POST | moderator or global admin | `_initialize_admin_phase6_api_payload` (app.py:4323) |
+| `/api/v1/admin/conversations/<id>/phase6-initialization` | POST | conversation **organizer** or global admin | `_initialize_admin_phase6_api_payload` (app.py:4323) |
 
-`/phase6-initialization` is the highest-consequence moderator route: it creates a second
+`/phase6-initialization` is the highest-consequence organizer route: it creates a second
 Polis conversation and seeds the confirmed featured statements into it. It has dedicated
 integration coverage in `tests/test_admin_lifecycle_api.py` (three tests, including the
 unknown-outcome path); a change here should keep it.

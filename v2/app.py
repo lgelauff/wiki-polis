@@ -16,7 +16,9 @@ import secrets
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote, urlencode, urlparse, urljoin
+from html.parser import HTMLParser
+from typing import NoReturn
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urljoin
 
 import coolname
 import nh3
@@ -77,7 +79,8 @@ from services.conversation_workspace import build_conversation_workspace
 from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
-                              ExploreUpstreamError, build_explore_state,
+                              ExploreUpstreamError, StatementAlreadyExists,
+                              FAMILY_MIN_DISTANCE, build_explore_state,
                               normalise_statements)
 from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
@@ -126,8 +129,8 @@ from services.admin_featured import (
     set_featured_argument_visibility,
 )
 from services.admin_catalog import (
-    build_admin_catalog, create_conversation as create_admin_conversation,
-    set_global_admin,
+    build_admin_catalog, build_admin_home, home_conversations_to_count,
+    create_conversation as create_admin_conversation, set_global_admin,
 )
 from services.admin_lifecycle import (
     ScheduleInPast,
@@ -251,13 +254,13 @@ def _spa_shell_response():
 # Copy for the voucher entry page, each with the English it falls back to (same
 # discipline as _spa_bootstrap_text: a missing catalogue must not put ⧼key⧽ on the page).
 _VOUCHER_MESSAGES = {
-    'doc-title': ('voucher-page-doc-title', 'Voucher code — $1'),
-    'intro': ('voucher-page-intro', 'You need a voucher code to take part in this consultation.'),
-    'label': ('voucher-page-label', 'Voucher code'),
+    'doc-title': ('voucher-page-doc-title', 'Access code — $1'),
+    'intro': ('voucher-page-intro', 'You need an access code to take part in this consultation.'),
+    'label': ('voucher-page-label', 'Access code'),
     'hint': ('voucher-page-hint', 'Capitals, spaces and hyphens do not matter.'),
     'submit': ('voucher-page-submit', 'Continue'),
-    'empty': ('voucher-error-empty', 'Enter a voucher code.'),
-    'too-short': ('voucher-error-too-short', 'Voucher codes are at least $1 characters long.'),
+    'empty': ('voucher-error-empty', 'Enter an access code.'),
+    'too-short': ('voucher-error-too-short', 'Access codes are at least $1 characters long.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
     'throttled': ('voucher-throttled',
                   'That was too many wrong codes. Wait $1 seconds and try again.'),
@@ -265,14 +268,31 @@ _VOUCHER_MESSAGES = {
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
     'joined': ('voucher-already-joined',
-               'You already take part in this consultation with a voucher in this browser. '
+               'You already take part in this consultation with an access code in this browser. '
                'Log out first to use a different code.'),
-    'switch-heading': ('voucher-switch-heading', 'You are signed in with another account'),
+    'switch-heading': ('voucher-switch-heading', 'Continue with this code?'),
     'switch-body': ('voucher-switch-body',
-                    'Continuing signs you out of your current account in this browser. '
-                    'You then take part in this consultation with the voucher account.'),
-    'switch-confirm': ('voucher-switch-confirm', 'Sign out and continue'),
-    'switch-cancel': ('voucher-switch-cancel', 'Cancel'),
+                    'This code gives you a separate account for this consultation only, '
+                    'not linked to your Wikimedia account. To use it, you are logged out of '
+                    'your Wikimedia account here, in this browser; you stay logged in at '
+                    'Wikimedia itself.'),
+    'switch-confirm': ('voucher-switch-confirm', 'Log out and continue with the code'),
+    'switch-cancel': ('voucher-switch-cancel', 'Cancel and stay logged in'),
+    'switch-voucher-body': ('voucher-switch-voucher-body',
+                            'You are logged in with a single-consultation account for '
+                            '<strong>$1</strong>. Continuing logs you out of it; this code then '
+                            'gives you a separate account for <strong>$2</strong> only.'),
+    'switch-voucher-cancel': ('voucher-switch-voucher-cancel',
+                              'Cancel and stay with your current account'),
+    # The one-time note on the page a logout lands on (#514); the SPA shows the same keys.
+    'logout-notice': ('logout-notice', 'You are logged out.'),
+    'logout-notice-voucher': ('logout-notice-voucher',
+                              'To come back to this account later, use the link or code you '
+                              "received again. Don't share it: anyone with it can take part "
+                              'as you.'),
+    'logout-notice-revoked': ('logout-notice-revoked',
+                              'Your code is no longer valid. You are logged out.'),
+    'dismiss': ('base-dismiss', 'Close'),
 }
 
 _VOUCHER_PAGE = (
@@ -292,7 +312,18 @@ _VOUCHER_PAGE = (
     'button{{margin-top:.75rem;padding:.5rem 1.25rem;font-size:1rem;border:none;border-radius:4px;background:#36c;color:#fff;cursor:pointer}}'
     'button:hover{{background:#25a}}'
     'a{{color:#36c}}'
+    '.lead{{color:#222;margin:0 0 1.5rem}}'
+    '.lead p{{margin:.25rem 0 0}}'
+    # The logout toast: the same look as the SPA's LegacyToast (static/style.css .toast).
+    '#toast-container{{position:fixed;top:1rem;right:1rem;left:1rem;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none}}'
+    '.toast{{pointer-events:all;display:flex;align-items:flex-start;gap:.75rem;padding:.75rem 1rem;border-radius:8px;font-size:13px;line-height:1.5;max-width:340px;box-shadow:0 2px 12px rgba(0,0,0,.12)}}'
+    '.toast--info{{background:#f0f4ff;border:1px solid #c7d3f5;color:#1e3a8a}}'
+    '.toast__msg{{flex:1}}'
+    '.toast__close{{margin:0;padding:0;background:none;border:none;cursor:pointer;color:inherit;opacity:.5;font-size:16px;line-height:1;min-width:24px;min-height:24px}}'
+    '.toast__close:hover{{background:none;opacity:1}}'
     '</style></head><body><main>'
+    '{notice}'
+    '{lead}'
     '<h1>{heading}</h1>'
     '{body}'
     '</main></body></html>'
@@ -310,13 +341,72 @@ def _voucher_text(name: str, *params) -> str:
     return html.escape(text)
 
 
-def _voucher_response(conv, heading: str, body: str):
+def _voucher_rich_text(name: str, *params) -> str:
+    """Like :func:`_voucher_text`, keeping the message's own <strong> tags.
+
+    Parameters go in escaped after the message is escaped, so a title can never add
+    markup of its own.
+    """
+    slots = [f'\x00{index}\x00' for index in range(1, len(params) + 1)]
+    text = _voucher_text(name, *slots)
+    for tag in ('strong', '/strong'):
+        text = text.replace(f'&lt;{tag}&gt;', f'<{tag}>')
+    for slot, value in zip(slots, params):
+        text = text.replace(slot, html.escape(str(value)))
+    return text
+
+
+class _FirstParagraph(HTMLParser):
+    """Collects the text of the first paragraph of sanitised introduction HTML."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.done = False
+
+    def handle_endtag(self, tag):
+        if tag == 'p' and ''.join(self.parts).strip():
+            self.done = True
+
+    def handle_data(self, data):
+        if not self.done:
+            self.parts.append(data)
+
+
+def _intro_excerpt(intro_html: str | None, limit: int = 300) -> str:
+    """Plain text of the first paragraph of an introduction, cut at a word near *limit*.
+
+    Unescaped: the caller escapes it for the page it goes into.
+    """
+    if not intro_html:
+        return ''
+    parser = _FirstParagraph()
+    parser.feed(intro_html)
+    parser.close()
+    text = ' '.join(''.join(parser.parts).split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(' ', 1)[0] or text[:limit]
+    return cut.rstrip(' ,.;:') + '…'
+
+
+def _voucher_lead(conv) -> str:
+    """The consultation's title and the start of its introduction, escaped."""
+    excerpt = _intro_excerpt(conv.intro_text)
+    return (
+        f'<div class="lead"><strong>{html.escape(conv.title)}</strong>'
+        + (f'<p>{html.escape(excerpt)}</p>' if excerpt else '')
+        + '</div>'
+    )
+
+
+def _voucher_response(conv, heading: str, body: str, *, lead: str = ''):
     """Self-contained page: it carries a credential, so it is never cached."""
     locale = g.get('locale') or i18n.SOURCE_LOCALE
     response = make_response(_VOUCHER_PAGE.format(
         lang=html.escape(locale), dir=i18n.text_direction(locale),
         doc_title=_voucher_text('doc-title', conv.title),
-        heading=heading, body=body,
+        heading=heading, body=body, lead=lead, notice=_take_logout_notice_html(),
     ))
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'
@@ -367,9 +457,26 @@ def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
 
 
 def _voucher_switch_page(conv, code: str):
-    """Ask before a voucher replaces the identity already in this browser."""
+    """Ask before a voucher replaces the identity already in this browser.
+
+    The texts depend on what would be logged out: a Wikimedia account (which stays
+    logged in at Wikimedia itself) or another single-consultation account, which is
+    named by its own consultation.
+    """
+    current_voucher = _signed_in_voucher_account()
+    own = (db.session.get(Conversation, current_voucher.conversation_id)
+           if current_voucher is not None else None)
+    if own is not None:
+        body_text = _voucher_rich_text('switch-voucher-body', own.title, conv.title)
+        # Cancel keeps the account: back to the consultation it belongs to.
+        cancel_href, cancel_key = _path_conversation(own.slug), 'switch-voucher-cancel'
+    else:
+        body_text = _voucher_text('switch-body')
+        # Cancel keeps the current account and leaves this consultation's door: the
+        # consultations list, not the consultation page that would ask again.
+        cancel_href, cancel_key = '/consultations', 'switch-cancel'
     body = (
-        f'<p>{_voucher_text("switch-body")}</p>'
+        f'<p>{body_text}</p>'
         f'<form method="post" action="{html.escape(_voucher_form_action(conv))}"'
         ' autocomplete="off">'
         f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
@@ -377,10 +484,11 @@ def _voucher_switch_page(conv, code: str):
         '<input type="hidden" name="confirm" value="1">'
         f'<button type="submit">{_voucher_text("switch-confirm")}</button>'
         '</form>'
-        f'<p><a href="{html.escape(_keep_other_params(_path_conversation(conv.slug)))}">'
-        f'{_voucher_text("switch-cancel")}</a></p>'
+        f'<p><a href="{html.escape(_keep_other_params(cancel_href))}">'
+        f'{_voucher_text(cancel_key)}</a></p>'
     )
-    return _voucher_response(conv, _voucher_text('switch-heading'), body)
+    return _voucher_response(conv, _voucher_text('switch-heading'), body,
+                             lead=_voucher_lead(conv))
 
 
 _CONVERSATION_PAGE_RE = re.compile(r'/c/([^/]+)')
@@ -406,6 +514,17 @@ def _linked_voucher_redirect():
     return redirect(_keep_other_params(_path_conversation(slug)))
 
 
+# Every logout leaves a one-time note for the page it lands on (#514): "You are logged
+# out.", plus, for a single-consultation (voucher) account, how to come back to it, or
+# that its code is no longer valid. The session keeps only which note to show, never a
+# code or a consultation: the database holds only a code's HMAC, and neither the session,
+# a log line nor a page carries the plaintext after redemption. The note is taken out of
+# the session by whichever page shows it first: the SPA through /api/v1/session, or a
+# Flask-rendered voucher page.
+LOGOUT_NOTICE_KEY = 'logout_notice'
+LOGOUT_NOTICES = ('logged-out', 'voucher', 'revoked')
+
+
 def _start_voucher_session(participant) -> None:
     """One identity per browser session (#368): nothing from a previous login,
     demo guest or voucher account survives into the voucher session."""
@@ -415,13 +534,75 @@ def _start_voucher_session(participant) -> None:
     g.pop('participant', None)  # resolved earlier in this request, before the switch
 
 
+def _signed_in_voucher_account():
+    """The voucher account signed in in this browser now, or None."""
+    current = _current_participant()
+    if current is None or current.account_kind != ACCOUNT_KIND_VOUCHER or current.is_demo:
+        return None
+    if 'username' in session:
+        return None
+    return current
+
+
+def _leave_logout_notice(kind: str) -> None:
+    """Queue the one-time logout note. Call after the session is cleared or replaced."""
+    session[LOGOUT_NOTICE_KEY] = kind
+
+
+def take_logout_notice() -> str | None:
+    """The queued logout note, removed from the session as it is read."""
+    kind = session.pop(LOGOUT_NOTICE_KEY, None)
+    return kind if kind in LOGOUT_NOTICES else None
+
+
+def _take_logout_notice_html() -> str:
+    """The queued logout note as a toast for a Flask-rendered voucher page, or ''.
+
+    The same toast as the SPA's: "You are logged out." closes itself after 5 seconds;
+    the code-account reminder and the withdrawn-code note stay until closed. The close
+    button needs a few lines of script, which the CSP admits through this request's nonce.
+    """
+    kind = take_logout_notice()
+    if kind is None:
+        return ''
+    if kind == 'revoked':
+        text = _voucher_text('logout-notice-revoked')
+    else:
+        text = _voucher_text('logout-notice')
+        if kind == 'voucher':
+            text += ' ' + _voucher_text('logout-notice-voucher')
+    sticky = kind != 'logged-out'
+    nonce = html.escape(g.get('csp_nonce', ''))
+    return (
+        '<div id="toast-container">'
+        f'<div class="toast toast--info" role="status"{" data-sticky" if sticky else ""}>'
+        f'<span class="toast__msg">{text}</span>'
+        f'<button class="toast__close" type="button" aria-label="{_voucher_text("dismiss")}">'
+        '×</button></div></div>'
+        f'<script nonce="{nonce}">'
+        "document.querySelectorAll('#toast-container .toast').forEach(function(t){"
+        "t.querySelector('.toast__close').addEventListener('click',function(){t.remove();});"
+        "if(!t.hasAttribute('data-sticky')){setTimeout(function(){t.remove();},5000);}"
+        '});</script>'
+    )
+
+
+def _without_voucher_code(path: str) -> str:
+    """*path* without a ``v`` query parameter: a code never rides along to a next page."""
+    parts = urlparse(path)
+    if not parts.query:
+        return path
+    pairs = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != 'v']
+    return parts._replace(query=urlencode(pairs)).geturl()
+
+
 def _voucher_identity_conflict(conv, target) -> str | None:
     """How the identity already in this session relates to the voucher entry.
 
     ``None``: nothing to lose (no session, a demo guest, or the same account).
     ``'joined'``: this browser already takes part here with another voucher, and
     the code would mint a second account, which #368 refuses.
-    ``'switch'``: another account would be signed out; ask first.
+    ``'switch'``: another account would be logged out; ask first.
     """
     current = _current_participant()
     if 'username' in session:
@@ -533,6 +714,9 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
         g.voucher_attempt_failed = True
         return _voucher_switch_page(conv, code)
 
+    # The account this switch logs out gets the logout note on the next page (#514).
+    previous = _current_participant() if conflict == 'switch' else None
+    previous_kind = 'voucher' if _signed_in_voucher_account() is not None else 'logged-out'
     participant = entry.participant
     if entry.outcome == 'redeem':
         participant = redeem_voucher_code(
@@ -546,6 +730,8 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
             return _voucher_not_valid(conv, code)
 
     _start_voucher_session(participant)
+    if conflict == 'switch' and (previous is None or previous.xid != participant.xid):
+        _leave_logout_notice(previous_kind)
     return redirect(_keep_other_params(_path_conversation(conv.slug)))
 
 
@@ -692,7 +878,7 @@ _phase6_agg_lock = threading.Lock()
 # fix is to bind the Phase-6 session to the trusted-sub subject (idempotent uid).
 _p6_bootstrap_locks: dict = {}
 _p6_bootstrap_locks_guard = threading.Lock()
-_p6_session_cache: dict = {}  # (xid, conv_id) -> (pa_cookie, csrf_token)
+_p6_session_cache: dict = {}  # (xid, conv_id) -> ParticiapiSessionState.to_dict()
 
 
 def _p6_bootstrap_lock(key):
@@ -1380,43 +1566,72 @@ def _publish_final_report(conv) -> Phase6ResultsFilter:
 
 
 def _process_due_scheduled_transitions(now: datetime | None = None) -> dict:
+    """Fire every due scheduled phase transition, each exactly once even if runs overlap.
+
+    jobs.yaml runs this every five minutes, and a run can overlap another (a manual re-run,
+    ``toolforge jobs restart``, a second pod). The phase change is idempotent, but the
+    append-only ``phase.schedule.fire`` / ``.abort`` audit rows are not. So the candidate
+    list is read without a lock, and each conversation is then handled in its own transaction:
+    locked with a plain ``SELECT … FOR UPDATE`` (any MariaDB version), re-checked, acted on and
+    committed. A second run that reaches the same row waits for the first to commit, then finds
+    the schedule cleared or frozen and skips it. A crash leaves nothing half-claimed: an
+    uncommitted lock is simply released. One conversation that raises is rolled back, logged and
+    counted as failed; the others still run.
+    """
     now = now or datetime.now(timezone.utc)
-    due = Conversation.query.filter(
+    candidate_ids = [cid for (cid,) in db.session.query(Conversation.id).filter(
         Conversation.active.is_(True),
         Conversation.scheduled_transition_at.isnot(None),
         Conversation.scheduled_transition_frozen.is_(False),
-    ).all()
-    fired = aborted = skipped = 0
-    for conv in due:
-        scheduled_at = _normalise_utc(conv.scheduled_transition_at)
-        if scheduled_at is None or scheduled_at > now:
-            skipped += 1
-            continue
-        ctx = _transition_context(conv)
-        if (
-            not _is_schedulable_transition(ctx)
-            or conv.scheduled_transition_target != ctx['target']['key']
-            or any(p.get('met') is False for p in ctx['preconditions'])
-        ):
-            conv.scheduled_transition_frozen = True
-            db.session.commit()
-            record_audit('phase.schedule.abort', conv_id=conv.id,
-                         target_type='phase',
-                         target_id=conv.scheduled_transition_target,
-                         outcome='blocked')
-            aborted += 1
-            continue
-        source, target = _apply_phase_transition(conv, ctx)
+    ).order_by(Conversation.id).all()]
+    db.session.rollback()                     # end the read; no row is held while we work
+    counts = {'fired': 0, 'aborted': 0, 'skipped': 0, 'failed': 0}
+    for conv_id in candidate_ids:
+        try:
+            counts[_process_one_scheduled_transition(conv_id, now)] += 1
+        except Exception:                      # noqa: BLE001 — one bad row must not block the rest
+            db.session.rollback()
+            current_app.logger.exception('Scheduled transition failed for conversation %s', conv_id)
+            counts['failed'] += 1
+    return counts
+
+
+def _process_one_scheduled_transition(conv_id: int, now: datetime) -> str:
+    """Lock one conversation, re-check that its schedule is still due, act, and commit.
+
+    Returns 'fired', 'aborted' or 'skipped'. The re-check is what makes an overlapping run
+    harmless: by the time it holds the lock, the first run has cleared or frozen the schedule.
+    """
+    conv = (Conversation.query.filter_by(id=conv_id)
+            .with_for_update().populate_existing().first())
+    scheduled_at = _normalise_utc(conv.scheduled_transition_at) if conv else None
+    if (conv is None or not conv.active or conv.scheduled_transition_frozen
+            or scheduled_at is None or scheduled_at > now):
+        db.session.rollback()                 # release the lock; nothing to do
+        return 'skipped'
+    ctx = _transition_context(conv)
+    if (
+        not _is_schedulable_transition(ctx)
+        or conv.scheduled_transition_target != ctx['target']['key']
+        or any(p.get('met') is False for p in ctx['preconditions'])
+    ):
+        conv.scheduled_transition_frozen = True
         db.session.commit()
-        record_audit('phase.schedule.fire', conv_id=conv.id,
-                     target_type='phase', target_id=target,
-                     from_phase=source)
-        if not _sync_vis_type(conv):
-            current_app.logger.warning(
-                'Scheduled phase transition fired for %s but vis_type sync failed',
-                conv.slug)
-        fired += 1
-    return {'fired': fired, 'aborted': aborted, 'skipped': skipped}
+        record_audit('phase.schedule.abort', conv_id=conv.id,
+                     target_type='phase',
+                     target_id=conv.scheduled_transition_target,
+                     outcome='blocked')
+        return 'aborted'
+    source, target = _apply_phase_transition(conv, ctx)
+    db.session.commit()
+    record_audit('phase.schedule.fire', conv_id=conv.id,
+                 target_type='phase', target_id=target,
+                 from_phase=source)
+    if not _sync_vis_type(conv):
+        current_app.logger.warning(
+            'Scheduled phase transition fired for %s but vis_type sync failed',
+            conv.slug)
+    return 'fired'
 
 
 OUTPUT_DEFINITIONS = [
@@ -2331,8 +2546,8 @@ def _path_accept(slug) -> str:
     return f'/accept/{_url_segment(slug)}'
 
 
-def _path_admin() -> str:
-    return '/admin'
+def _path_site_admin() -> str:
+    return '/site-admin'
 
 
 def _path_admin_conversation(conv_id, *, page: str | None = None) -> str:
@@ -2385,13 +2600,27 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/c/[^/]+/report',
     r'/c/[^/]+/reveal',
     r'/admin',
+    r'/site-admin',
     r'/admin/conversations/\d+',
     r'/admin/conversations/\d+/settings',
+    r'/admin/conversations/\d+/settings/basics',
+    r'/admin/conversations/\d+/settings/access',
+    r'/admin/conversations/\d+/settings/invitations',
+    r'/admin/conversations/\d+/settings/vouchers',
+    r'/admin/conversations/\d+/settings/roles',
     r'/admin/conversations/\d+/termination',
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
+    r'/admin/conversations/\d+/content',
+    r'/admin/conversations/\d+/content/statements',
+    r'/admin/conversations/\d+/content/participants',
     r'/admin/conversations/\d+/flags',
+    r'/admin/conversations/\d+/moderation',
+    r'/admin/conversations/\d+/moderation/queue',
+    r'/admin/conversations/\d+/moderation/flags',
+    r'/admin/conversations/\d+/moderation/featured',
+    r'/admin/conversations/\d+/moderation/people',
     r'/admin/conversations/\d+/invites',
     r'/admin/conversations/\d+/roles',
 )
@@ -2417,6 +2646,7 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         output_items=_output_items,
         reveal_context=_reveal_context,
         polis_client=_polis_server_client(),
+        participant_subject=_progress_subject,
     )
     return lane.to_api(
         conversation_link=_conversation_client_link,
@@ -2536,6 +2766,7 @@ def _conversation_about_model(conv: Conversation, participant: Participant | Non
         phase_labels=phase_labels,
         output_items=_output_items,
         polis_client=_polis_server_client(),
+        participant_subject=_progress_subject,
         can_moderate=_can_moderate(conv, participant),
     )
 
@@ -2782,6 +3013,7 @@ def _explore_gateway(conv: Conversation, participant: Participant):
         state=state,
         subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
         subject_secret=subject_secret,
+        log_context=f'phase=explore conversation_id={conv.id}',
     )
     return gateway, states
 
@@ -2791,6 +3023,26 @@ def _save_explore_gateway_state(
 ) -> None:
     states[str(conv.id)] = gateway.state.to_dict()
     session['particiapi_api_sessions'] = states
+
+
+_EXPLORE_RECENT_ANSWERS_KEY = 'explore_recent_answers'
+
+
+def _explore_recent_answers(conv: Conversation) -> list[int]:
+    """The statements answered last in this browser session, oldest first (p526-1)."""
+    recent = (session.get(_EXPLORE_RECENT_ANSWERS_KEY) or {}).get(str(conv.id)) or []
+    return [int(value) for value in recent if isinstance(value, int)]
+
+
+def _remember_explore_answer(conv: Conversation, statement_id: int) -> None:
+    """Record an answered statement, so family spacing starts from it on the next read.
+
+    Only the last `FAMILY_MIN_DISTANCE` are kept: that is all the spacing window needs.
+    """
+    stored = dict(session.get(_EXPLORE_RECENT_ANSWERS_KEY) or {})
+    recent = [value for value in _explore_recent_answers(conv) if value != statement_id]
+    stored[str(conv.id)] = [*recent, statement_id][-FAMILY_MIN_DISTANCE:]
+    session[_EXPLORE_RECENT_ANSWERS_KEY] = stored
 
 
 def _explore_state_payload(conv: Conversation, participant: Participant,
@@ -2804,6 +3056,8 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
         new_statement_unlock_at=int(config.get('new_stmt_unlock_at', 10)),
         new_statement_max=int(config.get('new_stmt_max', 3)),
         new_statements_used=len(participation.new_stmt_ids or []),
+        families=_statement_family_roots(conv.id),
+        recent_answers=_explore_recent_answers(conv),
     )
     links = {
         'self': url_for('api_v1.get_explore_state', slug=conv.slug),
@@ -2858,6 +3112,7 @@ def _explore_vote_api_payload(
         )
         _touch_last_engagement(participation)
         db.session.commit()
+        _remember_explore_answer(conv, statement_id)
         return {
             'statementId': statement_id,
             'choice': choice,
@@ -2941,15 +3196,17 @@ def _phase6_gateway(conv: Conversation, participant: Participant):
         state=state,
         subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
         subject_secret=subject_secret,
+        log_context=f'phase=informed_voting conversation_id={conv.id}',
     )
-    if not (state.cookie and state.csrf_token):
+    if gateway.rebind_reason() is not None:
         with _p6_bootstrap_lock(key):
-            shared = _p6_session_cache.get(key)
-            if shared:
-                state.cookie, state.csrf_token = shared
-            else:
+            # Another request in this worker may have just bound: share its session only
+            # if it passes the same re-bind rule (fresh, dated), else bind here.
+            gateway.state = ParticiapiSessionState.from_dict(_p6_session_cache.get(key))
+            if gateway.rebind_reason() is not None:
+                gateway.state = state
                 gateway.ensure_session()
-                _p6_session_cache[key] = (state.cookie, state.csrf_token)
+            _p6_session_cache[key] = gateway.state.to_dict()
     return gateway, key, states
 
 
@@ -2958,7 +3215,7 @@ def _save_phase6_gateway(
 ) -> None:
     states[str(conv.id)] = gateway.state.to_dict()
     session[_PHASE6_SESSION_KEY] = states
-    _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
+    _p6_session_cache[key] = gateway.state.to_dict()
 
 
 def _informed_voting_api_payload(slug: str) -> dict:
@@ -3335,7 +3592,11 @@ def _statement_api_payload(
             release_reservation(reservation.receipt)
             raise StatementQuotaExceeded()
 
-        statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        try:
+            statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        except ExploreUpstreamError as exc:
+            _log_statement_post_failure(conv, exc, derivative=derived_from is not None)
+            raise
         decision = 1 if policy == 'auto_approve' else 0
         if decision == 1:
             try:
@@ -3394,38 +3655,87 @@ def _statement_api_payload(
             # The committed pending receipt survives the rollback and blocks a
             # blind retry after an ambiguous upstream POST.
             raise
+        # A definite refusal: nothing was created upstream, so the key is free again.
         release_reservation(reservation.receipt)
+        if isinstance(exc, StatementAlreadyExists):
+            # Identical text is already in the conversation; a retry can never succeed.
+            # Known gap: after an earlier submission ended outcome-unknown (timeout; its
+            # receipt stays pending), the same text under a new key lands here although the
+            # existing statement may be the participant's own, so it is reported as a
+            # duplicate and its provenance/new_stmt_ids are not recorded. Follow-up issue.
+            raise
         raise StatementPreparationUnavailable() from exc
     finally:
         _save_explore_gateway_state(conv, gateway, states)
 
 
+def _log_statement_post_failure(
+    conv: 'Conversation', exc: ExploreUpstreamError, *, derivative: bool,
+) -> None:
+    """Record why Particiapi refused or failed a statement submission.
+
+    ``upstream_status`` is None when the gateway failed before a POST was answered (a
+    transport error, or a session refresh that failed).
+
+    Deliberately carries no statement text and no participant identifier (xid, subject,
+    username, pid): only what an operator needs to tell a duplicate from an outage.
+    """
+    # Upstream-controlled text: keep it short, and log it quoted (%r) so neither a line break
+    # nor spaces in it can fake a second line or extra key=value fields.
+    problem_type = exc.problem_type[:200] if exc.problem_type else None
+    current_app.logger.warning(
+        'statement submission to Particiapi failed: conversation_id=%s upstream_status=%s '
+        'problem_type=%r derivative=%s outcome_unknown=%s',
+        conv.id, exc.status_code, problem_type, derivative, exc.outcome_unknown,
+    )
+
+
+def _admin_caller_signed_out() -> bool:
+    """Whether the admin console should treat the caller as signed out: no session username,
+    and no participant or only a practice session's demo participant. A practice session is
+    not a sign-in, here as on Admin home (`_admin_home_api_payload`) and in the workspace."""
+    if session.get('username') is not None:
+        return False
+    participant = _current_participant()
+    return participant is None or participant.is_demo
+
+
+def _refuse_admin() -> NoReturn:
+    """Refuse an admin API call: 401 when the caller is signed out, 403 otherwise.
+
+    The console's access boundary sends a 401 to the login and back (`?next=`), and shows
+    its access page for a 403, so a signed-out visitor who opens any admin page is asked to
+    log in instead of being told "Not allowed". Signed out includes a practice session
+    (`_admin_caller_signed_out`). A signed-in Wikimedia or single-consultation account
+    without the role gets 403.
+    """
+    if _admin_caller_signed_out():
+        abort(401)
+    abort(403)
+
+
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
-    """Return conversation or abort 403 if the current user can't moderate it."""
+    """Return conversation, or refuse (`_refuse_admin`) if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
     if not _can_moderate(conv):
-        abort(403)
+        _refuse_admin()
     return conv
 
 
 def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
-    """Return conversation or abort 403 if the current user can't organize it."""
+    """Return conversation, or refuse (`_refuse_admin`) if the current user can't organize it."""
     conv = Conversation.query.get_or_404(conv_id)
     if not _can_organize(conv):
-        abort(403)
+        _refuse_admin()
     return conv
 
 
 def _admin_participant_roster_model(conv: Conversation):
-    scoped_subjects = bool(current_app.config.get('PARTICIAPI_SUB_SECRET'))
     return build_admin_participant_roster(
         conversation=conv,
         polis_client=_polis_server_client(),
         polis_pg_configured=bool(current_app.config.get('POLIS_DATABASE_URL')),
-        participant_subject=(
-            lambda participant: _conversation_subject(participant.xid, conv)
-            if scoped_subjects else participant.xid
-        ),
+        participant_subject=lambda participant: _progress_subject(participant, conv),
     )
 
 
@@ -3438,6 +3748,8 @@ def _admin_participant_roster_api_payload(conv_id: int) -> dict:
             conversation_id=conv.id,
         ),
         conversation_link=_admin_client_link(conv.id),
+        # A moderator who does not also organize sees pseudonyms only.
+        include_usernames=_can_organize(conv),
     )
 
 
@@ -3492,6 +3804,7 @@ def _admin_invitation_roster_api_payload(conv_id: int) -> dict:
         conversation=conv,
         self_link=self_link,
         conversation_link=conversation_link,
+        can_manage=_can_organize(conv),
     )
 
 
@@ -3503,12 +3816,14 @@ def _managed_polis_creation() -> bool:
 
 def _admin_catalog_api_payload() -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     return build_admin_catalog(
         conversations=Conversation.query.order_by(Conversation.created_at.desc()).all(),
         global_admins=Participant.query.filter_by(is_global_admin=True).order_by(
             Participant.mw_username,
         ).all(),
+        configured_admins=ADMIN_USERS,
+        actor_id=getattr(_current_participant(), 'id', None),
         phase_routes=PHASE_ROUTES,
         managed_creation=_managed_polis_creation(),
         self_link=url_for('api_v1.get_admin_catalog'),
@@ -3516,9 +3831,61 @@ def _admin_catalog_api_payload() -> dict:
     )
 
 
+def _admin_home_api_payload() -> dict:
+    """Admin home (#538): the caller's own consultations, their role, status and open flags.
+
+    Signed in, or 401 (a practice session is not a sign-in). Signed in without a role in
+    any consultation and not a site admin: 403, so the page shows the access page rather
+    than an empty list of things the caller cannot open. A site admin may hold no role, and
+    then gets the empty list with the link to the dashboard.
+    """
+    participant = _current_participant()
+    # A practice session is not a sign-in, whatever its demo participant holds: decide
+    # site admin first and only for a real participant, since `_is_global_admin(None)`
+    # would resolve the demo participant again.
+    if participant is not None and participant.is_demo:
+        participant = None
+        site_admin = False
+    else:
+        site_admin = _is_global_admin(participant)
+    if participant is None and not site_admin:
+        abort(401)
+    roles = (AdminRole.query.options(joinedload(AdminRole.conversation))
+             .filter_by(participant_id=participant.id).all()) if participant else []
+    if not roles and not site_admin:
+        abort(403)
+    conversation_ids = {role.conversation_id for role in roles}
+    open_flags = dict(
+        db.session.query(ContentFlag.conversation_id, db.func.count(ContentFlag.id))
+        .filter(ContentFlag.conversation_id.in_(conversation_ids), ContentFlag.status == 'open')
+        .group_by(ContentFlag.conversation_id).all()
+    ) if conversation_ids else {}
+    # Pending statements live in Polis: one bulk query for every live consultation, none
+    # at all when there is none. Unavailable (no Polis DB, or the query failed) is no
+    # count, never an error on the page.
+    live = home_conversations_to_count(roles)
+    pending_statements = {}
+    if live:
+        counts = _polis_server_client().get_pending_statement_counts(
+            [conv.polis_id for conv in live])
+        if counts is not None:
+            pending_statements = {
+                conv.id: counts[conv.polis_id] for conv in live if conv.polis_id in counts
+            }
+    return build_admin_home(
+        roles=roles,
+        open_flags=open_flags,
+        pending_statements=pending_statements,
+        site_admin=site_admin,
+        self_link=url_for('api_v1.get_admin_home'),
+        conversation_link=_admin_client_link,
+        site_admin_link=_path_site_admin(),
+    )
+
+
 def _create_admin_conversation_api_payload(body: dict) -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     managed = _managed_polis_creation()
     if not _valid_slug(body['slug']) or body['phaseRoute'] not in PHASE_ROUTES:
         abort(400, description='Invalid conversation slug or phase route.')
@@ -3570,12 +3937,13 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
 
 def _grant_global_admin_api_payload(body: dict) -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     participant = Participant.query.filter_by(
         mw_username=body['username'].strip(),
     ).first()
     changed = set_global_admin(
         participant=participant, granted=True, session=db.session,
+        configured_usernames=ADMIN_USERS,
         audit=lambda participant_id, granted: record_audit(
             'global_admin.grant', target_type='participant', target_id=participant_id,
         ),
@@ -3591,10 +3959,13 @@ def _grant_global_admin_api_payload(body: dict) -> dict:
 
 def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     participant = db.session.get(Participant, participant_id)
+    actor = _current_participant()
     changed = set_global_admin(
         participant=participant, granted=body['granted'], session=db.session,
+        actor_id=actor.id if actor is not None else None,
+        configured_usernames=ADMIN_USERS,
         audit=lambda target_id, granted: record_audit(
             'global_admin.grant' if granted else 'global_admin.revoke',
             target_type='participant', target_id=target_id,
@@ -3746,7 +4117,6 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         },
         counts={
             'participants': Participation.query.filter_by(conversation_id=conv.id).count(),
-            'invitations': ConversationInvite.query.filter_by(conversation_id=conv.id).count(),
             'openFlags': ContentFlag.query.filter_by(conversation_id=conv.id, status='open').count(),
             'featuredStatements': confirmed_featured_count,
         },
@@ -3755,12 +4125,8 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         links={
             'self': url_for('api_v1.get_admin_conversation_lifecycle', conversation_id=conv.id),
             'participantView': _path_conversation(conv.slug),
-            'participants': _admin_client_link(conv.id, 'participants'),
             'moderation': _admin_client_link(conv.id, 'flags'),
-            'invitations': _admin_client_link(conv.id, 'invites'),
-            'roles': _admin_client_link(conv.id, 'roles'),
             'statements': _admin_client_link(conv.id, 'statements'),
-            'featuredStatements': _admin_client_link(conv.id, 'featured'),
             'settings': _admin_client_link(conv.id, 'settings'),
             'termination': _admin_client_link(conv.id, 'termination'),
         },
@@ -3788,7 +4154,7 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
 def _admin_termination_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     return build_termination_state(
         conversation=conv,
         valid_vote_count=_polis_server_client().get_valid_vote_count(conv.polis_id),
@@ -3894,7 +4260,8 @@ def _ensure_statement_moderation_policy(conv: Conversation) -> str:
 
 
 def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Strict moderation is a consultation setting: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     outcome = _set_statement_moderation_policy_command(conv, body['mode'])
     return {
         'mode': outcome.policy,
@@ -4218,7 +4585,7 @@ def _delete_admin_featured_argument_api_payload(
 def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     client = _polis_server_client()
     result = delete_empty_conversation(
         conversation=conv,
@@ -4235,7 +4602,8 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     return {
         'conversationId': result.conversation_id,
         'deleted': True,
-        'links': {'admin': _path_admin()},
+        # Only a site admin can delete, from the dashboard, so that is where they go back to.
+        'links': {'admin': _path_site_admin()},
     }
 
 
@@ -4333,7 +4701,8 @@ def _initialize_admin_phase6_command(conv: Conversation):
 
 
 def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # A phase control, like Move on: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     _initialize_admin_phase6_command(conv)
     return {
         'initialized': True,
@@ -4344,7 +4713,7 @@ def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
 def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     changed = set_conversation_paused(
         conversation=conv, paused=body['paused'],
         session=db.session, audit=record_audit,
@@ -4359,7 +4728,7 @@ def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
 def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     changed = set_conversation_archived(
         conversation=conv, archived=body['archived'],
         clear_schedule=_clear_scheduled_transition,
@@ -4375,7 +4744,7 @@ def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
 def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     scheduled_at = (
         _parse_utc_timestamp(body['scheduledAt'])
         if body['scheduledAt'] is not None else None
@@ -4399,7 +4768,7 @@ def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
 def _set_admin_phases_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     result = set_advanced_phases(
         conversation=conv, phase_definitions=_phase_sequence_for(conv),
         active_keys=set(body['activeKeys']),
@@ -4419,7 +4788,7 @@ def _set_admin_phases_api_payload(conv_id: int, body: dict) -> dict:
 def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     publish_final_report(
         conversation=conv,
         in_cleanup_window=_in_cleanup_window(conv),
@@ -4439,7 +4808,7 @@ def _replace_admin_roles_api_payload(
 ) -> dict:
     conv = _require_mod_for_conv(conv_id)
     if not _is_global_admin():
-        abort(403)
+        _refuse_admin()
     try:
         result = replace_conversation_roles(
             conversation=conv,
@@ -4466,7 +4835,8 @@ def _replace_admin_roles_api_payload(
 
 
 def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Invitations are access: organizers (and site admins) only (owner, 2026-10-09).
+    conv = _require_organizer_for_conv(conv_id)
     usernames = [username.strip() for username in body['usernames']]
     result = add_conversation_invites(
         db.session, conversation_id=conv.id, usernames=usernames,
@@ -4489,7 +4859,8 @@ def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
 
 
 def _remove_admin_invitation_api_payload(conv_id: int, invite_id: int) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Invitations are access: organizers (and site admins) only (owner, 2026-10-09).
+    conv = _require_organizer_for_conv(conv_id)
     try:
         remove_conversation_invite(
             db.session, conversation_id=conv.id, invite_id=invite_id,
@@ -4525,13 +4896,25 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
 
 
 def _conversation_access_decision(conversation, participant):
-    """Resolve access once; a participation classifies refusal, never grants it."""
-    return check_access(
+    """Resolve access once; a participation classifies refusal, never grants it.
+
+    A single-consultation (voucher) account whose code the organizers have revoked is
+    logged out here, where that is found (#514): the account can do nothing any more,
+    and the page then shows the one-time "no longer valid" logout note.
+    """
+    decision = check_access(
         conversation,
         participant,
         demo_session=_is_demo_session(),
         demo_conversation_id=_demo_bound_conversation_id(),
     )
+    if decision.reason == 'access-voucher-revoked':
+        current = _signed_in_voucher_account()
+        if current is not None and participant is not None and current.id == participant.id:
+            session.clear()
+            g.pop('participant', None)
+            _leave_logout_notice('revoked')
+    return decision
 
 
 def _conversation_access_denial(conversation, participant):
@@ -4554,6 +4937,17 @@ def _check_conversation_access(conversation, participant):
 
 
 # ── Per-conversation Polis identity ───────────────────────────────────────────
+
+def _progress_subject(participant: Participant, conv) -> str | None:
+    """The subject Polis Postgres knows this participant by in this conversation.
+
+    Without trusted-sub binding (PARTICIAPI_SUB_SECRET unset) nothing is bound, so there is
+    no subject and the progress lookups report no count rather than "everything left".
+    """
+    if current_app.config.get('PARTICIAPI_SUB_SECRET'):
+        return _conversation_subject(participant.xid, conv)
+    return None
+
 
 def _conversation_subject(xid: str, conv) -> str:
     """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
@@ -5240,13 +5634,55 @@ def _provenance_map(conv_id, tids):
     return {r.polis_statement_id: r for r in rows}
 
 
+def _parent_map(conv_id):
+    """{tid: derived_from_tid} for the whole conversation, in one two-column query."""
+    rows = (db.session.query(StatementProvenance.polis_statement_id,
+                             StatementProvenance.derived_from_tid)
+            .filter(StatementProvenance.conversation_id == conv_id)
+            .all())
+    return {tid: parent for tid, parent in rows}
+
+
+def _family_roots(by_tid):
+    """{tid: root} for every tid in `by_tid`: walk `derived_from_tid` up. Cycle-safe.
+
+    The walk is the one :func:`_lineage_group` does. A cycle has no root, so its smallest
+    id stands in for one: every statement on or under the cycle then gets the same root,
+    whichever member the walk started from. Memoised: a walk stops at the first statement
+    whose root is already known, so the whole map costs O(n).
+    """
+    roots: dict = {}
+    for start in by_tid:
+        if start in roots:
+            continue
+        path, index = [start], {start: 0}
+        cur = start
+        while True:
+            if cur in roots:
+                root = roots[cur]
+                break
+            if cur not in by_tid:
+                root = cur
+                break
+            parent = by_tid[cur]
+            if parent in index:     # defensive: stop on any cycle
+                root = min(path[index[parent]:])
+                break
+            index[parent] = len(path)
+            path.append(parent)
+            cur = parent
+        for tid in path:
+            if tid in by_tid:
+                roots[tid] = root
+    return roots
+
+
 def _lineage_group(conv_id, tid):
     """Walk `derived_from_tid` from `tid` up to its root; return [tid, parent, …, root].
 
     The primitive the clustering/weighting consumers (#143 follow-ups) build on. Cycle-safe.
     """
-    by_tid = {r.polis_statement_id: r.derived_from_tid
-              for r in StatementProvenance.query.filter_by(conversation_id=conv_id).all()}
+    by_tid = _parent_map(conv_id)
     chain, seen = [tid], {tid}
     cur = tid
     while cur in by_tid:
@@ -5257,6 +5693,16 @@ def _lineage_group(conv_id, tid):
         seen.add(parent)
         cur = parent
     return chain
+
+
+def _statement_family_roots(conv_id):
+    """{statement_id: family_root} for one conversation, from one provenance query (#504).
+
+    Every statement that has a provenance row; the walk is the same cycle-safe one as
+    :func:`_lineage_group`, over the map it reads for the conversation. Statements with no
+    row are their own root and simply stay out of the map.
+    """
+    return _family_roots(_parent_map(conv_id))
 
 
 def _register_branded_error_pages(app) -> None:
@@ -5609,8 +6055,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         click.echo(
             'Scheduled transitions: '
             f'{result["fired"]} fired, {result["aborted"]} aborted, '
-            f'{result["skipped"]} not due.'
+            f'{result["skipped"]} not due or already handled, {result["failed"]} failed.'
         )
+        if result['failed']:
+            raise SystemExit(1)                # the job's failure email names the run; logs name the conversation
 
     # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
     # English and the in-repo translations, so the language switcher is visible as
@@ -5755,6 +6203,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     app.register_blueprint(create_api_v1_blueprint(
         resolve_participant=_current_participant,
+        take_logout_notice=take_logout_notice,
         resolve_global_admin=_is_global_admin,
         resolve_developer_logins=lambda: [
             {
@@ -5781,6 +6230,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_intermediate_results=_intermediate_results_api_payload,
         resolve_results_report=_results_report_api_payload,
         resolve_admin_catalog=_admin_catalog_api_payload,
+        resolve_admin_home=_admin_home_api_payload,
         create_admin_conversation=_create_admin_conversation_api_payload,
         grant_global_admin=_grant_global_admin_api_payload,
         set_global_admin=_set_global_admin_api_payload,
@@ -6051,7 +6501,11 @@ def _register_routes(app: Flask) -> None:
     @_unauthenticated_site_limit()
     @limiter.limit('30 per minute')
     def oauth_callback():
-        if request.args.get('state') != session.pop('oauth_state', None):
+        # Both sides must be present: a callback with no state, arriving in a session
+        # that never started a login, would otherwise compare None with None.
+        expected_state = session.pop('oauth_state', None)
+        if not expected_state or request.args.get('state') != expected_state:
+            session.pop('oauth_code_verifier', None)
             app.logger.warning('OAuth callback: state mismatch (likely duplicate login tab or expired session)')
             # The failure is currently unreported to the user: they are bounced
             # back to /login with no explanation. base.html was the only consumer
@@ -6121,11 +6575,28 @@ def _register_routes(app: Flask) -> None:
 
         return redirect(_safe_redirect(next_url or '', '/'))
 
+    # Not behind login_required, which checks for a Wikimedia username: a voucher account
+    # has none, so its "log out" button used to start a Wikimedia login instead of logging
+    # out (#511). Any session that passes the CSRF check is cleared and sent home, or to
+    # `next` (a plain path on this site, without a code) when the logout was a step towards
+    # a page (#514). That page shows a one-time "You are logged out." note; for a
+    # single-consultation (voucher) account it adds how to come back to the account.
+    # A stale form (CSRF token from an expired session) is redirected home by the CSRF
+    # error handler in api/v1.py, nothing cleared.
     @app.post('/logout')
-    @login_required
     def logout():
+        next_url = _without_voucher_code(
+            _safe_redirect(request.form.get('next', '').strip(), '/'))
+        if _signed_in_voucher_account() is not None:
+            kind = 'voucher'
+        elif 'username' in session:
+            kind = 'logged-out'
+        else:
+            kind = None  # nobody was logged in (a demo guest, an expired session)
         session.clear()
-        return redirect('/')
+        if kind is not None:
+            _leave_logout_notice(kind)
+        return redirect(next_url)
 
     # ── Health ────────────────────────────────────────────────────────────────
 

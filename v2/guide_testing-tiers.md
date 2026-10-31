@@ -100,9 +100,36 @@ broken for everyone (see `guide_runbook.md` → *Migration fails with "Duplicate
 - **Deploy:** present the commands for the user to run (you don't have SSH) — see
   `staging-chrome-test` skill, Step 0. `bash ~/wiki-polis/deploy.sh <branch> [--migrate]`;
   restore with `deploy.sh main` when done.
-- **Login caveat:** dev-login is **disabled** on staging (#118) — authenticated flows need a
-  real Wikimedia OAuth session already in the browser profile, or wait on #223 demo mode. See
-  the `staging-chrome-test` skill.
+- **Login:** staging has two kinds of identity (#118 is resolved).
+  - **A real Wikimedia account** through OAuth, for site admin and organizer checks. The user
+    logs in once in the browser profile; an agent reuses the session and never completes OAuth
+    or handles a password.
+  - **The signed staging dev-login** for the built-in test users `dev-user-1`, `dev-user-2` and
+    `dev-user-3`. They have no Wikimedia account, so a session as one of them reaches nothing
+    outside staging. See `guide_runbook.md` → *Logging in to staging* for the link recipe. The
+    user generates and opens the link; an agent never sees the token or the link, and never
+    asks for it in chat.
+
+### Test identities and roles (standard for every staging check)
+
+Check each changed screen as every role that can reach it, not only as the user's own account:
+
+| Role | Identity | How it gets the role |
+|---|---|---|
+| Site admin, organizer | the user's own Wikimedia account | already configured |
+| Moderator only | `dev-user-3` | joins the consultation once, then gets Moderator under Settings › Roles from an organizer |
+| Participant | `dev-user-1`, `dev-user-2` | join the consultation |
+
+- Plan the identities per check up front and ask the user to switch logins in batches.
+- Confirm the deployed commit before trusting a result: the short hash is in the footer of the
+  participant pages (for example `/consultations`), not in the admin console's footer.
+- Addresses: Admin home is `/admin`, the site admin dashboard is `/site-admin` (see
+  `v2/docs/admin_site_map.md` once #542 is merged).
+- A browser extension limited to the staging site cannot read other sites or the OAuth page. If
+  every page times out when a script runs, check the extension's site access before suspecting
+  the app.
+- Staging screenshots show real usernames and pseudonyms: never post them publicly. Use
+  screenshots from a local run with seeded data for PRs and issues.
 
 ### Database hygiene on staging (hard rule)
 

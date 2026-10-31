@@ -158,6 +158,54 @@ def test_moderate_policy_preserves_pending_rows_without_settings_read(
     assert conversation.statement_moderation_policy == 'moderate'
 
 
+def test_policy_change_is_refused_to_a_moderator(client, conversation, participant):
+    """Strict moderation is organizer-only (owner, 2026-10-09): a moderator is refused,
+    and neither the voting service nor the stored policy is touched."""
+    db.session.add(AdminRole(
+        participant_id=participant.id, conversation_id=conversation.id, role='moderator',
+    ))
+    db.session.commit()
+    login(client, 'testuser')
+    server, participant_client = _upstream()
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant_client),
+    ):
+        response = client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-moderation-policy',
+            json={'mode': 'auto_approve'},
+        )
+
+    assert response.status_code == 403
+    server.moderate.assert_not_called()
+    server.set_strict_moderation.assert_not_called()
+    db.session.refresh(conversation)
+    assert conversation.statement_moderation_policy == 'moderate'
+    assert AuditEvent.query.count() == 0
+
+
+def test_policy_change_is_allowed_to_an_organizer(client, conversation, participant):
+    db.session.add(AdminRole(
+        participant_id=participant.id, conversation_id=conversation.id, role='organizer',
+    ))
+    db.session.commit()
+    login(client, 'testuser')
+    server, participant_client = _upstream()
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant_client),
+    ):
+        response = client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-moderation-policy',
+            json={'mode': 'auto_approve'},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['mode'] == 'auto_approve'
+    db.session.refresh(conversation)
+    assert conversation.statement_moderation_policy == 'auto_approve'
+
+
 def test_statement_workspace_distinguishes_unavailable_from_empty(
     admin_client, conversation,
 ):

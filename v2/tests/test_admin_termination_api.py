@@ -46,7 +46,7 @@ def test_delete_api_rechecks_then_hides_and_deletes_empty_conversation(
     assert response.get_json()['data'] == {
         'conversationId': conversation_id,
         'deleted': True,
-        'links': {'admin': '/admin'},
+        'links': {'admin': '/site-admin'},
     }
     assert db.session.get(Conversation, conversation_id) is None
     # Pin the argument, not just the call: hiding *a* conversation upstream is not

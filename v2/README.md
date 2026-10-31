@@ -40,6 +40,7 @@ Following the classes and naming rules in
 | `ref_polis-routing.md` | tracks-code (external) | How a Polis conversation id is derived and routed |
 | `ref_cross-device-identity.md` | tracks-code | The `PARTICIAPI_SUB_SECRET` ↔ `TRUSTED_SUB_SECRET` trusted-subject mechanism |
 | `docs/route_authorization_matrix.md` | tracks-code | Which route requires which authorization. Verified against a named commit; see its banner for how to keep it true |
+| `docs/admin_site_map.md` | tracks-code | Every admin console page: its address, who can open it, what each role sees, and where the old addresses lead |
 | `docs/documentation-standards.md` | operational | Doc lifespans, naming rules, and the canonical-source map |
 | `openapi.json` | contract | The browser/API contract. The SPA's TypeScript types are generated from it |
 | `log_changelog.md` | append-only | What was built, and when. Never edited retroactively |
@@ -72,7 +73,7 @@ Following the classes and naming rules in
 |---|---|
 | `api/` | The two JSON blueprints: participant (`v1.py`) and admin (`admin_routes.py`). Thin adapters — request validation and error envelopes, no authorization logic |
 | `services/` | Domain logic, one module per feature. This is where authorization decisions and business rules live |
-| `frontend/` | The React SPA: `src/api` (generated client + queries), `src/features` (admin / participant / results), `src/i18n` |
+| `frontend/` | The React SPA: `src/api` (generated client + queries), `src/features` (`admin`, `legacy` — the participant screens — and `results`), `src/i18n` |
 | `tests/` | pytest suite; SQLite per test, no services required |
 | `migrations/` | Alembic chain (`versions/`). One head — see the runbook if a deploy reports drift |
 | `i18n/` | Message catalogues (`en`, `nl`, `qqq` documentation) and the translatewiki group |
@@ -80,6 +81,7 @@ Following the classes and naming rules in
 | `static/` | Flask-served assets: `img/`, `fonts/`, `redesign.css`, `style.css`, and `spa/` (the built bundle, git-ignored) |
 | `ops/` | uWSGI config (`uwsgi.ini`), Postgres/ToolsDB backup scripts, Loki/Grafana config, and the load/smoke/repair tooling |
 | `docs/` | Documentation standards and the route authorization matrix |
+| `docs/screenshots/` | Screenshots: `01`–`07` illustrate features; `issue*` / `pr*` are before/after shots attached to issues and PRs |
 | `reference/` | External API references |
 | `adr/` | Architecture decision records |
 | `figures/` | Diagrams |

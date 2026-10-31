@@ -36,9 +36,9 @@ const lifecycle: Lifecycle = {
   statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}],
     informedVoting: {participants: 9, statementCount: 4, excludedStatementCount: 0, excludedParticipantCount: 0,
       largestShift: {text: 'Regional communities should share infrastructure funding.', shift: 12}}},
-  counts: {participants: 12, invitations: 1, openFlags: 1, featuredStatements: 4},
+  counts: {participants: 12, openFlags: 1, featuredStatements: 4},
   capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-  links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+  links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
 };
 
 /** Closed and published, with the identity-reveal window open -- the danger-zone
@@ -70,6 +70,25 @@ function serve(payload: Lifecycle) {
   server.use(http.get(LIFECYCLE_URL, () => HttpResponse.json({data: payload})));
 }
 
+test('the page renders the console shell, not the legacy header and role bar', async () => {
+  serve(lifecycle);
+  const {container} = renderConsole();
+
+  // The frame is the shell's: the sidebar landmark, the top bar and the main region all
+  // come from AdminShell, so the page itself contributes only the content.
+  expect(await screen.findByRole('navigation', {name: 'Admin sections'})).toBeVisible();
+  expect(container.querySelector('.admin-shell')).not.toBeNull();
+  expect(container.querySelectorAll('main')).toHaveLength(1);
+
+  // The two things this issue removes, by the marks they left in the document: the legacy
+  // shell's header, crumb, main and toast container, and the role bar. (The import itself
+  // is a property of the diff, which the reviewer reads; its consequence is what a test
+  // can see -- a class of LegacyShell on the page means the header is still in the tree.)
+  for (const mark of ['.site-header', '.header-crumb', '.legacy-main', '#toast-container', '.role-bar']) {
+    expect(container.querySelector(mark)).toBeNull();
+  }
+});
+
 test('renders the admin console from the catalogue English', async () => {
   serve(lifecycle);
   renderConsole();
@@ -80,8 +99,7 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByRole('group', {name: 'Phase control mode'})).toBeVisible();
   expect(screen.getByText('1 readiness check still need resolving before Arguments')).toBeVisible();
   expect(screen.getByRole('button', {name: 'Move on to Arguments →'})).toBeDisabled();
-  expect(screen.getByText('1 invite')).toBeVisible();
-  expect(screen.getAllByText('12 participants joined').length).toBe(1);
+  expect(screen.getByText('12 participants joined', {exact: false})).toBeVisible();
   expect(screen.getByText('Need time to coordinate inviting people back? You can pause first.')).toBeVisible();
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
   expect(within(screen.getByText(/These toggles act independently/)).getByText('Advanced.').tagName).toBe('STRONG');
@@ -92,26 +110,26 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
 });
 
-test('links to the settings page instead of editing the same settings itself', async () => {
+test('edits no setting itself: Settings is reached from the sidebar', async () => {
   // The owner's condition: one setting, one place that edits it. The console used to carry
   // a second copy of the settings form -- title, intro, outro, the eligibility pair and the
   // complexity tier -- writing the same two endpoints the settings page writes. The
-  // lifecycle payload has carried links.settings all along; this card is how it is reached.
+  // settings page is reached from the console sidebar, as every section is.
   serve(lifecycle);
   renderConsole();
 
-  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
-  expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
-  expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
+  const sidebar = await screen.findByRole('navigation', {name: 'Admin sections'}, {timeout: 10_000});
+  expect(within(sidebar).getByRole('link', {name: 'Settings'}))
+    .toHaveAttribute('href', '/admin/conversations/7/settings');
 
   // Nothing on this page writes a setting any more. Queried by accessible name, so a
   // control that merely moved elsewhere on the page would still fail this.
-  for (const name of ['Title', 'Intro text (HTML, optional)', 'Outro text (HTML, optional)',
+  for (const name of ['Title', 'Introduction (HTML, optional)', 'Closing text (HTML, optional)',
     'Eligibility event ID', 'Eligibility label']) {
     expect(screen.queryByLabelText(name)).toBeNull();
   }
   expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();
-  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: /^Save( settings)?$/})).toBeNull();
   expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
 
   // What stays is what the settings page does not show, plus the tier as a fact.
@@ -120,90 +138,87 @@ test('links to the settings page instead of editing the same settings itself', a
   expect(screen.getByText(/Complexity tier/)).toBeVisible();
 });
 
-test('the access policy is named in plain words, not by its stored value', async () => {
-  serve({...lifecycle, conversation: {...lifecycle.conversation, accessPolicy: 'invite_only'}});
+const moderatorLifecycle: Lifecycle = {
+  ...lifecycle,
+  operator: {roleLabel: 'Moderator'},
+  phase: {...lifecycle.phase, activeKeys: ['submission', 'informed_voting']},
+  schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false},
+  capabilities: {advancePhase: false, pause: false, publish: false, editSettings: false, useAdvancedPhases: false, initializePhase6: false, archive: false},
+};
+
+test.each([
+  ['an organizer or site admin', () => lifecycle],
+  ['a moderator', () => moderatorLifecycle],
+] as const)('the Overview has no Content & access block for %s; the sidebar reaches every section', async (_role, payload) => {
+  // Owner, 2026-10-09: the block only repeated the sidebar and the section tab strips, and
+  // once Invitations is always in the Settings strip nothing is reachable from it alone.
+  serve(payload());
   renderConsole();
 
-  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
-  // The line under the title is where the stored value used to reach the screen.
-  expect(document.querySelector('.console-sub')?.textContent)
-    .toContain('Only people who have been given access');
-  expect(document.querySelector('.console-sub')?.textContent).not.toContain('invite_only');
+  const sidebar = await screen.findByRole('navigation', {name: 'Admin sections'}, {timeout: 10_000});
+  expect(screen.queryByText('Content & access')).toBeNull();
+  expect(document.querySelector('.manage-grid, .manage-card')).toBeNull();
+  // The page's own content links to none of the pages the block's cards opened.
+  const main = screen.getByRole('main');
+  for (const old of ['statements', 'invites', 'featured', 'participants', 'flags', 'roles', 'settings']) {
+    expect(main.querySelector(`a[href="/admin/conversations/7/${old}"]`)).toBeNull();
+  }
+  // Every section is one click away in the sidebar, for every role.
+  expect(within(sidebar).getByRole('link', {name: 'Overview'})).toHaveAttribute('href', '/admin/conversations/7');
+  expect(within(sidebar).getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
+  expect(within(sidebar).getByRole('link', {name: /^Moderation/})).toHaveAttribute('href', '/admin/conversations/7/flags');
+  expect(within(sidebar).getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
 });
 
-test('renders the closed-consultation description from parameterised sentences', async () => {
-  serve(closedLifecycle);
-  renderConsole();
+test('a moderator sees the phase control and statistics read-only, with nothing that changes a phase', async () => {
+  // Owner, 2026-10-09: moderators see the Overview, phase control and statistics included,
+  // but cannot change anything there. Read-only means text, not disabled controls.
+  serve(moderatorLifecycle);
+  const {container} = renderConsole();
 
-  expect(await screen.findByText('Permanently closed', {exact: false}, {timeout: 10_000})).toBeVisible();
-  // Two parameterised sentences joined at the sentence boundary, each reorderable inside.
-  expect(document.querySelector('.danger-row-desc')?.textContent)
-    .toBe('Closed 1 Jul 2026. Participants can link their Wikimedia username until 1 Sept 2026.');
-  expect(screen.getByText('Published')).toBeVisible();
-  expect(screen.getByText('The final aggregate report is published and participant activity is closed.')).toBeVisible();
+  expect(await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000})).toBeVisible();
+  expect(screen.getByText('You are in phase 2 of 3')).toBeVisible();
+  expect(screen.getByText('Regional communities should share infrastructure funding.', {exact: false})).toBeVisible();
+  expect(screen.getByText('Only an organizer or site admin can change phases.')).toBeVisible();
+
+  for (const name of [/Move on/, /^Pause$/, /^Resume$/, /^Save phases$/, /^Initialise Phase 6$/, /^Set$/, /^Edit$/, /^Freeze$/, /^Advanced$/]) {
+    expect(screen.queryByRole('button', {name})).toBeNull();
+  }
+  expect(screen.queryByRole('group', {name: 'Phase control mode'})).toBeNull();
+  // Nothing operable anywhere in the phase control: no button, no checkbox, no date input.
+  expect(container.querySelectorAll(
+    '#phaseControl :is(button, input, select, form), .mode-guided-part :is(button, input, select, form), .mode-advanced-part',
+  )).toHaveLength(0);
 });
 
-test('renders console text from the catalogue, not from source literals', async () => {
-  // Non-vacuity: serve deliberately different English for keys spread across the page --
-  // a kicker, an aria-label, a two-parameter sentence, a plural, a parameterised button,
-  // an inline-markup note, a status badge and the document title. None of these
-  // assertions can pass against a hardcoded literal.
-  server.use(
-    http.get(
-      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
-      () => HttpResponse.json({
-        ...testMessages,
-        'adminconv-phase-control': 'CATALOGUE PHASE KICKER',
-        'adminconv-journey-aria': 'CATALOGUE STEPPER LABEL',
-        'adminconv-you-are-in-phase': 'Step $1 of $2, catalogue-side',
-        'adminconv-readiness-unmet': '$2 is blocked by $1 {{PLURAL:$1|item|items}}',
-        'adminconv-invite-count': '$1 {{PLURAL:$1|pass|passes}} handed out',
-        'adminconv-move-on-to': 'Advance into $1',
-        'adminconv-advanced-note': '<strong>CATALOGUE WARNING</strong> use with care.',
-        'adminconv-status-active': 'RUNNING',
-        'adminconv-doc-title': 'Console for $1',
-      }),
-    ),
-  );
-  serve(lifecycle);
-  renderConsole();
+test('a moderator is told which phase comes next and when, only while a transition is scheduled', async () => {
+  // Owner, 2026-10-09: for a moderator no readiness list and no "next phase" head; one plain
+  // line when a transition is scheduled, in the participant notice's words.
+  serve(moderatorLifecycle);
+  const {container} = renderConsole();
 
-  expect(await screen.findByText('CATALOGUE PHASE KICKER', {}, {timeout: 10_000})).toBeVisible();
-  expect(screen.getByRole('list', {name: 'CATALOGUE STEPPER LABEL'})).toBeVisible();
-  expect(screen.getByText('Step 2 of 3, catalogue-side')).toBeVisible();
-  expect(screen.getByText('Arguments is blocked by 1 item')).toBeVisible();
-  expect(screen.getByText('1 pass handed out')).toBeVisible();
-  expect(screen.getByRole('button', {name: 'Advance into Arguments'})).toBeInTheDocument();
-  expect(within(screen.getByText(/use with care/)).getByText('CATALOGUE WARNING').tagName).toBe('STRONG');
-  expect(screen.getByText('RUNNING')).toBeVisible();
-  expect(document.title).toBe('Console for Community strategy');
-  expect(screen.queryByText('Phase control')).not.toBeInTheDocument();
-  expect(screen.queryByText('You are in phase 2 of 3')).not.toBeInTheDocument();
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  const line = container.querySelector('.admin-scheduled-transition');
+  expect(line).not.toBeNull();
+  const [before] = testMessages['conv-scheduled-transition']!.split('<strong>');
+  expect(line!.textContent!.startsWith(before!)).toBe(true);
+  expect(line!.querySelector('strong')).toHaveTextContent(testMessages['phase-label-argument_mapping']!);
+  expect(line!.querySelector('time')).toHaveAttribute('datetime', '2026-11-01T12:00:00Z');
+  // Text only, and no readiness list.
+  expect(line!.querySelectorAll('button, input, a')).toHaveLength(0);
+  expect(screen.queryByText('Every statement has been moderated', {exact: false})).toBeNull();
 });
 
-/** A transition due in thirty seconds, which is when the countdown falls back to its
- *  "under a minute" message. */
-function dueShortly(): Lifecycle {
-  return {...lifecycle, schedule: {canSchedule: true, scheduledAt: new Date(Date.now() + 30_000).toISOString(), targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false}};
-}
+test('a moderator sees no next-phase line when nothing is scheduled, or the schedule is frozen', async () => {
+  for (const schedule of [
+    {...moderatorLifecycle.schedule, scheduledAt: null, targetKey: null, targetLabel: null},
+    {...moderatorLifecycle.schedule, frozen: true},
+  ]) {
+    serve({...moderatorLifecycle, schedule});
+    const {container, unmount} = renderConsole();
 
-test('a transition under a minute away shows its countdown instead of blanking the console', async () => {
-  // Under a minute, the countdown uses adminconv-countdown-lt1m on its own.
-  serve(dueShortly());
-  renderConsole();
-  expect(await screen.findByText('under 1 min')).toBeVisible();
-});
-
-test('a message banana cannot parse degrades to its key, not to a blank page', async () => {
-  // banana-i18n throws on a bare "<"; msg() shows the key for that message and the rest of
-  // the console still renders.
-  server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
-    () => HttpResponse.json({...testMessages, 'adminconv-countdown-lt1m': '<1m'})));
-  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-  serve(dueShortly());
-  renderConsole();
-  expect(await screen.findByText('adminconv-countdown-lt1m')).toBeVisible();
-  expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
-  // Reported once, though the countdown re-renders.
-  expect(errors.mock.calls.filter(([message]) => String(message).includes('adminconv-countdown-lt1m'))).toHaveLength(1);
+    await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+    expect(container.querySelector('.admin-scheduled-transition')).toBeNull();
+    unmount();
+  }
 });

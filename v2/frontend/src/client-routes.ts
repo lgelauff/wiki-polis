@@ -22,7 +22,8 @@ function temporaryPathToCanonical(pathname: string): string | null {
     '/app/real': '/consultations',
     '/app/parity/help/statements': '/help/statements',
     '/app/parity/help/arguments': '/help/arguments',
-    '/app/admin': '/admin',
+    // The old dashboard address; /admin is Admin home now (#538).
+    '/app/admin': '/site-admin',
   };
   if (exact[pathname]) return exact[pathname];
 
@@ -54,10 +55,10 @@ function temporaryPathToCanonical(pathname: string): string | null {
 }
 
 export function isCanonicalClientPath(pathname: string): boolean {
-  if (['/', '/demo', '/consultations', '/help/statements', '/help/arguments', '/admin'].includes(pathname)) return true;
+  if (['/', '/demo', '/consultations', '/help/statements', '/help/arguments', '/admin', '/site-admin'].includes(pathname)) return true;
   if (/^\/accept\/[^/]+$/.test(pathname)) return true;
   if (/^\/c\/[^/]+(?:\/(?:about|moderation-log|report|reveal|outputs\/[^/]+))?$/.test(pathname)) return true;
-  return /^\/admin\/conversations\/\d+(?:\/(?:participants|flags|invites|statements|featured|settings|termination|roles))?$/.test(pathname);
+  return /^\/admin\/conversations\/\d+(?:\/(?:participants|flags|invites|statements|featured|settings(?:\/(?:basics|access|invitations|vouchers|roles))?|moderation(?:\/(?:queue|flags|featured|people))?|content(?:\/(?:statements|participants))?|termination|roles))?$/.test(pathname);
 }
 
 export function canonicalClientPath(href: string): string | null {

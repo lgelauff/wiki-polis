@@ -22,8 +22,8 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     statistics: {upstreamUnavailable: false, groups: [{key: 'preparation', label: 'Preparation', tiles: []}], informedVoting: null},
-    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+    counts: {participants: 12, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
   };
 }
 
@@ -45,14 +45,16 @@ function statementWorkspaceFixture(
   };
 }
 
+/** `selfId` marks that participant's row as the caller's own (`self`), as the server does. */
 export function adminCatalogFixture(
-  includeNewAdmin = false,
+  includeNewAdmin = false, selfId: number | null = null,
 ): components['schemas']['AdminCatalog'] {
   return {
     conversations: [{id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', createdAt: '2026-08-01T10:00:00Z', links: {participant: '/c/community-strategy', manage: '/admin/conversations/7'}}],
+    configuredAdmins: ['Config admin'],
     globalAdmins: [
-      {participantId: 1, username: 'adminuser'},
-      ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor'}] : []),
+      {participantId: 1, username: 'adminuser', self: selfId === 1},
+      ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor', self: selfId === 23}] : []),
     ],
     phaseRoutes: [{key: 'default_7', label: 'Full consultation', description: 'Explore through informed voting and report.'}],
     creation: {mode: 'manual_polis_id', defaultModerationPolicy: 'moderate'},
@@ -76,9 +78,9 @@ export function phaseAdvanceFixture(
         schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
         publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
         statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
-        counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
+        counts: {participants: 12, openFlags: 1, featuredStatements: 4},
         capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-        links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+        links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
       },
   } as components['schemas']['AdminPhaseAdvanceReceipt'];
   return {...receipt, transition: {...receipt.transition, ...transition}};
@@ -94,6 +96,10 @@ export const testMessages: Record<string, string> = Object.fromEntries(
 
 export const handlers = [
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
+  http.get(new URL('/api/v1/admin/home', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversations: [{id: 7, title: 'Community strategy', role: 'Organizer', status: 'active', openFlags: 1, pendingStatements: 2, links: {overview: '/admin/conversations/7'}}],
+    links: {self: '/api/v1/admin/home', siteAdminDashboard: null},
+  }})),
   http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
   http.post(new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {username: string};
@@ -140,7 +146,7 @@ export const handlers = [
     links: {self: '/api/v1/admin/conversations/7/termination', lifecycle: '/admin/conversations/7'},
   }})),
   http.delete(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversationId: 7, deleted: true, links: {admin: '/admin'},
+    conversationId: 7, deleted: true, links: {admin: '/site-admin'},
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', gated: false, gatingType: null, announce: false, information: false, resultsShared: false, showUsernames: false, accessRequestText: null, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},

@@ -14,6 +14,10 @@
 
 set -euo pipefail
 
+# Kept for the self-restart below: the argument loop consumes "$@".
+ORIG_ARGS=("$@")
+SELF_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+
 BRANCH=""
 PULL_REQUEST=""
 EXPECTED_REV=""
@@ -103,12 +107,24 @@ if [ -n "$EXPECTED_REV" ] && [[ "$TARGET_REV" != "$EXPECTED_REV"* ]]; then
   exit 1
 fi
 
+SELF_HASH_BEFORE=$(git hash-object "$SELF_PATH")
 if [ -n "$PULL_REQUEST" ]; then
   git checkout --detach "$TARGET_REV"
 else
   # Recreate the local branch at the verified remote commit. This also handles
   # first-time deployments and force-pushed development branches consistently.
   git checkout -B "$BRANCH" "$TARGET_REV"
+fi
+
+# bash keeps reading the copy of this script it started with, so a deploy.sh
+# change in the new revision would only take effect on the next run (it bit the
+# production deploy of 2026-10-10). If the checkout changed this file, start
+# again with the new version, pinned to the revision just verified.
+if [ -z "${DEPLOY_REEXEC:-}" ] && [ "$(git hash-object "$SELF_PATH")" != "$SELF_HASH_BEFORE" ]; then
+  echo "==> deploy.sh changed in this revision; restarting with the new version..."
+  REEXEC_ARGS=(${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"})
+  [ -n "$EXPECTED_REV" ] || REEXEC_ARGS+=(--expect "$TARGET_REV")
+  DEPLOY_REEXEC=1 exec bash "$SELF_PATH" "${REEXEC_ARGS[@]}"
 fi
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -134,8 +150,10 @@ elif command -v toolforge >/dev/null 2>&1; then
   # Toolforge bastions intentionally do not provide application runtimes. Run
   # the build in an ephemeral Node pod; the shared home mount makes the output
   # immediately available to the Python webservice after it restarts.
-  echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell..."
-  toolforge webservice --backend=kubernetes node20 shell -- \
+  # The default shell pod is too small for `tsc -b` + `vite build` (Node ran out of
+  # heap at ~256 MB on 2026-10-10), so ask for more memory explicitly.
+  echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell (2Gi)..."
+  toolforge webservice --backend=kubernetes --mem 2Gi node20 shell -- \
     "$HOME/wiki-polis/v2/bin/build-spa.sh"
 else
   echo "!!  ERROR: npm is required to build v2/frontend (Toolforge CLI fallback unavailable)." >&2

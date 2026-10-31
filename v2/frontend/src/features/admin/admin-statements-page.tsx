@@ -1,193 +1,148 @@
-import {Fragment, useCallback, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useLocation} from 'react-router-dom';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {
+  adminLifecycleQuery,
+  adminSettingsQuery,
   adminStatementWorkspaceQuery,
   postAdminSeedStatement,
   postAdminStatementImport,
-  putAdminStatementModeration,
-  putAdminStatementModerationPolicy,
 } from '../../api/queries';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {useMessage, type Message} from '../../i18n/messages';
+import {sortByBasedOn} from './admin-based-on';
+import {AdminComing} from './admin-coming';
+import {AdminShell} from './admin-shell';
+import {useAnnouncer} from './admin-announcer';
+import {useRowFocus} from './admin-row-focus';
+import {StatementActions} from './admin-statement-actions';
+import {StatementProvenance} from './admin-provenance';
+import {AdminTabStrip} from './admin-tab-strip';
+import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
 type Status = Statement['moderation'];
-type Feedback = LegacyToastMessage;
+/** One line of a form's result: said on the form's status line, under its button, as an
+ *  error (role=alert) or as the outcome (role=status). Never also a toast: a form's result
+ *  belongs to the form; toasts are for row actions. */
+type Feedback = {id: number; error: boolean; message: string};
 
-function legacyTruncate(value: string, length = 28, leeway = 5): string {
-  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
-}
 
-function legacyError(error: Error, fallback: string): string {
-  return error instanceof ApiContractError ? error.message : fallback;
-}
-
-function feedbackStyle(category: Feedback['category']) {
-  const error = category === 'error' || category === 'import_row_error';
-  const warning = category === 'warning';
-  return {
-    background: error ? '#fef2f2' : warning ? '#fffbeb' : '#f0fdf4',
-    borderColor: error ? '#fca5a5' : warning ? '#fcd34d' : '#86efac',
-    color: error ? '#991b1b' : warning ? '#92400e' : '#166534',
-    border: '1px solid',
-    padding: '.75rem 1rem',
-    borderRadius: 6,
-    fontSize: 13,
-    marginBottom: '1.5rem',
-  };
-}
-
-function StatementIdentity({statement}: {statement: Statement}) {
-  const provenance = statement.provenance;
-  const scores = provenance?.scores ?? [];
-  const title = provenance
-    ? `Derived from statement #${provenance.derivedFromId}. Similarity 1.00 = identical.${scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`
-    : undefined;
-  return (
-    <td className="muted">
-      {statement.id}{statement.featured && ' ★'}
-      {provenance && (
-        <><br /><span className="prov-badge" title={title}>
-          <span className="sr-only">derived from statement {provenance.derivedFromId}, </span>
-          ↳ #{provenance.derivedFromId}
-          {scores.map((score) => (
-            <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
-          ))}
-        </span></>
-      )}
-    </td>
-  );
-}
-
-function VoteCounts({statement}: {statement: Statement}) {
-  return (
-    <td className="stmt-votes">
-      <span className="vcount vcount--agree" title="Agree votes"><span className="vlabel">A</span> {statement.votes.agree}</span>{' '}
-      <span className="vcount vcount--pass" title="Pass votes"><span className="vlabel">P</span> {statement.votes.pass}</span>{' '}
-      <span className="vcount vcount--disagree" title="Disagree votes"><span className="vlabel">D</span> {statement.votes.disagree}</span>
-    </td>
-  );
-}
-
-const actions: Record<Status, {status: Status; label: string; className?: string}[]> = {
-  pending: [
-    {status: 'approved', label: 'approve', className: 'btn-approve'},
-    {status: 'hidden', label: 'hide', className: 'btn-danger'},
-  ],
-  approved: [
-    {status: 'hidden', label: 'hide', className: 'btn-danger'},
-    {status: 'pending', label: 'pending'},
-  ],
-  hidden: [
-    {status: 'approved', label: 'approve', className: 'btn-approve'},
-    {status: 'pending', label: 'pending'},
-  ],
-};
-
-function StatementActions({
-  statement, conversationId, csrfToken, onMove, onError,
-}: {
-  statement: Statement;
-  conversationId: number;
-  csrfToken: string;
-  onMove: (statement: Statement, status: Status) => void;
-  onError: (message: string) => void;
-}) {
-  const mutation = useMutation({
-    mutationFn: (status: Status) => putAdminStatementModeration(
-      conversationId, statement.id, {status}, csrfToken,
-    ),
-    onSuccess: (receipt) => onMove(statement, receipt.status),
-    onError: (error: Error) => {
-      if (error instanceof ApiContractError
-          && error.code === 'last_featured_statement_protected') {
-        onError('Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.');
-      } else {
-        onError('Moderation action failed. Check server logs for details.');
-      }
-    },
-  });
-  return (
-    <td className="stmt-actions">
-      {actions[statement.moderation].map((action, index) => (
-        <Fragment key={action.status}>
-          {index > 0 && ' '}
-          <form
-            style={{display: 'inline'}}
-            onSubmit={(event) => {
-              event.preventDefault();
-              mutation.mutate(action.status);
-            }}
-          >
-            <input type="hidden" name="csrf_token" value={csrfToken} />
-            <input type="hidden" name="mod" value={{approved: 1, pending: 0, hidden: -1}[action.status]} />
-            <button
-              type="submit"
-              className={`btn-small${action.className ? ` ${action.className}` : ''}`}
-              disabled={mutation.isPending}
-            >{action.label}</button>
-          </form>
-        </Fragment>
-      ))}
-    </td>
-  );
-}
-
-function StatementTable({
-  status, statements, conversationId, csrfToken, onMove, onError,
-}: {
-  status: Status;
-  statements: Statement[];
-  conversationId: number;
-  csrfToken: string;
-  onMove: (statement: Statement, status: Status) => void;
-  onError: (message: string) => void;
-}) {
-  const labels: Record<Status, string> = {
-    pending: 'Pending review', approved: 'Approved', hidden: 'Hidden',
-  };
-  const empty: Record<Status, string> = {
-    pending: 'No statements awaiting review.',
-    approved: 'No approved statements.',
-    hidden: 'No hidden statements.',
-  };
+/** A form's result lines, at the form. */
+function FormFeedback({lines}: {lines: Feedback[]}) {
+  const errors = lines.filter((line) => line.error);
+  const outcomes = lines.filter((line) => !line.error);
   return (
     <>
-      <h3 className="section-heading">
-        {labels[status]}
-        {!!statements.length && <>{' '}<span className="stmt-count">{statements.length}</span></>}
-      </h3>
-      {!statements.length ? (
-        <p className="muted" style={{marginBottom: '1.5rem'}}>{empty[status]}</p>
-      ) : (
-        <table className="admin-table stmt-table">
-          <thead><tr><th>#</th><th>Text</th><th>Votes</th><th /></tr></thead>
-          <tbody>
-            {statements.map((statement) => (
-              <tr key={statement.id}>
-                {status === 'hidden'
-                  ? <td className="muted">{statement.id}</td>
-                  : <StatementIdentity statement={statement} />}
-                <td className="stmt-text">{statement.text}</td>
-                <VoteCounts statement={statement} />
-                <StatementActions
-                  statement={statement}
-                  conversationId={conversationId}
-                  csrfToken={csrfToken}
-                  onMove={onMove}
-                  onError={onError}
-                />
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {errors.length > 0 && <div role="alert">{errors.map((line) => (
+        <p key={line.id} className="admin-error">{line.message}</p>
+      ))}</div>}
+      {/* Always mounted, so the region exists before its first message; each line is keyed
+          by its own id, so the same outcome twice is a new line and is read again. */}
+      <div role="status">{outcomes.map((line) => (
+        <p key={line.id} className="admin-status">{line.message}</p>
+      ))}</div>
     </>
+  );
+}
+
+/** A moderation refusal in the page's words: the server's message is for developers. */
+function moderationError(msg: Message, error: Error): string {
+  return error instanceof ApiContractError && error.code === 'last_featured_statement_protected'
+    ? msg('flash-last-featured-hide') : msg('flash-moderation-failed');
+}
+
+/** Which statements the page shows, chosen by the state switch. Approved is the default
+ *  here: on the Content side the question is what the consultation says, not what is
+ *  waiting, and what is waiting is Moderation's page. */
+type Position = 'approved' | 'unmoderated' | 'hidden';
+
+const POSITIONS: {id: Position; glyph: string; key: string}[] = [
+  {id: 'approved', glyph: '✓', key: 'admin-moderation-state-approved'},
+  {id: 'unmoderated', glyph: '○', key: 'admin-moderation-state-unmoderated'},
+  {id: 'hidden', glyph: '✕', key: 'admin-moderation-state-hidden'},
+];
+
+const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
+  approved: 'approved',
+  unmoderated: 'pending',
+  hidden: 'hidden',
+};
+
+/** What is said when a statement has moved to a list. */
+const MOVED: Record<Status, string> = {
+  approved: 'admin-moderation-statement-approved',
+  hidden: 'admin-moderation-statement-hidden',
+  pending: 'admin-moderation-statement-unmoderated',
+};
+
+/** "Most responses" is what a reader of the statements wants first; "Oldest first" is the order
+ *  they arrived; "Based on" groups a correction under the statement it corrects, with the
+ *  same function as the Moderation queue (`sortByBasedOn`). All three sort what is already
+ *  loaded. */
+type Sort = 'most-responses' | 'oldest' | 'based-on';
+
+function responseTotal(statement: Statement): number {
+  return statement.votes.agree + statement.votes.pass + statement.votes.disagree;
+}
+
+function sortStatements(rows: Statement[], sort: Sort): Statement[] {
+  if (sort === 'based-on') return sortByBasedOn(rows);
+  const byId = [...rows].sort((left, right) => left.id - right.id);
+  if (sort === 'most-responses') {
+    return byId.sort((left, right) => responseTotal(right) - responseTotal(left) || left.id - right.id);
+  }
+  return byId;
+}
+
+/** One statement as one row: a star when it is featured, the text, its number as a muted
+ *  suffix (what "↳ #N", Featured's add by number and "Corrects statement #" refer to),
+ *  where it came from, its votes and what can be done to it. The row's id is the target of
+ *  "↳ #N" on the rows derived from it. */
+function StatementRow({conversationId, statement, sourceShown, csrfToken, move, onError}: {
+  conversationId: number;
+  statement: Statement;
+  sourceShown: boolean;
+  csrfToken: string;
+  move: (statement: Statement, status: Status) => void;
+  onError: (message: string) => void;
+}) {
+  const msg = useMessage();
+  return (
+    <li className="admin-row" id={`statement-${statement.id}`} data-row-id={statement.id}>
+      <div className="admin-row__text">
+        {statement.featured && (
+          <span className="admin-row__star" title={msg('conv-arg-featured-label')}>
+            <span aria-hidden="true">★ </span>
+            <span className="sr-only">{msg('conv-arg-featured-label')}: </span>
+          </span>
+        )}
+        {statement.text}
+        <span className="admin-row__suffix">{` #${statement.id}`}</span>
+        {statement.provenance && (
+          <StatementProvenance provenance={statement.provenance} linked={sourceShown} />
+        )}
+      </div>
+      <div className="admin-row__counts">
+        <span title={msg('stmts-vote-agree-title')}>{msg('stmts-vlabel-a')} {statement.votes.agree}</span>
+        {' · '}
+        <span title={msg('stmts-vote-pass-title')}>{msg('stmts-vlabel-p')} {statement.votes.pass}</span>
+        {' · '}
+        <span title={msg('stmts-vote-disagree-title')}>{msg('stmts-vlabel-d')} {statement.votes.disagree}</span>
+      </div>
+      <StatementActions
+        statement={statement}
+        conversationId={conversationId}
+        csrfToken={csrfToken}
+        withUnmoderate
+        onMoved={move}
+        onError={(error) => onError(moderationError(msg, error))}
+      />
+    </li>
   );
 }
 
@@ -195,34 +150,45 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   conversationId: number;
   csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const options = adminStatementWorkspaceQuery(conversationId);
   const {data} = useSuspenseQuery(options);
-  const [feedback, setFeedback] = useState<Feedback[]>([]);
-  const [toast, setToast] = useState<LegacyToastMessage | null>(() => (
-    data.dataAvailability.statements ? null : {
-      id: 0,
-      category: 'error',
-      message: 'Could not load statements. Check server logs.',
-    }
-  ));
+  const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
+  // A link to one statement (the Queue's "↳ #N") opens the page on the list that holds it.
+  const {hash} = useLocation();
+  const target = /^#statement-(\d+)$/.exec(hash)?.[1];
+  const [position, setPosition] = useState<Position>(() => {
+    const id = Number(target);
+    if (data.statements.pending.some((row) => row.id === id)) return 'unmoderated';
+    if (data.statements.hidden.some((row) => row.id === id)) return 'hidden';
+    return 'approved';
+  });
+  // ...and scrolled to it: a client-side navigation does not do what a page load would.
+  useEffect(() => {
+    if (target) document.getElementById(`statement-${target}`)?.scrollIntoView?.({block: 'center'});
+  }, [target]);
+  const [sort, setSort] = useState<Sort>('most-responses');
+  const [search, setSearch] = useState('');
+  // Each form's result lines, said at that form.
+  const [seedFeedback, setSeedFeedback] = useState<Feedback[]>([]);
+  const [importFeedback, setImportFeedback] = useState<Feedback[]>([]);
+  // Toasts are for the row actions only.
+  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const [seedText, setSeedText] = useState('');
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
-  const [strictModeration, setStrictModeration] = useState(
-    data.moderationPolicy.mode === 'moderate',
-  );
   const dismissToast = useCallback(() => setToast(null), []);
+  const announcer = useAnnouncer();
 
-  function showFeedback(messages: Omit<Feedback, 'id'>[]) {
+  function lines(messages: Omit<Feedback, 'id'>[]): Feedback[] {
     const timestamp = Date.now();
-    const next = messages.map((message, index) => ({...message, id: timestamp + index}));
-    setFeedback(next);
-    setToast(next.at(-1) ?? null);
+    return messages.map((message, index) => ({...message, id: timestamp + index}));
   }
 
-  function showError(message: string) {
-    showFeedback([{category: 'error', message}]);
+  function showRowError(message: string) {
+    setToast({id: Date.now(), category: 'error', message});
   }
 
   const seedMutation = useMutation({
@@ -232,25 +198,26 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       csrfToken,
     ),
     onSuccess: (receipt) => {
-      let category: Feedback['category'] = 'success';
-      let message = 'Seed statement added.';
+      let error = false;
+      let message = msg('flash-seed-added');
       if (receipt.provenanceRecorded === false) {
-        category = 'warning';
-        message = 'Seed statement added, but the correction link could not be recorded.';
+        error = true;
+        message = msg('flash-seed-added-no-link');
       } else if (receipt.derivedFromId !== null) {
-        message = `Seed statement added (recorded as a correction of #${receipt.derivedFromId}).`;
+        message = msg('flash-seed-added-corrected', receipt.derivedFromId);
       }
       setSeedText('');
       setDerivedFrom('');
-      showFeedback([{category, message}]);
+      setSeedFeedback(lines([{error, message}]));
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
     onError: (error: Error) => {
+      // The typed text stays in the form, so it can be corrected and sent again.
       if (error instanceof ApiContractError
           && error.code === 'derived_statement_not_found') {
-        showError(`Statement #${derivedFrom} was not found in this conversation — fix the "corrects" number and try again. Nothing was added.`);
+        setSeedFeedback(lines([{error: true, message: msg('stmts-seed-corrects-not-found', derivedFrom)}]));
       } else {
-        showError(legacyError(error, 'The voting service is unavailable.'));
+        setSeedFeedback(lines([{error: true, message: msg('adminconv-command-failed')}]));
       }
     },
   });
@@ -261,62 +228,28 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     ),
     onSuccess: (receipt) => {
       const messages: Omit<Feedback, 'id'>[] = [];
-      if (receipt.outcome.skippedExisting) {
-        messages.push({
-          category: 'warning',
-          message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this conversation and were skipped.`,
-        });
+      const skipped = receipt.outcome.skippedExisting;
+      const failed = receipt.outcome.failedUpstream;
+      if (receipt.outcome.imported) {
+        messages.push({error: false, message: msg('stmts-import-imported', receipt.outcome.imported)});
       }
-      if (receipt.outcome.imported && !receipt.outcome.skippedExisting
-          && !receipt.outcome.failedUpstream) {
-        messages.push({
-          category: 'import_result',
-          message: `✓ ${receipt.outcome.imported} statement${receipt.outcome.imported === 1 ? '' : 's'} imported`,
-        });
-      } else if (receipt.outcome.imported) {
-        messages.push({
-          category: 'import_result',
-          message: `✓ ${receipt.outcome.imported} imported — ⚠ ${receipt.outcome.skippedExisting + receipt.outcome.failedUpstream} skipped`,
-        });
-      } else if (receipt.outcome.skippedExisting) {
-        messages.push({
-          category: 'import_result',
-          message: `⚠ 0 imported — ${receipt.outcome.skippedExisting} already existed in Polis`,
-        });
-      } else {
-        messages.push({category: 'warning', message: 'No statements were imported — there were no valid rows.'});
-        messages.push({category: 'import_result', message: '⚠ 0 imported — Polis returned no result'});
+      if (skipped) {
+        messages.push({error: false, message: msg('stmts-import-skipped', skipped)});
       }
-      setImportText('');
-      showFeedback(messages);
+      // A statement the voting service refused is not "skipped": it was not added, and
+      // trying again may add it. It is counted on its own, and the text stays in the box.
+      if (failed) {
+        messages.push({error: true, message: msg('stmts-import-failed', failed)});
+      }
+      if (!receipt.outcome.imported && !skipped && !failed) {
+        messages.push({error: true, message: msg('flash-import-no-valid-rows')});
+        messages.push({error: false, message: msg('flash-import-no-result')});
+      }
+      if (!failed) setImportText('');
+      setImportFeedback(lines(messages));
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
-    onError: (error: Error) => showError(legacyError(error, 'The voting service is unavailable.')),
-  });
-
-  const policyMutation = useMutation({
-    mutationFn: () => putAdminStatementModerationPolicy(
-      conversationId,
-      {mode: strictModeration ? 'moderate' : 'auto_approve'},
-      csrfToken,
-    ),
-    onSuccess: (receipt) => {
-      queryClient.setQueryData<Workspace>(options.queryKey, receipt.workspace);
-      setStrictModeration(receipt.mode === 'moderate');
-      setFeedback([]);
-      setToast(null);
-    },
-    onError: (error: Error) => {
-      if (error instanceof ApiContractError && error.code === 'verification_unavailable') {
-        showError('Could not verify the current moderation state. Try again later.');
-      } else if (error instanceof ApiContractError && error.code === 'upstream_unavailable') {
-        showError('Could not update moderation settings. Check server logs for details.');
-      } else if (error instanceof ApiContractError && error.code === 'command_outcome_unknown') {
-        showError('The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.');
-      } else {
-        showError('Could not save the moderation policy. Try again later.');
-      }
-    },
+    onError: () => setImportFeedback(lines([{error: true, message: msg('adminconv-command-failed')}])),
   });
 
   function moveStatement(statement: Statement, status: Status) {
@@ -330,8 +263,11 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       statements[status] = [...statements[status], {...statement, moderation: status}];
       return {...workspace, statements};
     });
-    setFeedback([]);
     setToast(null);
+    // The row leaves the list when the switch is on another position; focus goes to the next
+    // row and the result is said, every time, through the shell's live region.
+    if (status !== LIST[position]) rowRemoved(statement.id);
+    announcer.announce(msg(MOVED[status], statement.id));
   }
 
   function submitImport(event: FormEvent<HTMLFormElement>) {
@@ -340,191 +276,197 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       .map((text, index) => ({row: index + 1, text: text.trim()}))
       .filter(({text}) => text);
     if (rows.length > data.seeding.maxStatementsPerImport) {
-      showFeedback([{
-        category: 'import_result',
-        message: `✗ Import rejected — nothing was imported. Text import contains ${rows.length} lines, maximum is ${data.seeding.maxStatementsPerImport}. Reduce it and try again. (Parse errors may also be present — fix everything before retrying.)`,
-      }]);
+      setImportFeedback(lines([{
+        error: true,
+        message: msg('flash-import-rejected-rows', rows.length, data.seeding.maxStatementsPerImport),
+      }]));
       return;
     }
     const seen = new Set<string>();
     const errors: Omit<Feedback, 'id'>[] = [];
     rows.forEach(({row, text}) => {
       if (text.length > data.seeding.maxCharactersPerStatement) {
-        errors.push({category: 'import_row_error', message: `Row ${row}: text is too long (${text.length} characters; max ${data.seeding.maxCharactersPerStatement}).`});
+        errors.push({error: true, message: msg('flash-import-row-error', row,
+          msg('stmts-import-too-long', text.length, data.seeding.maxCharactersPerStatement))});
       } else if (seen.has(text)) {
-        errors.push({category: 'import_row_error', message: `Row ${row}: duplicate — already added from an earlier row.`});
+        errors.push({error: true, message: msg('flash-import-row-error', row, msg('stmts-import-duplicate'))});
       }
       seen.add(text);
     });
     if (errors.length) {
-      showFeedback([...errors, {
-        category: 'import_result',
-        message: '✗ Import rejected — nothing was added. One invalid line rejects the whole import; fix the lines listed above and try again.',
-      }]);
+      setImportFeedback(lines([...errors, {
+        error: true,
+        message: msg('flash-import-rejected-invalid'),
+      }]));
       return;
     }
     importMutation.mutate(rows.map(({text}) => text));
   }
 
-  const title = data.conversation.title;
-  return (
-    <LegacyShell
-      headerMode="admin"
-      title={`Statements — ${title} — Proto`}
-      headerCrumb={(
-        <nav className="header-crumb" aria-label="Admin breadcrumb">
-          <span className="header-crumb-sep">/</span>
-          <Link to="/admin">Admin panel</Link>
-          <span className="header-crumb-sep">/</span>
-          <Link to={data.links.lifecycle}>{legacyTruncate(title)}</Link>
-          <span className="header-crumb-sep">/</span>
-          <span>Statements</span>
-        </nav>
-      )}
-      toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
-    >
-      <div className="container">
-        <h2>Statements — {title}</h2>
+  const needle = search.trim().toLowerCase();
+  const total = data.statements.approved.length + data.statements.pending.length
+    + data.statements.hidden.length;
+  const inView = data.statements[LIST[position]];
+  // What the list says when it is empty: that there are no statements at all, that this
+  // position of the switch holds none, or that the search matched none of them.
+  const emptyPosition: Record<Position, string> = {
+    approved: msg('stmts-approved-empty'),
+    unmoderated: msg('stmts-pending-empty'),
+    hidden: msg('stmts-hidden-empty'),
+  };
+  let empty = msg('admin-content-no-match');
+  if (total === 0) empty = msg('admin-content-empty');
+  else if (inView.length === 0) empty = emptyPosition[position];
+  const rows = sortStatements(
+    inView.filter((statement) => needle === ''
+      || statement.text.toLowerCase().includes(needle)),
+    sort,
+  );
 
-        <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h3 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h3>
-          <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
-            Pending statements are held for moderator review. Approve makes a statement visible
-            {' '}for participant voting, hide removes it from participant voting, and pending returns
-            {' '}an approved or hidden statement to the review queue.
-          </p>
-          <ul style={{fontSize: 13, paddingLeft: '1.25rem', marginBottom: '.6rem'}}>
-            <li>Vote counts show <strong>A</strong>gree · <strong>P</strong>ass · <strong>D</strong>isagree totals from Polis when the statistics database is available.</li>
-            <li>Seed statements come from moderator entry or imports; participant-submitted statements appear in the same moderation lists.</li>
-            <li>A star marks statements already selected as featured. A correction marker links derived statements back to the original TID.</li>
-            <li>Seed entry and imports are available only during preparation or open statement submission.</li>
-          </ul>
-          <p className="muted" style={{fontSize: 13, marginBottom: 0}}>
-            The text import strips spreadsheet formula prefixes, removes HTML, rejects invalid
-            {' '}rows as a batch, and skips statements already present in the conversation.
-          </p>
+  const shown = new Set(rows.map((row) => row.id));
+  const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
+
+  return (
+    <AdminShell
+      title={msg('adminconv-doc-title', lifecycle.conversation.title)}
+      data={lifecycle}
+      gatingType={settings.conversation.gatingType}
+      section="content"
+      subPage={msg('adminconv-card-statements')}
+      toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+      announcer={announcer}
+    >
+      <div className="admin-page">
+        <h1>{msg('admin-shell-content')}</h1>
+        <AdminTabStrip label={msg('admin-content-tabs-aria')}
+          tabs={contentTabs(conversationId, msg)} current="statements" />
+
+        <div className="admin-toolbar">
+          <div className="admin-switch">
+            {POSITIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={position === item.id}
+                title={msg(item.key)}
+                onClick={() => setPosition(item.id)}
+              >
+                <span aria-hidden="true">{item.glyph}</span>
+                <span className="sr-only">{msg(item.key)}</span>
+                {data.statements[LIST[item.id]].length
+                  ? ` ${data.statements[LIST[item.id]].length}` : ''}
+              </button>
+            ))}
+          </div>
+          <label className="admin-sort">
+            {msg('admin-moderation-sort-aria')}
+            <select value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
+              <option value="most-responses">{msg('admin-content-sort-most-responses')}</option>
+              <option value="oldest">{msg('admin-moderation-sort-oldest')}</option>
+              <option value="based-on">{msg('admin-moderation-sort-based-on')}</option>
+            </select>
+          </label>
+          <label className="admin-sort">
+            {msg('admin-content-search-aria')}
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
         </div>
 
-        {!data.dataAvailability.statements && (
-          <div style={feedbackStyle('error')}>Could not load statements. Check server logs.</div>
-        )}
-        {feedback.map((message) => (
-          <div key={message.id} style={feedbackStyle(message.category)}>{message.message}</div>
-        ))}
-
-        {!data.seeding.allowed ? (
-          <>
-            <h3 className="section-heading">Seed statements locked</h3>
-            <div className="edit-form">
-              <p className="muted" style={{marginBottom: 0, fontSize: 13}}>
-                {data.seeding.lockReason} Seed statements can only be added during preparation
-                {' '}or while statement submission is open.
-              </p>
-            </div>
-          </>
+        {rows.length ? (
+          <ul className="admin-rows" ref={listRef}>
+            {rows.map((statement) => (
+              <StatementRow
+                key={statement.id}
+                conversationId={conversationId}
+                statement={statement}
+                sourceShown={!!statement.provenance
+                  && shown.has(statement.provenance.derivedFromId)}
+                csrfToken={csrfToken}
+                move={moveStatement}
+                onError={showRowError}
+              />
+            ))}
+          </ul>
+        ) : data.dataAvailability.statements ? (
+          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{empty}</p>
         ) : (
+          // Lists left empty because the voting service could not be read are not an empty
+          // consultation. Said once, here, where the list would be (as on the Queue).
+          <p className="admin-empty" role="alert">{msg('flash-load-statements-failed')}</p>
+        )}
+
+        {/* Seeding works only during preparation or while statement submission is open;
+            outside that, its two forms are not shown rather than shown locked. */}
+        {data.seeding.allowed && (
           <>
-            <h3 className="section-heading">Add seed statement</h3>
-            <div className="edit-form">
-              <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                Adds a seed-marked statement that appears early in the voting sequence for participants.
-              </p>
+            <h2>{msg('stmts-seed-heading')}</h2>
+            <div className="admin-form">
               <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
-                <label>Statement text (max 280 characters)
+                <label className="admin-field">{msg('stmts-seed-label')}
                   <textarea
                     name="txt"
                     rows={3}
                     maxLength={280}
                     id="seed-txt"
                     required
-                    placeholder="Enter a statement participants will vote on…"
+                    aria-describedby="seed-count"
                     value={seedText}
                     onChange={(event) => setSeedText(event.target.value)}
                   />
                 </label>
-                <label className="muted" style={{display: 'block', marginTop: '.5rem', fontSize: 13}}>
-                  Corrects statement&nbsp;#&nbsp;(optional)
+                <label className="admin-field admin-field--short">
+                  {msg('stmts-seed-corrects-label')}
                   <input
                     type="number"
                     name="derived_from"
                     min={0}
-                    style={{width: '6rem'}}
-                    title="If this is a corrected/derived version of an existing statement, enter its #id so the link is recorded (#143)."
+                    className="admin-mono"
                     value={derivedFrom}
                     onChange={(event) => setDerivedFrom(event.target.value)}
                   />
                 </label>
-                <div style={{display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '.5rem'}}>
-                  <button type="submit" disabled={seedMutation.isPending}>Add seed statement</button>
-                  <span id="seed-count" className="muted" style={{fontSize: 12}}>{seedText.length} / 280</span>
+                <div className="admin-form__actions">
+                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending}>{msg('stmts-seed-submit')}</button>
+                  <span id="seed-count" className="admin-form__count">{seedText.length} / 280</span>
                 </div>
+                <FormFeedback lines={seedFeedback} />
               </form>
             </div>
 
-            <h3 className="section-heading">Import seed statements from text</h3>
-            <div className="edit-form">
-              <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                Paste one statement per line. Blank lines are ignored. Maximum {data.seeding.maxStatementsPerImport}
-                {' '}statements per import and {data.seeding.maxCharactersPerStatement} characters per statement.
-              </p>
-              <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                All-or-nothing: if any line is invalid (too long, duplicated within your paste, or
-                {' '}over the limit) nothing is imported and the offending lines are listed. Lines
-                {' '}identical to an existing statement are skipped automatically — the rest still import.
-              </p>
+            <h2>{msg('stmts-import-heading')}</h2>
+            <div className="admin-form">
               <form onSubmit={submitImport}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
-                <label>Statements
+                <label className="admin-field">{msg('stmts-import-label')}
                   <textarea
                     name="statement_texts"
                     rows={8}
                     maxLength={data.seeding.maxStatementsPerImport * (data.seeding.maxCharactersPerStatement + 1)}
-                    placeholder={'First statement\nSecond statement\nThird statement'}
                     value={importText}
                     onChange={(event) => setImportText(event.target.value)}
                   />
                 </label>
-                <div style={{marginTop: '.75rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap'}}>
-                  <button type="submit" disabled={importMutation.isPending}>Import statements</button>
+                <div className="admin-form__actions">
+                  <button type="submit" className="admin-button admin-button--primary" disabled={importMutation.isPending}>{msg('stmts-import-submit')}</button>
                 </div>
+                <FormFeedback lines={importFeedback} />
               </form>
             </div>
           </>
         )}
 
-        <h3 className="section-heading">Moderation settings</h3>
-        <div className="edit-form" style={{marginBottom: '2rem'}}>
-          <form onSubmit={(event) => { event.preventDefault(); policyMutation.mutate(); }}>
-            <input type="hidden" name="csrf_token" value={csrfToken} />
-            <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
-              <input
-                type="checkbox"
-                name="strict_moderation"
-                value="1"
-                checked={strictModeration}
-                onChange={(event) => setStrictModeration(event.target.checked)}
-              />
-              Strict moderation — new participant statements must be approved before others can vote on them
-            </label>
-            <div style={{marginTop: '.75rem'}}>
-              <button type="submit" className="btn-small" disabled={policyMutation.isPending}>Save</button>
-            </div>
-          </form>
-        </div>
+        {/* Arguments are a page in the spec and not one here: there is no admin list endpoint
+            for them yet (#473). */}
+        <AdminComing what="the arguments of this consultation as a list of their own" issue={473} />
 
-        {(['pending', 'approved', 'hidden'] as Status[]).map((status) => (
-          <StatementTable
-            key={status}
-            status={status}
-            statements={data.statements[status]}
-            conversationId={conversationId}
-            csrfToken={csrfToken}
-            onMove={moveStatement}
-            onError={showError}
-          />
-        ))}
+        {/* The Approval control (strict moderation) lives on Settings › Basics (#478): it is a
+            setting of the consultation, not of the statement list. */}
       </div>
-    </LegacyShell>
+    </AdminShell>
   );
 }

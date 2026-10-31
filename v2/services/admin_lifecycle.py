@@ -137,7 +137,8 @@ def build_admin_lifecycle(
             'editSettings': can_organize,
             'useAdvancedPhases': can_administer,
             'initializePhase6': (
-                bool(conversation.active)
+                can_organize
+                and bool(conversation.active)
                 and not bool(conversation.paused)
                 and bool(conversation.phase_informed_voting)
                 and not bool(conversation.phase6_polis_conversation_id)

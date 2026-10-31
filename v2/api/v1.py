@@ -8,16 +8,17 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from flask import Blueprint, Flask, current_app, g, jsonify, request, session, url_for
+from flask import (Blueprint, Flask, current_app, g, jsonify, redirect, request, session,
+                   url_for)
 from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
 import i18n
 from api.admin_routes import register_admin_routes
-from db import ACCOUNT_KIND_VOUCHER, Participant
+from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
-from services.explore import ExploreUpstreamError
+from services.explore import ExploreUpstreamError, StatementAlreadyExists
 from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
                                   InvalidIdempotencyKey,
                                   validate_idempotency_key)
@@ -71,6 +72,7 @@ def error_response(code: str, message: str, status: int, *, details=None):
 def create_api_v1_blueprint(
     *,
     resolve_participant: Callable[[], Participant | None],
+    take_logout_notice: Callable[[], str | None],
     resolve_global_admin: Callable[[Participant | None], bool],
     resolve_developer_logins: Callable[[], list[dict]],
     resolve_git_version: Callable[[], str],
@@ -91,6 +93,7 @@ def create_api_v1_blueprint(
     resolve_intermediate_results: Callable[[str], dict],
     resolve_results_report: Callable[[str], dict],
     resolve_admin_catalog: Callable[[], dict],
+    resolve_admin_home: Callable[[], dict],
     create_admin_conversation: Callable[[dict], dict],
     grant_global_admin: Callable[[dict], dict],
     set_global_admin: Callable[[int, dict], dict],
@@ -157,6 +160,14 @@ def create_api_v1_blueprint(
         else:
             state = 'anonymous'
 
+        # The one consultation a voucher account belongs to (#368, #514): pages it is
+        # refused on name it, so the visitor knows which account is logged in.
+        voucher_consultation = None
+        if state == 'voucher' and participant.conversation_id is not None:
+            own = db.session.get(Conversation, participant.conversation_id)
+            if own is not None:
+                voucher_consultation = {'slug': own.slug, 'title': own.title}
+
         user = None
         if state == 'authenticated':
             user = {
@@ -168,6 +179,10 @@ def create_api_v1_blueprint(
             'data': {
                 'state': state,
                 'user': user,
+                'voucherConsultation': voucher_consultation,
+                # Once, on the page a logout landed on (#514): which note to show. Read
+                # here, it is gone from the session for every later request.
+                'logoutNotice': take_logout_notice(),
                 'capabilities': {
                     'administerSite': bool(resolve_global_admin(participant)),
                 },
@@ -223,6 +238,7 @@ def create_api_v1_blueprint(
         error_response=error_response,
         limiter=limiter,
         resolve_admin_catalog=resolve_admin_catalog,
+        resolve_admin_home=resolve_admin_home,
         create_admin_conversation=create_admin_conversation,
         grant_global_admin=grant_global_admin,
         set_global_admin=set_global_admin,
@@ -349,7 +365,7 @@ def create_api_v1_blueprint(
                 'validation_failed', 'A JSON request body is required.', 400,
             )
         fields = {}
-        unknown = sorted(set(body) - {'pseudonym', 'notifyEmail', 'notifyTalkPage'})
+        unknown = sorted(set(body) - {'pseudonym', 'notifyEmail', 'notifyTalkPage', 'consent'})
         if unknown:
             fields['_request'] = [
                 f"Unknown field{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}.",
@@ -360,6 +376,11 @@ def create_api_v1_blueprint(
         for key in ('notifyEmail', 'notifyTalkPage'):
             if key in body and not isinstance(body[key], bool):
                 fields[key] = ['Use true or false.']
+        # The join page's consent tick also grants the CC0 licence on everything the
+        # participant writes, so the server checks it too; `required` in the form is
+        # only a browser nudge (#341).
+        if body.get('consent') is not True:
+            fields['consent'] = ['Tick the box to agree before you join.']
         if fields:
             return error_response(
                 'validation_failed', 'Check the highlighted fields.', 400,
@@ -682,6 +703,13 @@ def create_api_v1_blueprint(
                 'The voting service is temporarily unavailable. It is safe to retry with the same key.',
                 502,
             )
+        except StatementAlreadyExists:
+            return error_response(
+                'statement_exists',
+                'A statement with this exact text already exists in this conversation. '
+                'Nothing was added; retrying the same text will not help.',
+                409,
+            )
         except ExploreUpstreamError:
             return error_response(
                 'command_outcome_unknown',
@@ -727,6 +755,11 @@ def register_api_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(exc):
+        # A log-out form from an expired session carries a stale token. Refusing it with a
+        # bare 400 is a dead end; going home without clearing anything is as safe against
+        # a cross-site post and leaves the visitor somewhere they can act (#514).
+        if request.method == 'POST' and request.path == url_for('logout'):
+            return redirect('/')
         if is_api_request():
             return error_response('csrf_failed', exc.description, 400)
         return exc

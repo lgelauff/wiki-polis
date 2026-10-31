@@ -194,6 +194,7 @@ def build_conversation_lane(
     output_items: Callable[[Conversation], list[dict]],
     reveal_context: Callable[[Conversation, Participation | None], dict | None],
     polis_client,
+    participant_subject: Callable[[Participant, Conversation], str | None],
 ) -> ConversationLane:
     """Load one demo/real lane and compute participant-facing state once."""
     lane = ConversationLane(space='demo' if demo else 'real', authenticated=bool(username))
@@ -242,15 +243,17 @@ def build_conversation_lane(
                                    Conversation.id.in_(invited_ids or [0]),
                                ),
                            )))
+    # A consultation you moderate but have not joined is deliberately NOT removed from
+    # `available`: that is the only place to join it. You moderate it, so its API card also
+    # carries the admin link, which the home page shows only under "You moderate". A site admin
+    # moderates everything.
     lane.available = (available_query
                       .filter(~Conversation.id.in_(joined_ids or [0]))
                       .order_by(Conversation.created_at.desc()).all())
 
-    moderated_ids: set[int] = set()
     if participant:
         if global_admin:
             lane.moderating = Conversation.query.order_by(Conversation.created_at.desc()).all()
-            moderated_ids = {conv.id for conv in lane.moderating}
         else:
             roles = AdminRole.query.filter_by(participant_id=participant.id).all()
             moderated_ids = {role.conversation_id for role in roles}
@@ -262,19 +265,20 @@ def build_conversation_lane(
         conv for conv in lane.moderating
         if (conv.access_policy == 'demo') == demo
     ]
-    # A consultation you moderate but have not joined stays in `available`: that is the
-    # only place to join it. Its card carries the admin link too. (A site admin moderates
-    # everything, so filtering here emptied their list.)
     lane.pseudonym_map = {part.conversation_id: part for part in lane_parts}
 
     all_conversations = joined_conversations + lane.available
     submission_conversations = [
         conv for conv in joined_conversations if conv.phase_submission and conv.active
     ]
-    zinvites = [conv.polis_id for conv in submission_conversations if conv.polis_id]
+    # The participant's subject is conversation-scoped, so it is resolved per conversation.
+    subjects_by_zinvite = {
+        conv.polis_id: participant_subject(participant, conv)
+        for conv in submission_conversations if conv.polis_id
+    } if participant else {}
     remaining_by_zinvite = {}
-    if zinvites and participant:
-        result = polis_client.get_statements_remaining_bulk(zinvites, participant.xid)
+    if subjects_by_zinvite:
+        result = polis_client.get_statements_remaining_bulk(subjects_by_zinvite)
         if result:
             remaining_by_zinvite = result
 

@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 
 import type {Message} from './messages';
-import {accessPolicyLabel, outputLabel, outputPending, outputTooltip, phaseLabel, routeLabel, tabLabel} from './server-labels';
+import {accessPolicyLabel, outputLabel, outputPending, outputTooltip, phaseLabel, roleLabel, routeLabel, tabLabel} from './server-labels';
 
 /** A catalogue whose values are deliberately UNLIKE the server's English. Every assertion
  *  below distinguishes "read the catalogue" from "echoed the server label" -- which the
@@ -17,6 +17,8 @@ const CATALOGUE: Record<string, string> = {
   'output-report-pending': 'CATALOGUE report pending',
   'admin-common-policy-open': 'CATALOGUE anyone with an account',
   'admin-common-policy-invited': 'CATALOGUE only people given access',
+  'admin-shell-role-site-admin': 'CATALOGUE site admin',
+  'admin-shell-role-organizer': 'CATALOGUE organizer',
 };
 
 /** Stands in for banana: returns the key itself for a message it does not hold, which is
@@ -83,6 +85,25 @@ describe('server identifier -> message', () => {
     expect(outputTooltip(msg, 'report', 'After closing')).toBe('CATALOGUE report tooltip');
     expect(outputPending(msg, 'report', 'Published after cleanup')).toBe('CATALOGUE report pending');
     expect(outputLabel(msg, 'dataset', 'Dataset')).toBe('Dataset');
+  });
+
+  test('the role word is the console one, not the server one', () => {
+    // The server sends "Global admin" as both identifier and label; the console never says
+    // that on screen, so the table -- and not the server string -- decides what is shown.
+    expect(roleLabel(msg, 'Global admin')).toBe('CATALOGUE site admin');
+    expect(roleLabel(msg, 'Organizer')).toBe('CATALOGUE organizer');
+    // 'Moderator' is in the table; its message is absent from CATALOGUE above, so a naive
+    // implementation would render the bare key 'admin-shell-role-moderator'.
+    expect(roleLabel(msg, 'Moderator')).toBe('Moderator');
+  });
+
+  test('a role the table does not know keeps the server string rather than showing a key', () => {
+    // Same shape as moderationAction/roleLabel elsewhere: the server sends one string, so
+    // it is both the identifier to look up and the fallback when the table misses.
+    expect(roleLabel(msg, 'Some New Role')).toBe('Some New Role');
+    expect(roleLabel(msg, null)).toBe('');
+    // A prototype key must not reach msg() as a non-string.
+    expect(roleLabel(msg, 'constructor')).toBe('constructor');
   });
 
   test('an access-policy value is read from the catalogue, never printed raw', () => {

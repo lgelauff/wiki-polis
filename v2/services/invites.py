@@ -31,6 +31,7 @@ def _utc_iso(value) -> str:
 
 def build_invitation_roster(
     *, conversation: Conversation, self_link: str, conversation_link: str,
+    can_manage: bool,
 ) -> dict:
     rows = (
         ConversationInvite.query
@@ -55,7 +56,8 @@ def build_invitation_roster(
             # carry an id too. It says nothing about this consultation.
             'signedIn': row.mw_user_id is not None,
         } for row in rows],
-        'capabilities': {'manageInvitations': True},
+        # Organizers (and site admins) manage the list; a moderator only reads it.
+        'capabilities': {'manageInvitations': can_manage},
         'links': {'self': self_link, 'conversation': conversation_link},
     }
 

@@ -113,6 +113,15 @@ export async function putAdminRoles(
   }))).data;
 }
 
+/** Admin home (#538): the consultations the viewer holds a role in. Always refetched on
+ *  arrival (`staleTime: 0`): a role, status, delete or moderation elsewhere in the console
+ *  changes what it shows, and nothing invalidates it from there. */
+export const adminHomeQuery = () => queryOptions({
+  queryKey: ['admin-home'],
+  queryFn: async () => (await requireApiData(api.GET('/admin/home'))).data,
+  staleTime: 0,
+});
+
 export const adminCatalogQuery = () => queryOptions({
   queryKey: ['admin-catalog'],
   queryFn: async () => (await requireApiData(api.GET('/admin'))).data,
