@@ -138,7 +138,7 @@ def app(tmp_path):
             # exported them (#583); reminder tests set their own.
             'REMINDERS_BOT_EMAIL_USERNAME': '', 'REMINDERS_BOT_EMAIL_PASSWORD': '',
             'REMINDERS_BOT_TALK_USERNAME': '', 'REMINDERS_BOT_TALK_PASSWORD': '',
-            'REMINDERS_LIVE_WIKIS': [], 'REMINDERS_TEST_RECIPIENTS': [],
+            'REMINDERS_TEST_RECIPIENTS': [],
         })
     with a.app_context():
         db.create_all()
