@@ -38,7 +38,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from db import (ACCOUNT_KIND_VOUCHER, AdminRole, Argument,
+from db import (ACCOUNT_KIND_VOUCHER, ACCOUNT_KIND_WIKIMEDIA, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, Reminder, ReminderDelivery, StatementProvenance,
@@ -150,7 +150,8 @@ from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
                                     ReminderSettings, ReminderTestMessage,
                                     ReminderTestRefused, default_client_factory,
                                     login_settings, missing_login_parts, send_test_message)
-from services.reminder_batch import DryRunSender, ReminderNotFound, UnknownReminderWiki
+from services.reminder_batch import (BatchBusy, DryRunSender, ReminderNotFound,
+                                     UnknownReminderWiki, email_cap_from)
 from services.reminders import can_send_reminders
 from services.reminder_batch import run_batch as run_reminder_batch
 from services.wiki_bot import WIKI_HOSTS
@@ -6098,8 +6099,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     # The daily batch (#577): an emergency stop read at every run, and the wiki-mail
     # cap per day. Wikimedia allows an unflagged bot 20 a day, 5 until autoconfirmed.
     app.config['REMINDERS_PAUSED'] = _truthy(os.environ.get('REMINDERS_PAUSED', ''))
-    app.config['REMINDERS_EMAIL_DAILY_CAP'] = int(
-        os.environ.get('REMINDERS_EMAIL_DAILY_CAP', '') or 5)
+    app.config['REMINDERS_EMAIL_DAILY_CAP'] = email_cap_from(
+        os.environ.get('REMINDERS_EMAIL_DAILY_CAP', ''))
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -6323,54 +6324,87 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.cli.command('process-reminders')
     @click.option('--day', type=click.DateTime(formats=['%Y-%m-%d']), default=None,
-                  help='The UTC day to handle (default: today).')
+                  help='The UTC day to handle (default: today; never a later day).')
     @click.option('--reminder', 'reminder_id', type=int, default=None,
-                  help="A super admin's trigger: handle this one reminder now, on any wiki.")
+                  help="A super admin's trigger: handle this one reminder now, on any wiki. "
+                       'Needs --by.')
     @click.option('--by', 'by_username', default=None,
                   help='With --reminder: the super admin who triggers it (Wikimedia username).')
     def process_reminders_cmd(day, reminder_id, by_username):
-        """Handle one day's reminders (#577). Dry run: nothing is sent yet."""
+        """Handle one day's reminders (#577). Dry run: nothing is sent yet.
+
+        Exit codes: 0 done; 1 done, but a wiki was unknown or the bot was blocked;
+        2 refused, nothing changed; 3 the run broke off (see the log).
+        """
+        def refuse(text):
+            click.echo(text, err=True)
+            raise SystemExit(2)
+
         now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if day is not None and day.date() > now.date():
+            refuse('--day cannot be a later day than today (UTC).')
         triggered_by = None
-        if by_username is not None:
-            if reminder_id is None:
-                click.echo('--by needs --reminder.')
-                raise SystemExit(2)
-            triggered_by = Participant.query.filter_by(mw_username=by_username).first()
+        if reminder_id is not None:
+            if by_username is None:
+                refuse('--reminder needs --by: the super admin who triggers it.')
+            triggered_by = Participant.query.filter_by(
+                mw_username=by_username, account_kind=ACCOUNT_KIND_WIKIMEDIA).one_or_none()
             if not can_send_reminders(triggered_by, None, admin_usernames=ADMIN_USERS):
-                click.echo('--by must name a super admin.')
-                raise SystemExit(2)
+                refuse('--by must name a super admin.')
+        elif by_username is not None:
+            refuse('--by needs --reminder.')
+
+        def paused():
+            # Read at use, so a changed Toolforge setting stops even a running job.
+            return (_truthy(os.environ.get('REMINDERS_PAUSED', ''))
+                    or bool(current_app.config['REMINDERS_PAUSED']))
+
+        handled_day = (day or now).date()
         try:
             result = run_reminder_batch(
-                (day or now).date(), now=now, active_phases=_active_phases,
-                sender=DryRunSender(), email_cap=current_app.config['REMINDERS_EMAIL_DAILY_CAP'],
-                paused=current_app.config['REMINDERS_PAUSED'], reminder_id=reminder_id,
+                handled_day, now=now, active_phases=_active_phases, sender=DryRunSender(),
+                email_cap=current_app.config['REMINDERS_EMAIL_DAILY_CAP'], paused=paused,
+                reminder_id=reminder_id,
                 triggered_by_id=triggered_by.id if triggered_by else None,
             )
         except ReminderNotFound:
-            click.echo(f'No reminder {reminder_id}.')
-            raise SystemExit(2)
+            refuse(f'No reminder {reminder_id}.')
         except UnknownReminderWiki as exc:
-            click.echo(f'Reminder {reminder_id} is set to a wiki the bot does not know: {exc}.')
-            raise SystemExit(2)
+            refuse(f'Reminder {reminder_id} is set to a wiki the bot does not know: {exc}.')
+        except BatchBusy:
+            refuse('Another reminder run is in progress; nothing was handled.')
+        except Exception:
+            current_app.logger.exception('process-reminders broke off (day %s, reminder %s)',
+                                         handled_day, reminder_id)
+            click.echo('The reminder run broke off; see the log.', err=True)
+            raise SystemExit(3)
         if result.paused:
+            current_app.logger.warning('process-reminders: paused, nothing handled')
             click.echo('Reminders are paused (REMINDERS_PAUSED); nothing was handled.')
             return
-        counts = ', '.join(f'{channel} {status}: {n}'
-                           for (channel, status), n in sorted(result.counts.items()))
-        click.echo(f'Reminders handled: {result.reminders}; waiting for a super admin: '
-                   f'{result.waiting_for_trigger}; rows unlinked: {result.unlinked}.')
+
+        def ids(values):
+            return ', '.join(map(str, values)) or '-'
+        click.echo(f'Day {handled_day}. Reminders handled: {ids(result.due)}; waiting for a '
+                   f'super admin: {ids(result.waiting_for_trigger)}; missed and dropped as '
+                   f'expired: {ids(result.missed)}; rows unlinked: {result.unlinked}.')
+        for label, counts in (('This run', result.this_run), ('All rows', result.totals)):
+            if counts:
+                click.echo(f'{label}: ' + ', '.join(
+                    f'{channel} {status}: {n}' for (channel, status), n in sorted(counts.items()))
+                    + '.')
+        if result.stale_claims:
+            click.echo(f'Unsettled claims from an earlier run, recorded as outcome_unknown: '
+                       f'{result.stale_claims}.')
         if result.unknown_wiki:
             current_app.logger.error('reminders on a wiki the bot does not know: %s',
                                      result.unknown_wiki)
-            click.echo('Not handled, wiki unknown to the bot: reminder '
-                       + ', '.join(map(str, result.unknown_wiki)) + '.')
-        if counts:
-            click.echo(f'Deliveries: {counts}.')
+            click.echo(f'Not handled, wiki unknown to the bot: reminder {ids(result.unknown_wiki)}.',
+                       err=True)
         for channel, wiki in sorted(result.blocked_wikis):
             current_app.logger.error('reminder bot is blocked on %s; %s batch stopped there',
                                      wiki, channel)
-            click.echo(f'The bot is blocked on {wiki}: {channel} stopped there.')
+            click.echo(f'The bot is blocked on {wiki}: {channel} stopped there.', err=True)
         if result.unknown_wiki or result.blocked_wikis:
             raise SystemExit(1)            # the job's failure mail names the run; the log says why
 

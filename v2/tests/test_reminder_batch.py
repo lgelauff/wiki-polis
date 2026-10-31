@@ -68,6 +68,8 @@ def _remind(conv, *, kind=PHASE_OPENED, phase='submission', day=DAY):
 
 def _run(sender=None, *, cap=20, approved=APPROVED, phases=None, **kw):
     phases = phases or (lambda conv: {'submission'})
+    if kw.get('reminder_id') is not None:
+        kw.setdefault('triggered_by_id', 1)
     return run_batch(DAY, now=NOW, active_phases=phases, sender=sender or Recording(),
                      email_cap=cap, approved=approved, **kw)
 
@@ -85,7 +87,7 @@ def test_a_dry_run_records_every_recipient_and_calls_no_wiki(app):
     result = run_batch(DAY, now=NOW, active_phases=lambda c: {'submission'},
                        sender=DryRunSender(), email_cap=20, approved=APPROVED)
     assert _statuses(reminder) == [('email', 'dry_run'), ('email', 'dry_run'), ('talk', 'dry_run')]
-    assert result.counts[('email', 'dry_run')] == 2
+    assert result.totals[('email', 'dry_run')] == 2
     assert {row.sent_via for row in ReminderDelivery.query} == {'metawiki'}
 
 
@@ -104,7 +106,7 @@ def test_the_scheduled_run_waits_on_a_wiki_where_the_bot_is_not_approved(app):
     _remind(conv)
     sender = Recording()
     result = _run(sender, approved={'metawiki': '#582'})
-    assert result.waiting_for_trigger == 1 and result.reminders == 0
+    assert len(result.waiting_for_trigger) == 1 and result.due == []
     assert sender.calls == [] and ReminderDelivery.query.count() == 0
 
 
@@ -249,7 +251,7 @@ def test_a_blocked_bot_stops_that_wiki_only(app):
     result = _run(sender)
     assert [call['wiki'] for call in sender.calls].count('metawiki') == 1
     assert result.blocked_wikis == {('talk', 'metawiki')}
-    assert result.counts[('talk', 'failed')] == 3 and result.counts[('talk', 'dry_run')] == 1
+    assert result.totals[('talk', 'failed')] == 3 and result.totals[('talk', 'dry_run')] == 1
 
 
 # ── Retention ─────────────────────────────────────────────────────────────────
@@ -292,13 +294,14 @@ def test_rows_of_a_running_consultation_stay_linked(app):
 
 # ── Command ───────────────────────────────────────────────────────────────────
 
-def test_the_command_reports_counts_and_names_nobody(app, monkeypatch):
+def test_the_command_reports_counts_and_names_nobody(app, monkeypatch, admin_participant):
     conv = _conversation(phase_submission=True)
     person = _person()
     _join(conv, person)
     reminder = _remind(conv, day=datetime.now(timezone.utc).date())
     monkeypatch.setitem(app.config, 'REMINDERS_EMAIL_DAILY_CAP', 5)
-    result = app.test_cli_runner().invoke(args=['process-reminders', '--reminder', str(reminder.id)])
+    result = app.test_cli_runner().invoke(args=['process-reminders', '--reminder', str(reminder.id),
+                                                '--by', admin_participant.mw_username])
     assert result.exit_code == 0, result.output
     assert 'email dry_run: 1' in result.output
     assert person.mw_username not in result.output
@@ -343,7 +346,7 @@ def test_the_scheduled_run_reports_a_wiki_the_bot_does_not_know(app):
     reminder = _remind(conv)
     sender = Recording()
     result = _run(sender, approved={'enwiki': 'x'})
-    assert result.unknown_wiki == [reminder.id] and result.waiting_for_trigger == 0
+    assert result.unknown_wiki == [reminder.id] and result.waiting_for_trigger == []
     assert sender.calls == [] and ReminderDelivery.query.count() == 0
 
 
@@ -403,3 +406,238 @@ def test_the_command_refuses_by_for_someone_who_is_not_a_super_admin(app, partic
     result = app.test_cli_runner().invoke(args=[
         'process-reminders', '--reminder', str(reminder.id), '--by', participant.mw_username])
     assert result.exit_code == 2 and 'super admin' in result.output
+
+
+# ── Fixes from the B2 review ─────────────────────────────────────────────────
+
+from db import ConversationBan  # noqa: E402
+from services import reminder_batch  # noqa: E402
+from services.reminder_batch import TriggerNeedsSuperAdmin, email_cap_from  # noqa: E402
+
+
+def test_a_sender_that_raises_is_recorded_as_unknown_and_the_rest_still_goes(app):
+    conv = _conversation()
+    for _ in range(3):
+        _join(conv, _person())
+    reminder = _remind(conv)
+    calls = []
+
+    def answer(**kw):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError('boom')
+        return Outcome('dry_run', sent_via=kw['wiki'])
+    _run(Recording(answer))
+    assert sorted(s for _, s in _statuses(reminder)) == ['dry_run', 'dry_run', 'failed']
+    failed = ReminderDelivery.query.filter_by(status='failed').one()
+    assert failed.reason == 'outcome_unknown'
+
+
+def test_an_outcome_the_log_cannot_hold_is_recorded_as_unknown(app):
+    conv = _conversation()
+    _join(conv, _person())
+    reminder = _remind(conv)
+    _run(Recording(lambda **kw: Outcome('sent', reason='refused')))
+    row = ReminderDelivery.query.filter_by(reminder_id=reminder.id).one()
+    assert (row.status, row.reason) == ('failed', 'outcome_unknown')
+
+
+def test_a_claim_left_unsettled_by_a_dead_run_becomes_unknown_and_is_never_resent(app):
+    conv = _conversation()
+    joined = _join(conv, _person())
+    reminder = _remind(conv)
+    reminder.recorded_at = NOW
+    db.session.add(ReminderDelivery(reminder_id=reminder.id, participation_id=joined.id,
+                                    channel='email', claimed_at=NOW - timedelta(hours=1)))
+    db.session.commit()
+    sender = Recording()
+    result = _run(sender)
+    assert result.stale_claims == 1 and sender.calls == []
+    assert _statuses(reminder) == [('email', 'failed')]
+
+
+def test_a_trigger_needs_the_super_admin_who_triggers_it(app):
+    reminder = _remind(_conversation())
+    with pytest.raises(TriggerNeedsSuperAdmin):
+        run_batch(DAY, now=NOW, active_phases=lambda c: {'submission'}, sender=Recording(),
+                  email_cap=5, reminder_id=reminder.id)
+
+
+def test_the_first_trigger_is_kept_on_record(app):
+    conv = _conversation(wiki='nlwiki')
+    reminder = _remind(conv)
+    _run(approved={}, reminder_id=reminder.id, triggered_by_id=7)
+    run_batch(DAY, now=NOW + timedelta(hours=1), active_phases=lambda c: {'submission'},
+              sender=Recording(), email_cap=5, approved={}, reminder_id=reminder.id,
+              triggered_by_id=8)
+    db.session.refresh(reminder)
+    assert (reminder.triggered_by_id, reminder.triggered_at) == (7, NOW)
+
+
+def test_one_message_per_person_per_day_holds_across_runs(app):
+    person = _person()
+    first, second = _conversation(), _conversation(wiki='nlwiki')
+    _join(first, person)
+    _join(second, person)
+    _remind(first)
+    later = _remind(second)
+    _run(approved={'metawiki': '#582'})
+    sender = Recording()
+    _run(sender, approved={}, reminder_id=later.id)
+    assert sender.calls == [] and _statuses(later) == [('email', 'not_sent_limit')]
+
+
+def test_the_cap_counts_todays_mail_even_when_an_older_day_is_handled(app):
+    conv = _conversation()
+    for _ in range(2):
+        _join(conv, _person())
+    today = _remind(conv)
+    _run(cap=1)                                         # one mail goes out today
+    old = _remind(_conversation(), day=DAY - timedelta(days=1))
+    _join(old.conversation, _person())
+    sender = Recording()
+    run_batch(DAY - timedelta(days=1), now=NOW, active_phases=lambda c: {'submission'},
+              sender=sender, email_cap=1, approved=APPROVED)
+    assert sender.calls == [] and _statuses(old) == [('email', 'not_sent_limit')]
+    assert ('email', 'dry_run') in _statuses(today)
+
+
+def test_failed_mail_does_not_use_up_the_cap(app):
+    conv = _conversation()
+    for _ in range(3):
+        _join(conv, _person())
+    reminder = _remind(conv)
+    calls = []
+
+    def answer(**kw):
+        calls.append(1)
+        return (Outcome('failed', reason='not_emailable') if len(calls) == 1
+                else Outcome('dry_run', sent_via=kw['wiki']))
+    _run(Recording(answer), cap=2)
+    assert sorted(s for _, s in _statuses(reminder)) == ['dry_run', 'dry_run', 'failed']
+
+
+def test_the_other_rows_share_the_primarys_outcome_when_it_was_not_delivered(app):
+    person = _person()
+    one, two = _conversation(), _conversation()
+    _join(one, person)
+    _join(two, person)
+    first, second = _remind(one), _remind(two)
+    _run(Recording(lambda **kw: Outcome('skipped_optout')))
+    assert _statuses(first) == [('email', 'skipped_optout')]
+    assert _statuses(second) == [('email', 'skipped_optout')]
+
+
+def test_someone_banned_after_recording_is_not_messaged(app):
+    conv = _conversation()
+    joined = _join(conv, _person())
+    reminder = _remind(conv)
+    reminder_batch._record_deliveries(reminder, {'submission'}, NOW)
+    db.session.add(ConversationBan(conversation_id=conv.id, participant_id=joined.participant_id))
+    db.session.commit()
+    sender = Recording()
+    _run(sender)
+    assert sender.calls == [] and _statuses(reminder) == [('email', 'skipped_optout')]
+
+
+def test_a_reminder_that_expired_after_recording_is_not_sent(app):
+    conv = _conversation()
+    _join(conv, _person())
+    reminder = _remind(conv)
+    reminder_batch._record_deliveries(reminder, {'submission'}, NOW)
+    sender = Recording()
+    _run(sender, phases=lambda c: {'cleanup'})
+    assert sender.calls == [] and _statuses(reminder) == [('email', 'skipped_expired')]
+
+
+def test_a_missed_day_on_an_approved_wiki_is_dropped_as_expired(app):
+    conv = _conversation()
+    _join(conv, _person())
+    missed = _remind(conv, day=DAY - timedelta(days=2))
+    waiting = _remind(_conversation(wiki='nlwiki'), day=DAY - timedelta(days=2))
+    sender = Recording()
+    result = _run(sender, approved={'metawiki': '#582'})
+    assert result.missed == [missed.id] and waiting.id in result.waiting_for_trigger
+    assert sender.calls == [] and _statuses(missed) == [('email', 'skipped_expired')]
+    assert waiting.recorded_at is None
+
+
+def test_pausing_mid_run_stops_the_rest(app):
+    conv = _conversation()
+    for _ in range(3):
+        _join(conv, _person())
+    reminder = _remind(conv)
+    sender = Recording()
+    checks = []
+
+    def paused():
+        checks.append(1)
+        return len(sender.calls) >= 1 and len(checks) > 1
+    _run(sender, paused=paused)
+    assert len(sender.calls) == 1
+    assert [s for _, s in _statuses(reminder)].count('pending') == 2
+
+
+def test_retention_unlinks_waiting_rows_after_settling_them(app):
+    conv = _conversation(active=False)
+    reminder = _remind(conv)
+    free, claimed = _join(conv, _person()), _join(conv, _person())
+    db.session.add_all([
+        ReminderDelivery(reminder_id=reminder.id, participation_id=free.id, channel='email'),
+        ReminderDelivery(reminder_id=reminder.id, participation_id=claimed.id, channel='talk',
+                         claimed_at=NOW - timedelta(days=20)),
+    ])
+    db.session.commit()
+    assert unlink_ended(NOW) == 2
+    rows = {r.channel: r for r in ReminderDelivery.query}
+    assert rows['email'].status == 'skipped_expired'
+    assert (rows['talk'].status, rows['talk'].reason) == ('failed', 'outcome_unknown')
+    assert all(r.participation_id is None and r.claimed_at is None for r in rows.values())
+
+
+def test_the_retention_clock_counts_only_messages_that_went_out(app):
+    conv = _conversation(active=False)
+    row = _sent_row(conv, NOW - timedelta(days=15))
+    later = ReminderDelivery(reminder_id=row.reminder_id, participation_id=_join(conv, _person()).id,
+                             channel='talk', status='not_sent_limit',
+                             attempted_at=NOW - timedelta(days=1))
+    db.session.add(later)
+    db.session.commit()
+    assert unlink_ended(NOW) == 2
+
+
+@pytest.mark.parametrize('value, cap', [('', 5), ('7', 7), (' 3 ', 3), ('five', 5), ('-1', 5),
+                                        ('50', 20), ('0', 0)])
+def test_the_cap_setting_is_read_safely(value, cap):
+    assert email_cap_from(value) == cap
+
+
+def test_the_command_refuses_a_trigger_without_by(app):
+    reminder = _remind(_conversation())
+    result = app.test_cli_runner().invoke(args=['process-reminders', '--reminder', str(reminder.id)])
+    assert result.exit_code == 2 and '--by' in result.output
+
+
+def test_the_command_refuses_a_later_day(app):
+    result = app.test_cli_runner().invoke(args=['process-reminders', '--day', '2999-01-01'])
+    assert result.exit_code == 2
+
+
+def test_the_command_refuses_while_another_run_holds_the_lock(app, monkeypatch):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def busy():
+        raise reminder_batch.BatchBusy()
+        yield
+    monkeypatch.setattr(reminder_batch, 'single_flight', busy)
+    result = app.test_cli_runner().invoke(args=['process-reminders'])
+    assert result.exit_code == 2 and 'in progress' in result.output
+
+
+def test_a_run_that_breaks_off_exits_3(app, monkeypatch):
+    def broken(*a, **kw):
+        raise RuntimeError('db gone')
+    monkeypatch.setattr('app.run_reminder_batch', broken)
+    result = app.test_cli_runner().invoke(args=['process-reminders'])
+    assert result.exit_code == 3
