@@ -53,7 +53,4 @@ def test_featured_statement_with_tid_zero_keeps_its_explore_tallies(app, convers
                if s['text'].startswith('Shared technical'))
     assert row['p2'] is not None
     assert row['p2']['n_agree'] == 3 and row['p2']['n_voters'] == 12
-    assert row['p2']['pct_agree'] == 25
     assert row['shift'] == 50          # 75% agree in Phase 6 vs 25% in Explore
-    assert row in results['p2_consensus']
-    assert row in results['p2_divisive']

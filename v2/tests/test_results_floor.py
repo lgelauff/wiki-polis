@@ -31,7 +31,9 @@ def _results():
     return {
         'statements': [
             _row(1, (6, 2, 4), (8, 1, 3), shift=17),   # 12 and 12 responses
-            _row(2, (3, 2, 4), (5, 1, 2)),             # 9 and 8: below the floor
+            # 9 and 8: below the floor. The row's own shift is set on purpose: the report
+            # must not pass it through for a withheld tally.
+            _row(2, (3, 2, 4), (5, 1, 2), shift=40),
         ],
         'p2_participants': 30, 'p6_participants': 28, 'matched_participants': None,
         'filter': Phase6ResultsFilter.empty(),

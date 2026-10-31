@@ -17,8 +17,8 @@ type Statement = components['schemas']['ResultsReport']['statements'][number];
 function statement(id: number, viewerChoice: Statement['viewerChoice']): Statement {
   return {
     featuredStatementId: id, statement: `Statement ${id}`,
-    initial: {counts: {agree: 1, pass: 1, disagree: 1, voters: 3}, percentages: {agree: 33, pass: 33, disagree: 34}, belowFloor: false},
-    informed: {counts: {agree: 1, pass: 1, disagree: 1, voters: 3}, percentages: {agree: 33, pass: 33, disagree: 34}, belowFloor: false},
+    initial: {counts: {agree: 4, pass: 3, disagree: 3, voters: 10}, percentages: {agree: 40, pass: 30, disagree: 30}, belowFloor: false},
+    informed: {counts: {agree: 4, pass: 3, disagree: 3, voters: 10}, percentages: {agree: 40, pass: 30, disagree: 30}, belowFloor: false},
     agreementShift: 0, viewerChoice, viewerGroupChoice: null, viewerMatchesGroup: null, personalDelta: null,
   };
 }
@@ -28,7 +28,7 @@ function serveResults(statements: Statement[]) {
     slug: 'community-strategy', title: 'Community strategy', publication: 'preliminary', resultsAvailable: true,
     openedAt: '2026-05-01T12:00:00Z', closedAt: null,
     context: {phase: 'Informed vote', status: 'provisional', method: 'Live comparison.'},
-    participation: {initialRound: null, informedRound: 3, matchedRounds: null},
+    participation: {initialRound: null, informedRound: 10, matchedRounds: null},
     dataAvailability: {detailedCounts: true, opinionGroups: false, personalLens: false, responseFloor: 10},
     moderation: {excludedStatements: 0, excludedParticipants: 0},
     statements,
@@ -101,4 +101,14 @@ test('under nl, the whole percentages from the server are written the Dutch way'
   expect(screen.getAllByText('63% eens · 13% overgeslagen')).toHaveLength(2);
   expect(screen.getAllByTitle('Eens 63% · Oneens 25% · Overgeslagen 13%')).toHaveLength(2);
   expect(screen.queryByText('-3%')).not.toBeInTheDocument();
+});
+
+test('when every statement is still below the floor, the panel says so instead of "no results"', async () => {
+  const withheld = {counts: null, percentages: null, belowFloor: true};
+  serveResults([{...statement(1, null), informed: withheld}, {...statement(2, null), informed: withheld}]);
+  renderPanel();
+
+  expect(await screen.findByText('fewer than 10 responses')).toBeVisible();
+  expect(screen.queryByText('No informed-vote results are available yet.')).toBeNull();
+  expect(document.querySelector('.p6-vote-bar')).toBeNull();
 });

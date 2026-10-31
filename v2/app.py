@@ -875,11 +875,6 @@ class Phase6ResultsFilter:
         )
 
 
-def _pct(n: int, total: int) -> int:
-    """Whole percent, rounded half up once (services.reporting_rules); 0 for no responses."""
-    return reporting_rules.percent(n, total) or 0
-
-
 # ── Phase 6 results aggregate cache ───────────────────────────────────────────
 # The results / report surfaces recompute ~5 Postgres + Particiapi round trips per
 # view, and the aggregate is identical for every viewer. Memoise the fetched
@@ -978,8 +973,9 @@ def _build_phase6_results(
       {
         'statements': [{
           'text', 'fs_id',
-          'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
-          'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
+          'p2': {n_agree, n_disagree, n_pass, n_voters} | None,   # exact counts, unfloored:
+          'p6': {n_agree, n_disagree, n_pass, n_voters},          #   never serve them as they are;
+                                     #   services.results_report applies the reporting rules
           'shift': int | None,       # aggregate: P6 minus P2 agree share in whole points, None
                                      #   below the floor in either round (population comparison,
                                      #   NOT individual-level delta — see 'matched_participants')
@@ -989,8 +985,6 @@ def _build_phase6_results(
         'p6_participants': int | None,
         'p2_participants': int | None,
         'matched_participants': None,  # Report-only matched-round aggregate; not computed here.
-        'p2_consensus': list,   # top-3 statements by Phase 2 agree rate (population consensus)
-        'p2_divisive':  list,   # top-3 statements by balanced agree/disagree split (most divisive)
         'filter': Phase6ResultsFilter,
         'source_divergence': float | None,  # abs diff between PG count and Particiapi count
         'is_preliminary': bool,   # True while conversation is still active
@@ -1106,33 +1100,18 @@ def _build_phase6_results(
         p6_row = (p6_counts or {}).get(p6_tid, {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0})
         p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid is not None else None
 
-        p6_n = p6_row['n_voters']
-        p6_pct_agree    = _pct(p6_row['n_agree'],    p6_n)
-        p6_pct_disagree = _pct(p6_row['n_disagree'], p6_n)
-        p6_pct_pass     = _pct(p6_row['n_pass'],     p6_n)
-
-        p2_pct_agree = p2_pct_disagree = p2_pct_pass = None
-        if p2_row:
-            p2_n = p2_row['n_voters']
-            p2_pct_agree    = _pct(p2_row['n_agree'],    p2_n)
-            p2_pct_disagree = _pct(p2_row['n_disagree'], p2_n)
-            p2_pct_pass     = _pct(p2_row['n_pass'],     p2_n)
-
         # From the exact shares, rounded once; withheld unless both rounds pass the floor.
         shift = (
             reporting_rules.shift(
-                p2_row['n_agree'], p2_row['n_voters'], p6_row['n_agree'], p6_n,
+                p2_row['n_agree'], p2_row['n_voters'], p6_row['n_agree'], p6_row['n_voters'],
             ) if p2_row else None
         )
 
         statements.append({
             'text':        fs.statement_text,
             'fs_id':       fs.id,
-            'p6': {**p6_row, 'pct_agree': p6_pct_agree,
-                   'pct_disagree': p6_pct_disagree, 'pct_pass': p6_pct_pass},
-            'p2': ({**p2_row, 'pct_agree': p2_pct_agree,
-                    'pct_disagree': p2_pct_disagree, 'pct_pass': p2_pct_pass}
-                   if p2_row else None),
+            'p6': dict(p6_row),
+            'p2': dict(p2_row) if p2_row else None,
             'shift':       shift,
             'my_p2_vote':  my_p2_votes.get(p2_tid),
             'my_p6_vote': my_p6_votes.get(p6_tid),
@@ -1146,22 +1125,12 @@ def _build_phase6_results(
         # Preliminary output is single-round; its order must not encode P2-to-P6 deltas.
         statements.sort(key=lambda s: s['fs_id'])
 
-    # Phase 2 consensus / divisiveness derived from the same data.
-    p2_with_data = [s for s in statements if s['p2'] is not None and s['p2']['n_voters'] > 0]
-    p2_consensus = sorted(p2_with_data,
-                          key=lambda s: s['p2']['pct_agree'] or 0, reverse=True)[:3]
-    # Most divisive = smallest gap between agree and disagree (most 50/50 split).
-    p2_divisive  = sorted(p2_with_data,
-                          key=lambda s: abs((s['p2']['pct_agree'] or 0) - (s['p2']['pct_disagree'] or 0)))[:3]
-
     return {
         'statements':            statements,
         'p6_participants':       p6_total_participants,
         'p2_participants':       p2_total_participants,
         'matched_participants': None,  # report-only aggregate, not computed in this slice.
         'personal_lens_available': personal_lens_available,
-        'p2_consensus':          p2_consensus,
-        'p2_divisive':           p2_divisive,
         'filter':                filt,
         'source_divergence':     source_divergence,
         'is_preliminary':        bool(conv.active),

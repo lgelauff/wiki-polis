@@ -1,7 +1,8 @@
 """The reporting rules for opinion numbers, enforced on the server (#233).
 
 Every opinion number the app serves goes through here, so a payload never carries more
-than its page shows and the client receives values, never thresholds. Decided by the
+than its page shows and the client never applies a floor itself; it gets the floor value
+only to print "fewer than N". Decided by the
 owner on 2026-10-30/31 (DECISIONS.md, D1-D10); the names match polis_report and
 METHODOLOGY, although polis_report keeps its own rule (exact counts).
 
@@ -14,7 +15,8 @@ METHODOLOGY, although polis_report keeps its own rule (exact counts).
   complementary suppression. No app surface prints a count in such a cell today; the first
   one (#228/#229) adds it here.
 
-Percentages are whole numbers, rounded half up once, from integers.
+Percentages are whole numbers, rounded once, from integers, with halves rounded away from
+zero: 12.5 -> 13 and -12.5 -> -13, so a fall and a rise of the same size look the same.
 
 Named exception: the moderation Statements page shows exact agree/pass/disagree counts
 (owner, 2026-10-30, D6); see ``services.admin_statements``.
@@ -54,7 +56,7 @@ def _round_half_away(value: Fraction) -> int:
 
 
 def percent(n: int, base: int) -> int | None:
-    """``n`` of ``base`` as a whole percent, rounded half up once. None for an empty base."""
+    """``n`` of ``base`` as a whole percent, rounded once (halves up). None for an empty base."""
     if base <= 0:
         return None
     return _round_half_away(Fraction(100 * int(n), int(base)))

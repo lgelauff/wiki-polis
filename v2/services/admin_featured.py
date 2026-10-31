@@ -99,7 +99,7 @@ def build_featured_workspace(
         )
         # Below the floor the split is withheld too, not only the share: the counts would
         # give the share straight back (owner, 2026-10-30, D6). Total responses stay.
-        split = agree + disagree >= max(1, agreement_floor)
+        split = percent is not None
         projected_candidates.append({
             'statementId': int(row['tid']),
             'text': str(row.get('text') or ''),

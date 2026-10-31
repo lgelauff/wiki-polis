@@ -17,11 +17,9 @@ def _results(*, pg_available=True):
             'text': 'Communities should share infrastructure.',
             'p2': {
                 'n_agree': 12, 'n_pass': 3, 'n_disagree': 5, 'n_voters': 20,
-                'pct_agree': 60.0, 'pct_pass': 15.0, 'pct_disagree': 25.0,
             },
             'p6': {
                 'n_agree': 14, 'n_pass': 4, 'n_disagree': 2, 'n_voters': 20,
-                'pct_agree': 70.0, 'pct_pass': 20.0, 'pct_disagree': 10.0,
             },
             'shift': 10.0,
             'my_p6_vote': -1,          # raw Polis value: -1 = Agree
@@ -553,7 +551,7 @@ def test_preliminary_results_order_does_not_depend_on_cross_round_shift(
 
     # Identical informed tallies must not let different P2→P6 shifts choose which
     # statements survive the public top-three tie cutoff.
-    assert len({row['p6']['pct_agree'] for row in results['statements']}) == 1
+    assert len({row['p6']['n_agree'] for row in results['statements']}) == 1
     assert len({row['shift'] for row in results['statements']}) == 4
     assert [row['featuredStatementId'] for row in data['statements']] == [
         row.id for row in featured

@@ -17,6 +17,18 @@ def _tally(value: dict | None, *, exact_counts: bool) -> dict | None:
     return reporting_rules.tally(value, exact_counts=exact_counts)
 
 
+def _agreement_shift(row: dict) -> int | None:
+    """The P2 -> P6 shift, from the counts here rather than trusted from the row: withheld
+    unless both rounds pass the floor, so it never outlives a withheld tally."""
+    initial, informed = row.get('p2'), row.get('p6')
+    if not initial or not informed:
+        return None
+    return reporting_rules.shift(
+        int(initial.get('n_agree') or 0), int(initial.get('n_voters') or 0),
+        int(informed.get('n_agree') or 0), int(informed.get('n_voters') or 0),
+    )
+
+
 def _choice(vote: int | None) -> str | None:
     """The viewer's own vote as a stable identifier, from the raw Polis value.
 
@@ -126,7 +138,7 @@ def build_results_report(
                 if detailed and report_shape else None
             ),
             'informed': _tally(row.get('p6'), exact_counts=full_view) if detailed else None,
-            'agreementShift': row.get('shift') if detailed and report_shape else None,
+            'agreementShift': _agreement_shift(row) if detailed and report_shape else None,
             # A participant's own round delta and group comparison stay private and live.
             'viewerChoice': viewer_choice,
             'viewerGroupChoice': group_choice,
