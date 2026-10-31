@@ -9,6 +9,9 @@ settings: the wiki reminders go out from (Meta unless a super admin picks anothe
 and whether a talk-page note names the consultation (off). Nothing is sent yet.
 Totals are counts over the deliveries; a delivery unlinked from its person keeps
 counting.
+
+Rollback: the change is additive, so rolling back the code needs no downgrade. A
+downgrade drops both tables with their rows, totals included; dump them first.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -21,7 +24,8 @@ depends_on = None
 
 _STATUSES = ('pending', 'sent', 'dry_run', 'combined', 'skipped_expired',
              'skipped_optout', 'not_sent_limit', 'failed')
-_REASONS = ('not_emailable', 'refused', 'nobots', 'throttled', 'blocked', 'api_error')
+_REASONS = ('not_emailable', 'refused', 'nobots', 'throttled', 'blocked', 'lagged',
+            'outcome_unknown', 'api_error')
 
 
 def _in_list(column, values):
@@ -40,13 +44,19 @@ def upgrade():
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('conversation_id', sa.Integer(), nullable=False),
         sa.Column('reminder_type', sa.String(length=32), nullable=False),
-        sa.Column('phase_key', sa.String(length=32), nullable=True),
+        sa.Column('phase_key', sa.String(length=32), nullable=False, server_default=''),
         sa.Column('send_day', sa.Date(), nullable=False),
         sa.Column('created_by_id', sa.Integer(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('triggered_by_id', sa.Integer(), nullable=True),
+        sa.Column('triggered_at', sa.DateTime(), nullable=True),
+        sa.Column('recorded_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['conversation_id'], ['conversations.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['created_by_id'], ['participants.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['triggered_by_id'], ['participants.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('conversation_id', 'reminder_type', 'phase_key', 'send_day',
+                            name='uq_reminder_moment'),
     )
     op.create_index('ix_reminders_conversation_id', 'reminders', ['conversation_id'])
     op.create_index('ix_reminders_send_day', 'reminders', ['send_day'])
@@ -75,6 +85,8 @@ def upgrade():
             "OR (status <> 'failed' AND reason IS NULL)",
             name='ck_reminder_delivery_reason',
         ),
+        sa.CheckConstraint("error_code IS NULL OR status = 'failed'",
+                           name='ck_reminder_delivery_error_code'),
     )
     op.create_index('ix_reminder_deliveries_status', 'reminder_deliveries', ['status'])
     op.create_index('ix_reminder_deliveries_participation_id', 'reminder_deliveries',
@@ -82,11 +94,9 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index('ix_reminder_deliveries_participation_id', table_name='reminder_deliveries')
-    op.drop_index('ix_reminder_deliveries_status', table_name='reminder_deliveries')
+    # drop_table removes each table's own indexes. Dropping an index first would fail on
+    # MariaDB where it backs a foreign key (error 1553).
     op.drop_table('reminder_deliveries')
-    op.drop_index('ix_reminders_send_day', table_name='reminders')
-    op.drop_index('ix_reminders_conversation_id', table_name='reminders')
     op.drop_table('reminders')
     with op.batch_alter_table('conversations') as batch:
         batch.drop_column('reminder_talk_names_consultation')

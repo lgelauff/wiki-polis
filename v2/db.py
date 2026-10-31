@@ -615,8 +615,10 @@ REMINDER_DELIVERY_STATUSES = (
     'pending', 'sent', 'dry_run', 'combined', 'skipped_expired', 'skipped_optout',
     'not_sent_limit', 'failed',
 )
+# Every reason the bot client (services/wiki_bot.py) can raise is one of these.
 REMINDER_FAILURE_REASONS = (
-    'not_emailable', 'refused', 'nobots', 'throttled', 'blocked', 'api_error',
+    'not_emailable', 'refused', 'nobots', 'throttled', 'blocked', 'lagged', 'outcome_unknown',
+    'api_error',
 )
 
 
@@ -625,24 +627,38 @@ def _in_list(column: str, values: tuple[str, ...]) -> str:
 
 
 class Reminder(db.Model):
+    # One reminder per moment: the same type and phase for one consultation on one
+    # day is sent once (owner, 2026-10-31).
     __tablename__ = 'reminders'
+    __table_args__ = (
+        db.UniqueConstraint('conversation_id', 'reminder_type', 'phase_key', 'send_day',
+                            name='uq_reminder_moment'),
+    )
 
     id              = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
                                 nullable=False)
     # A string, not a check constraint, so a new type needs no migration.
     reminder_type   = db.Column(db.String(32), nullable=False)
-    # The phase the reminder is about (opened, closing soon); empty for the final message.
-    phase_key       = db.Column(db.String(32), nullable=True)
+    # The phase the reminder is about (opened, closing soon); '' for the final message,
+    # not NULL, so the one-per-moment key covers it too.
+    phase_key       = db.Column(db.String(32), nullable=False, default='', server_default='')
     send_day        = db.Column(db.Date, nullable=False)
     created_by_id   = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'),
                                 nullable=True)
     created_at      = db.Column(db.DateTime, nullable=False,
                                 default=lambda: datetime.now(timezone.utc))
+    # A super admin's trigger on a wiki where the bot is not approved (#576).
+    triggered_by_id = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'),
+                                nullable=True)
+    triggered_at    = db.Column(db.DateTime, nullable=True)
+    # Set when the batch recorded this reminder's deliveries; a recorded reminder is
+    # never recorded again, even after its rows were unlinked from their people.
+    recorded_at     = db.Column(db.DateTime, nullable=True)
 
     conversation = db.relationship('Conversation')
     deliveries   = db.relationship('ReminderDelivery', back_populates='reminder',
-                                   cascade='all, delete-orphan')
+                                   cascade='all, delete-orphan', passive_deletes=True)
 
 
 class ReminderDelivery(db.Model):
@@ -659,6 +675,9 @@ class ReminderDelivery(db.Model):
             "OR (status <> 'failed' AND reason IS NULL)",
             name='ck_reminder_delivery_reason',
         ),
+        # The wiki's own error code is kept only on a failure.
+        db.CheckConstraint("error_code IS NULL OR status = 'failed'",
+                           name='ck_reminder_delivery_error_code'),
     )
 
     id               = db.Column(db.Integer, primary_key=True)
