@@ -7,6 +7,11 @@ same footer: why the person gets it, who sends it, and how to stop it.
 A talk page is public. A consultation is named on a talk page only when its
 ``reminder_talk_names_consultation`` setting is on; otherwise the note says "a
 Proto consultation" and links to Proto's front page, not to the consultation.
+On a talk page the organizer-written title is shown as plain text, never as
+wikitext.
+
+One message is in one language: the consultations' language when they all
+share it and the reminder texts exist in it, otherwise English.
 """
 
 from dataclasses import dataclass
@@ -34,8 +39,22 @@ class MessageSettings:
 
 
 def _locale(reminders) -> str:
-    language = (reminders[0].conversation.language or i18n.SOURCE_LOCALE).split('-')[0]
-    return language if i18n.has_locale(language) else i18n.SOURCE_LOCALE
+    languages = {(r.conversation.language or i18n.SOURCE_LOCALE).split('-')[0] for r in reminders}
+    if len(languages) == 1:
+        language = languages.pop()
+        if i18n.has_message('reminder-mail-footer', language):
+            return language
+    return i18n.SOURCE_LOCALE
+
+
+def _plain_wikitext(text: str) -> str:
+    """Organizer-written text shown literally in wikitext: one line, inside <nowiki>."""
+    flat = ' '.join(str(text).split())
+    return '<nowiki>' + flat.replace('</nowiki', '&lt;/nowiki') + '</nowiki>'
+
+
+def _consultations(reminders) -> int:
+    return len({r.conversation.id for r in reminders})
 
 
 def _link(settings: MessageSettings, conversation) -> str:
@@ -46,18 +65,19 @@ def _phase(reminder, locale: str) -> str:
     return i18n.resolve(f'phase-label-{reminder.phase_key}', locale)
 
 
-def _item(reminder, settings, locale, *, named: bool) -> str:
+def _item(reminder, settings, locale, *, named: bool, wikitext: bool = False) -> str:
     kind = reminder.reminder_type
     if kind not in _TYPES:
         raise ValueError(f'unknown reminder type: {kind}')
     conv = reminder.conversation
+    title = _plain_wikitext(conv.title) if wikitext else conv.title
     if not named:
         params = () if kind == RESULTS else (_phase(reminder, locale),)
         return i18n.resolve(f'reminder-item-unnamed-{kind}', locale, params)
     if kind == RESULTS:
-        return i18n.resolve('reminder-item-results', locale, (conv.title, _link(settings, conv)))
+        return i18n.resolve('reminder-item-results', locale, (title, _link(settings, conv)))
     return i18n.resolve(f'reminder-item-{kind}', locale,
-                        (conv.title, _phase(reminder, locale), _link(settings, conv)))
+                        (title, _phase(reminder, locale), _link(settings, conv)))
 
 
 def _user_page_url(username: str) -> str:
@@ -77,7 +97,7 @@ def build_email(reminders, settings: MessageSettings) -> ReminderMessage:
         subject = i18n.resolve('reminder-mail-subject-combined', locale, (len(reminders),))
     items = [_item(r, settings, locale, named=True) for r in reminders]
     footer = i18n.resolve('reminder-mail-footer', locale, (
-        len(reminders), _user_page_url(settings.operator), _user_page_url(BOT_ACCOUNT).replace(
+        _consultations(reminders), _user_page_url(settings.operator), _user_page_url(BOT_ACCOUNT).replace(
             '/wiki/User:', '/wiki/User_talk:'),
     ))
     body = '\n\n'.join(items + ['--', footer])
@@ -90,13 +110,13 @@ def build_talk(reminders, settings: MessageSettings) -> ReminderMessage:
         raise ValueError('no reminders')
     locale = _locale(reminders)
     named = [r.conversation.reminder_talk_names_consultation for r in reminders]
-    items = [_item(r, settings, locale, named=n) for r, n in zip(reminders, named)]
+    items = [_item(r, settings, locale, named=n, wikitext=True) for r, n in zip(reminders, named)]
     if not all(named):
         items.append(i18n.resolve('reminder-talk-see-proto', locale,
                                   (settings.base_url.rstrip('/'),)))
     footer = i18n.resolve('reminder-talk-footer-named' if all(named) else
                           'reminder-talk-footer-unnamed', locale,
-                          (len(reminders), settings.operator))
+                          (_consultations(reminders), settings.operator))
     title = i18n.resolve('reminder-talk-title', locale, (len(reminders),))
     body = '\n\n'.join([f'* {item}' for item in items] + [f"''{footer}''"])
     summary = i18n.resolve('reminder-talk-summary', locale)

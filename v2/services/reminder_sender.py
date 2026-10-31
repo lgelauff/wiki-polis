@@ -14,7 +14,12 @@ Per message:
   the wiki's MassMessage opt-out category (``nobots``). Posts on one wiki are
   spaced by that wiki's interval (services/reminder_wikis.py).
 - Any other failure keeps the client's reason (``blocked``, ``throttled``,
-  ``lagged``, ``outcome_unknown``, ``api_error``) and the wiki's code.
+  ``lagged``, ``outcome_unknown``, ``api_error``), the wiki's code, and which
+  wiki answered (``sent_via``), so a block on Meta stops Meta.
+- Special:Mute is private, so it can only stop wiki-mail (the wiki refuses the
+  mail); on a talk page the opt-outs are {{nobots}}/{{bots}} and the category.
+
+Use it as a context manager, so every client it opened is closed.
 
 It never logs a username or message text.
 """
@@ -43,6 +48,12 @@ class LiveSender:
         self._clients: dict[tuple[str, str], object] = {}
         self._last_post: dict[str, float] = {}
 
+    def __enter__(self) -> 'LiveSender':
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
     def close(self) -> None:
         for client in self._clients.values():
             close = getattr(client, 'close', None)
@@ -58,38 +69,45 @@ class LiveSender:
 
     def send(self, *, channel, wiki, participation, reminders) -> Outcome:
         username = participation.participant.mw_username
+        # Built first: a text that cannot be built fails before any wiki is asked.
+        try:
+            message = (build_email if channel == 'email' else build_talk)(reminders, self._messages)
+        except ValueError:
+            return Outcome('failed', reason='api_error', error_code='bad_message')
+        answering = wiki
         try:
             if channel == 'email':
-                return self._email(wiki, username, reminders)
-            return self._talk(wiki, username, reminders)
+                client = self._client(wiki, 'email')
+                answering = client.wiki
+                if not client.is_emailable(username):
+                    if wiki == FALLBACK_WIKI:
+                        return Outcome('failed', reason=NOT_EMAILABLE, sent_via=wiki)
+                    client = self._client(FALLBACK_WIKI, 'email')
+                    answering = client.wiki
+                    if not client.is_emailable(username):
+                        return Outcome('failed', reason=NOT_EMAILABLE, sent_via=answering)
+                return self._email(client, username, message)
+            return self._talk(wiki, username, message)
         except WikiBotError as exc:
-            return Outcome('failed', reason=exc.reason, error_code=exc.code)
+            return Outcome('failed', reason=exc.reason, error_code=exc.code, sent_via=answering)
 
-    def _email(self, wiki, username, reminders) -> Outcome:
-        client = self._client(wiki, 'email')
-        if not client.is_emailable(username):
-            if wiki == FALLBACK_WIKI:
-                return Outcome('failed', reason=NOT_EMAILABLE)
-            client = self._client(FALLBACK_WIKI, 'email')
-            if not client.is_emailable(username):
-                return Outcome('failed', reason=NOT_EMAILABLE)
-        message = build_email(reminders, self._messages)
+    def _email(self, client, username, message) -> Outcome:
         try:
             client.send_email(username, subject=message.subject, text=message.body)
         except WikiBotError as exc:
             if exc.reason == NOT_EMAILABLE:
                 # The check said yes and the wiki said no: the person muted the bot or
                 # refuses mail from new accounts. The wiki does not say which.
-                return Outcome('failed', reason='refused', error_code=exc.code)
+                return Outcome('failed', reason='refused', error_code=exc.code,
+                               sent_via=client.wiki)
             raise
         return Outcome('sent', sent_via=client.wiki)
 
-    def _talk(self, wiki, username, reminders) -> Outcome:
+    def _talk(self, wiki, username, message) -> Outcome:
         client = self._client(wiki, 'talk')
         if not client.talk_page_allows_bot(username) or client.talk_page_opted_out(username):
-            return Outcome('failed', reason=NOBOTS)
+            return Outcome('failed', reason=NOBOTS, sent_via=wiki)
         self._wait_for_turn(wiki)
-        message = build_talk(reminders, self._messages)
         try:
             client.post_talk_section(username, title=message.subject,
                                      text=f'{message.body} ~~~~', summary=message.summary)

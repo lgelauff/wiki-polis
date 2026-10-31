@@ -609,6 +609,11 @@ def qqx_message(key: str, english: str) -> str:
     return _qqx(key, tuple(f'${n}' for n in range(1, count + 1)))
 
 
+def has_message(key: str, locale: str) -> bool:
+    """Whether ``locale`` has its own text for ``key`` (no English fallback)."""
+    return key in _MESSAGES.get(locale, {})
+
+
 def resolve(key: str, locale: str = SOURCE_LOCALE, params=()) -> str:
     """Resolve ``key`` to text in ``locale``.
 

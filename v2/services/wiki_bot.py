@@ -247,8 +247,11 @@ class WikiBotClient:
         "Opted-out of message delivery" and may be localised.
         """
         if self._optout_category is None:
+            # In the wiki's content language, whatever language a logged-in bot reads in.
+            site = self._call('GET', {'action': 'query', 'meta': 'siteinfo', 'siprop': 'general'})
+            language = ((site.get('query') or {}).get('general') or {}).get('lang') or 'en'
             payload = self._call('GET', {
-                'action': 'query', 'meta': 'allmessages',
+                'action': 'query', 'meta': 'allmessages', 'amlang': language,
                 'ammessages': 'massmessage-optout-category', 'amenableparser': '1',
             })
             messages = (payload.get('query') or {}).get('allmessages') or [{}]

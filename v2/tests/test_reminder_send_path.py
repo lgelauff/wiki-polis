@@ -21,14 +21,17 @@ SETTINGS = MessageSettings(base_url='https://proto.example/', operator='Some Ope
 EN = json.loads((Path(__file__).parents[1] / 'i18n' / 'en.json').read_text(encoding='utf-8'))
 
 
-def _conv(title='Library hours', slug='library-hours', named=False, language='en'):
-    return SimpleNamespace(title=title, slug=slug, language=language,
+_ids = iter(range(1, 10_000))
+
+
+def _conv(title='Library hours', slug='library-hours', named=False, language='en', id=None):
+    return SimpleNamespace(id=id or next(_ids), title=title, slug=slug, language=language,
                            reminder_talk_names_consultation=named)
 
 
-def _rem(kind=PHASE_OPENED, phase='submission', **conv):
+def _rem(kind=PHASE_OPENED, phase='submission', conversation=None, **conv):
     return SimpleNamespace(reminder_type=kind, phase_key='' if kind == RESULTS else phase,
-                           send_day=date(2026, 11, 2), conversation=_conv(**conv))
+                           send_day=date(2026, 11, 2), conversation=conversation or _conv(**conv))
 
 
 # ── Texts ─────────────────────────────────────────────────────────────────────
@@ -154,14 +157,15 @@ def test_mail_falls_back_to_meta(app):
 def test_mail_that_neither_wiki_can_deliver_is_not_emailable(app):
     sender, _ = _sender({('nlwiki', 'email'): FakeClient('nlwiki', emailable=False),
                          ('metawiki', 'email'): FakeClient('metawiki', emailable=False)})
-    assert _send(sender, 'email') == Outcome('failed', reason=NOT_EMAILABLE)
+    assert _send(sender, 'email') == Outcome('failed', reason=NOT_EMAILABLE, sent_via='metawiki')
 
 
 def test_a_refusal_after_a_passing_check_is_refused_and_not_retried_from_meta(app):
     nl = FakeClient('nlwiki', fail=WikiBotError(NOT_EMAILABLE, 'nowikiemail'))
     meta = FakeClient('metawiki')
     sender, made = _sender({('nlwiki', 'email'): nl, ('metawiki', 'email'): meta})
-    assert _send(sender, 'email') == Outcome('failed', reason='refused', error_code='nowikiemail')
+    assert _send(sender, 'email') == Outcome('failed', reason='refused', error_code='nowikiemail',
+                                             sent_via='nlwiki')
     assert ('metawiki', 'email') not in made
 
 
@@ -172,14 +176,15 @@ def test_a_refusal_after_a_passing_check_is_refused_and_not_retried_from_meta(ap
 @pytest.mark.parametrize('channel', ['email', 'talk'])
 def test_other_failures_keep_the_clients_reason_and_code(app, error, channel):
     sender, _ = _sender({('nlwiki', channel): FakeClient('nlwiki', fail=error)})
-    assert _send(sender, channel) == Outcome('failed', reason=error.reason, error_code=error.code)
+    assert _send(sender, channel) == Outcome('failed', reason=error.reason, error_code=error.code,
+                                             sent_via='nlwiki')
 
 
 @pytest.mark.parametrize('fields', [{'allows': False}, {'opted_out': True}])
 def test_a_talk_page_that_keeps_bots_out_or_opted_out_gets_no_post(app, fields):
     talk = FakeClient('nlwiki', **fields)
     sender, _ = _sender({('nlwiki', 'talk'): talk})
-    assert _send(sender, 'talk') == Outcome('failed', reason='nobots')
+    assert _send(sender, 'talk') == Outcome('failed', reason='nobots', sent_via='nlwiki')
     assert talk.posts == []
 
 
@@ -231,7 +236,10 @@ def _client(answer):
 
 def test_the_opt_out_category_is_the_wikis_own_and_read_once():
     def answer(method, params):
+        if params.get('meta') == 'siteinfo':
+            return {'query': {'general': {'lang': 'nl'}}}
         if params.get('meta') == 'allmessages':
+            assert params['amlang'] == 'nl'
             return {'query': {'allmessages': [{'content': 'Geen berichten'}]}}
         assert params['clcategories'] == 'Category:Geen berichten'
         return {'query': {'pages': [{'categories': [{'title': 'Categorie:Geen berichten'}]}]}}
@@ -243,9 +251,98 @@ def test_the_opt_out_category_is_the_wikis_own_and_read_once():
 
 def test_the_default_category_is_used_when_the_wiki_has_none():
     def answer(method, params):
+        if params.get('meta') == 'siteinfo':
+            return {'query': {'general': {'lang': 'en'}}}
         if params.get('meta') == 'allmessages':
             return {'query': {'allmessages': [{'missing': True}]}}
         assert params['clcategories'] == 'Category:Opted-out of message delivery'
         return {'query': {'pages': [{}]}}
     client, _ = _client(answer)
     assert client.talk_page_opted_out('Tester') is False
+
+
+# ── Fixes from the B3 review ─────────────────────────────────────────────────
+
+HOSTILE = "{{subst:x}} [[Category:y]] [[User:Z]] ~~~~ <!-- '' </nowiki>\n== h =="
+
+
+def test_an_organizer_title_is_plain_text_on_a_talk_page(app):
+    body = build_talk([_rem(named=True, title=HOSTILE)], SETTINGS).body
+    inner = body.split('<nowiki>', 1)[1].split('</nowiki>', 1)[0]
+    outside = body.replace('<nowiki>' + inner + '</nowiki>', '')
+    assert 'Category:y' in inner and '\n' not in inner
+    for live in ('{{subst', '[[Category', '[[User:Z', '~~~~', '<!--', '== h'):
+        assert live not in outside
+    assert body.count('</nowiki>') == 1
+
+
+def test_a_mail_keeps_the_title_as_written(app):
+    assert 'Library hours' in build_email([_rem()], SETTINGS).subject
+    assert '<nowiki>' not in build_email([_rem()], SETTINGS).body
+
+
+def test_one_language_per_message(app):
+    message = build_email([_rem(language='nl')], SETTINGS)
+    assert 'Explore' in message.body and 'phase has opened' in message.body
+
+
+def test_the_footer_counts_consultations_not_reminders(app):
+    conv = _conv()
+    two = [_rem(PHASE_OPENED, conversation=conv), _rem(PHASE_CLOSING, 'argument_mapping',
+                                                       conversation=conv)]
+    assert 'this consultation' in build_email(two, SETTINGS).body
+    assert 'these consultations' in build_email([_rem(), _rem(title='Park', slug='park')],
+                                                SETTINGS).body
+
+
+def test_a_block_on_meta_is_reported_from_meta(app):
+    nl = FakeClient('nlwiki', emailable=False)
+    meta = FakeClient('metawiki', fail=WikiBotError(BLOCKED, 'blocked'))
+    sender, _ = _sender({('nlwiki', 'email'): nl, ('metawiki', 'email'): meta})
+    assert _send(sender, 'email') == Outcome('failed', reason=BLOCKED, error_code='blocked',
+                                             sent_via='metawiki')
+
+
+def test_spacing_still_applies_after_a_failed_post(app):
+    now = [100.0]
+    slept = []
+    talk = FakeClient('nlwiki', fail=WikiBotError(OUTCOME_UNKNOWN, 'timeout'))
+    sender, _ = _sender({('nlwiki', 'talk'): talk}, sleep=slept.append, clock=lambda: now[0])
+    _send(sender, 'talk')
+    _send(sender, 'talk')
+    assert slept == [pytest.approx(10.0)]
+
+
+def test_each_client_is_opened_once_and_all_are_closed(app):
+    nl, meta = FakeClient('nlwiki', emailable=False), FakeClient('metawiki')
+    clients = {('nlwiki', 'email'): nl, ('metawiki', 'email'): meta}
+    with LiveSender(client_for=lambda w, c: clients[(w, c)], messages=SETTINGS) as sender:
+        _send(sender, 'email')
+        _send(sender, 'email')
+    assert nl.closed and meta.closed and len(meta.sent) == 2
+
+
+def test_a_message_that_cannot_be_built_fails_before_any_wiki_is_asked(app):
+    sender, made = _sender({})
+    outcome = sender.send(channel='email', wiki='nlwiki', participation=PERSON,
+                          reminders=[_rem('unanswered')])
+    assert outcome == Outcome('failed', reason='api_error', error_code='bad_message')
+    assert made == []
+
+
+@pytest.mark.parametrize('kind', [PHASE_OPENED, PHASE_CLOSING, RESULTS])
+def test_an_unnamed_note_carries_no_title_slug_or_consultation_link(app, kind):
+    for reminders in ([_rem(kind, title='Hidden', slug='hidden')],
+                      [_rem(kind, title='Hidden', slug='hidden'), _rem(kind, title='Also', slug='also')]):
+        message = build_talk(reminders, SETTINGS)
+        text = message.subject + message.body + message.summary
+        assert 'Hidden' not in text and 'hidden' not in text and '/c/' not in text
+
+
+def test_the_fake_client_matches_the_real_one():
+    import inspect
+    for name in ('is_emailable', 'send_email', 'talk_page_allows_bot', 'talk_page_opted_out',
+                 'post_talk_section', 'close'):
+        real = inspect.signature(getattr(WikiBotClient, name))
+        fake = inspect.signature(getattr(FakeClient, name))
+        assert list(real.parameters) == list(fake.parameters), name

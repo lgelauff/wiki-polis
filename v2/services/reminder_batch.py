@@ -382,8 +382,9 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused) 
                 log.exception('reminders: the sender raised; recorded as outcome_unknown')
                 outcome = Outcome('failed', reason='outcome_unknown')
             if outcome.status == 'failed' and outcome.reason == 'blocked':
-                # The bot itself is blocked there: stop that wiki's batch for this channel.
-                result.blocked_wikis.add((channel, wiki))
+                # The bot itself is blocked on the wiki that answered (a fallback mail
+                # answers from Meta): stop that wiki's batch for this channel.
+                result.blocked_wikis.add((channel, outcome.sent_via or wiki))
             if channel == 'email' and outcome.status in _DELIVERED:
                 room -= 1
             _finish(live[:1], outcome, now, result)
