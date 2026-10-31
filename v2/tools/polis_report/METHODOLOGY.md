@@ -36,18 +36,22 @@ everything that applies to external exports:
    which participants its figures describe ("among the 34 matched participants") and gives the counts.
 3. **Deterministic.** Every sentence is a fixed template filled from the data, chosen by a stated rule.
 4. **Self-selected participants.** Counts describe the people who responded. Each page says so.
-5. **Privacy at a small event.** Counts only; no xid or participant id is ever written. Small cells are
-   suppressed where they could identify someone (§9).
+5. **Counts only, and exact.** The data is cleaned for privacy before it reaches the report. The report writes
+   counts only: no xid or participant id is ever written. Every count is exact. The limits in §9 are about how
+   much a number can carry, not about hiding anyone.
 6. **Descriptive first, statistics in fold-outs.** The main text gives counts and plain readings. Test details
    (p-values, corrections, how close a label is to the line) sit in fold-out sections. The statistical claims are the tests listed in §11, each read against a model of
    response noise among these same participants; everything else describes these participants and makes no
    claim about a wider population.
+7. **Every response counts, unless excluded.** Each exclusion has a rule, a reason and a count, and the report
+   lists them (§4). Changes to the settings that decide what counts are logged with a reason, and the log is
+   printed in every report it produced (§4).
 
-**Planned (language review):** a semantic check of the report templates for overclaiming, run when templates
-change and before a report goes out. It covers implied causation, more certainty than the test supports,
-generalising beyond these participants, and qualitative words without sizes. A language-model reviewer applies
-this rubric and records the flagged sentences with reasons. It is a review step, not a word list, and not part
-of the deterministic test suite.
+**Wording review.** Every sentence a report can contain is a template in the code, so wording can only change in
+the pull request that changes a template. That pull request is reviewed for four problems: implied cause, more
+certainty than the test supports, speaking for people beyond these participants, and size words ("most", "many",
+"strongly") without the counts next to them. A language model may assist that review; it is not part of the
+method, and it never changes report text. There is no list of banned words.
 
 ## 3. What can be built from which export
 
@@ -67,15 +71,18 @@ Three kinds of input:
 |---|---|---|---|---|
 | Statements, moderation, creation time, author | yes | | yes | yes (pol.is format) |
 | Responses with time; current response | yes | | yes | yes (pol.is format) |
-| Automatic responses (author + creation time) | yes | | yes | removed, total counted |
+| Automatic responses (author + creation time) | yes | | yes | excluded, total counted |
+| Exclusions listed with rule, reason and count | yes | | yes | not yet (counts only) |
+| Settings change log, checked by the builder | yes | | yes | not yet |
 | Automatic responses by value (pass / agree) | yes | | yes | not yet |
 | Seed vs participant-written statement | no | | yes (`is_seed`) | not yet |
 | Role questions | named by text in the config | | yes (`is_meta`) | by config text |
 | Labels, PCA map | yes | | yes | yes (pol.is format) |
 | Polis groups | yes, snapshot at export time | | yes, from the math record | yes (pol.is format) |
 | Leiden groups | computed from responses | | computed from responses | **Planned** |
-| Label sensitivity (responses that would change a label) | yes | | yes | not yet (an interval is shown today) |
-| Per-statement privacy minimum | yes | | yes | not yet |
+| Label sensitivity (responses that would change a label) | yes | | yes | in #563 |
+| Minimum of 10 for percentages, bars, labels and groups (§9) | yes | | yes | in #563 |
+| Tarone's selection of testable statements (§8) | yes (shifts need the xid file) | | yes (shifts need the xid file) | not yet |
 | Statistics in fold-outs | yes | | yes | not yet |
 | `*` on significant results (§11) | yes (shifts need the xid file) | | yes (shifts need the xid file) | not yet |
 | Linking participants across conversations | no | yes | no | yes (with xid files) |
@@ -87,17 +94,32 @@ production reports run from the same code.
 The last row needs data from the wiki-polis side, which none of these exports covers. A production report that
 uses it has to name its source and how it was extracted.
 
-## 4. Which responses count
+## 4. Which responses count: all, unless excluded
 
-- **Time window (`since`).** Response rows before the window are dropped, e.g. test responses before a live session.
-  The report gives the number of rows removed, and how many participants responded only before the window.
+Every response counts. A response is left out only by a named exclusion, and each report has an "Excluded
+responses" fold-out with one line per exclusion: the rule, the reason and how many responses it removed. Three
+kinds exist:
+- **Automatic responses:** a fixed rule, always applied (below).
+- **Responses before a stated time (`since`):** optional, with a reason, e.g. "test responses before the session
+  opened". The time comes from the event, not from the results. The report also says how many participants
+  responded only before it. In production, test responses are better kept out at the source, in a separate test
+  conversation.
+- **A named participant's responses (`exclude_participants`):** optional, with a reason.
+
+**Change log.** The settings that decide what counts (exclusions, role questions, statement pairs, thresholds and
+minimums) have a log next to them: date, setting, old → new, reason. Every report prints the log in a fold-out.
+**Planned:** the builder fingerprints these settings, and refuses to run when they changed since the last logged
+fingerprint without a new entry, or when an exclusion has no reason. For an external partner the settings and log
+stay with their data, outside the repository.
+
 - **Automatic responses.**
   - **Rule (both settings):** a response by a statement's author on that statement, at the second the statement
-    was created, is treated as automatic and left out. The rule is procedural: it is about *which response*, not
+    was created, is treated as automatic and excluded. The rule is procedural: it is about *which response*, not
     *which person*. All other responses count, including those of statement authors and the conversation owner,
     who can also take part as ordinary participants.
-  - **Reported as well as removed.** Removed responses are counted, so a reader can see what was left out and
-    add it back. **Planned:** the count is split by value (automatic passes, automatic agrees), and in production,
+  - **Reported as well as excluded.** Excluded responses are counted, so a reader can see what was left out and
+    add it back. The line reconciles the report with Polis's own counts, e.g. "Automatic responses: 39 excluded
+    (39 passes, 0 agrees). Polis's own counts include them." **Planned:** the split by value, and in production,
     where `is_seed` is available, by seed versus participant-written statement.
   - **What produces them,** as checked in code:
     - **Seed statements** (written by the moderator): the Polis server records a pass from the author, unless the
@@ -112,7 +134,6 @@ uses it has to name its source and how it was extracted.
     39 automatic passes; no other responses by the authors exist there.
   - **Production setting:** the report must name the deployed version of the participant-facing code it was
     checked against, because that code decides whether participant-written statements carry an automatic agree.
-  - `exclude_participants` remains as a manual override and must come with a stated reason.
 - **Current response.** The latest row per participant and statement in the response history (`votes.csv`). Rows
   with equal timestamps keep file order, and the report counts them. Polis's participant-by-statement matrix
   (`participant-votes.csv`) is not used for responses: Polis builds it by id order with last-write-wins, so after
@@ -148,6 +169,9 @@ uses it has to name its source and how it was extracted.
 - A statement is labelled **≥70% agree**, **≥70% disagree** or **neither ≥70%**, counting agree + disagree only.
   The pass count is shown separately and is not in the denominator. The threshold is `label_share`.
 - The label is written as the rule itself, not as "consensus". It is not Polis's group-informed consensus.
+- **Pass in a label** counts as a non-answer: the label is about the position people took (§10).
+- **Too few to label.** A statement with fewer than `min_total` (10) agree + disagree responses gets no label:
+  "too few responses for a label", with its counts (§9).
 - **Close to the line.** A fold-out gives how many responses would have to change for the label to change
   (e.g. "6 responses changing from disagree to agree would change this label"). That describes these responses;
   it is not a confidence interval, which would assume a sample from a wider population.
@@ -155,21 +179,21 @@ uses it has to name its source and how it was extracted.
 - **Pass rate.** Statements that were passed more often than others get a `*`: one test across all statements
   (Cochran's Q, since the same people respond to every statement), then a per-statement comparison with Holm
   correction. Details are in the fold-out.
-- **No statistical minimum.** Labels describe counts, so they need none; the only minimum is the privacy
-  minimum per statement (§9).
 
 ## 7. Opinion groups
 
 - **Current:** Polis's own groups (its k-means clustering), shown only when at least
   `min_participants_for_groups` people took part. The interim value is **25**. Below it the report says "not
   computed" and gives the count.
-  - Groups under 5 members are merged into "Other".
-  - The groups are a snapshot at export time, computed by Polis over all responses, including responses before
-    the window and automatic responses. The report names the Polis group of participants with only automatic
-    responses.
+  - Groups under `min_total` (10) members are merged into "Other", shown with its size.
+  - The groups are a snapshot at export time, computed by Polis over all responses, including the responses this
+    report excludes. The report labels them "groups as Polis computed them, including responses this report
+    excludes", gives how many excluded responses that is, and names the Polis group of participants with only
+    automatic responses.
+  - Clustering treats pass as the middle between agree and disagree (§10).
 - **Descriptive only.** Testing differences between groups formed from these same responses would be circular, so
   no test is applied. The "largest difference between groups" chart uses this report's own measure: the range
-  across groups of (agree − disagree) / all responses, over groups of 5 or more. It is named as such on the page.
+  across groups of (agree − disagree) / all responses, over the groups shown (10 or more members). It is named as such on the page.
 - **Planned:** an indication of how confident a grouping is (for example, how stable group assignments stay
   when the analysis is repeated on resampled participants). The method needs research first; until then groups
   are shown without a confidence indicator.
@@ -191,24 +215,31 @@ uses it has to name its source and how it was extracted.
 - **Movement in both directions, never only the net.**
   - Per statement: a table of each person's response in A against their response in B (agree / disagree / pass /
     no response).
-  - Counts of movers toward agree and toward disagree, on the order agree · pass · disagree.
+  - Counts of movers toward agree and toward disagree, on the order agree · pass · disagree: for change, pass is
+    the middle (§10). Agree → pass counts as a move toward disagree.
   - Direct agree↔disagree switches, reported separately.
 - **Significance where it can exist.**
-  - Test: an exact two-sided sign test per statement on the direction of movement, Holm-corrected for the
-    number of statements. Each statement gets a reading chosen by rule:
+  - Test: an exact two-sided sign test per statement on the direction of movement, Holm-corrected. It counts
+    direction, not distance: agree → pass and agree → disagree each count as one move. Full switches have their
+    own test (below).
+  - **Which statements are tested (Tarone's method).** With n movers, the smallest two-sided p a statement can
+    reach is 2 × 0.5ⁿ. A statement whose smallest reachable p cannot clear its Holm threshold is left out of the
+    correction, and the thresholds are recomputed until every statement left can reach its own. The choice uses
+    only the number of movers, never their direction, so it does not bias the test. Statements of interest are
+    not named in advance.
+  - Each statement gets a reading chosen by rule:
     - no movers: "No observed movement";
-    - too few movers for any split to reach p < 0.05: "Too few people changed their response to tell", with the
-      counts;
+    - too few movers to be tested: "Too few people changed their response to tell", with the counts;
     - significant after correction: the direction and both p-values;
     - significant only before correction: said explicitly;
     - otherwise: "No clear direction", with the probability of a split at least as uneven if movers were
       equally likely to go either way.
-  - The report also counts how many statements could not reach significance with the movers they had.
+  - The report also counts how many statements had too few movers to be tested.
   - **Marker:** a result that is significant at 95% (two-sided, after Holm correction within its family, §11)
     gets a `*` in the main text, with a footnote saying so. Three families of per-statement tests carry it: the
     direction of shift (sign test), direct agree↔disagree switches (McNemar on agree and disagree only), and the
-    change in pass rate (McNemar on pass versus not pass). Everything else about the test (p-values, the reading, how many movers) is in
-    the fold-out.
+    change in pass rate (McNemar on pass versus not pass). Tarone's selection applies within each family.
+    Everything else about the test (p-values, the reading, how many movers) is in the fold-out.
     The marker belongs to the test only: descriptive labels (≥70% agree, ≥70% disagree, neither) and other
     counts never carry it.
 - **Noise baseline.** The report counts how many statements' net movement went toward the middle. Changes in
@@ -218,17 +249,20 @@ uses it has to name its source and how it was extracted.
   uncertainty of a shift are visible together. A pre-specified person-level test across statements, if a pooled
   question is wanted.
 
-## 9. Small cells and privacy
+## 9. What the report leaves out, and why
 
-- **Per-statement minimum (privacy).** A statement with fewer than `min_responses` responses (default 5) is listed
-  with its text only: its counts and label are not shown, since the label reveals the split. Groups need no
-  extra minimum beyond the rules in §7.
-- Counts of 1–2 are shown as "<3" for the merged "Other" group, and wherever role answers are crossed with
-  anything.
-- Role answers are never crossed with a group under 5.
-- Role answers are not compared between polls.
-- Per-person opinion transitions are shown exactly. Seeing single agree↔disagree switches is the point of that
-  table, and it contains no role answers.
+The data this tool reads is cleaned for privacy before it reaches the report. The limits below are about how much
+a number can carry, so the reader looks at what the data supports. They do not hide anyone.
+
+- **Every count is exact,** in every table, chart and CSV, including counts of 1, the per-person transition
+  tables and movers.
+- **Percentages and bars** need at least `min_total` (default 10) responses behind them. Below that the counts are
+  shown on their own ("3 of 9" in place of a percentage, "fewer than 10 responses" in place of a bar).
+- **Labels** need at least `min_total` agree + disagree responses (§6).
+- **Polis groups** are shown on their own only with at least `min_total` members, and only when at least
+  `min_participants_for_groups` (25) people took part (§7). Smaller groups are merged into "Other", shown with its
+  size.
+- Role answers are not shown for "Other", and are not compared between polls.
 - xids are used only to match people; they never appear in an output.
 - In production, data reaches the analysis host only as the participant-id-only extract (§1).
 
@@ -237,7 +271,10 @@ uses it has to name its source and how it was extracted.
 - Groups are weak and change between exports while the poll is open: Polis re-clusters on new responses.
 - With a few dozen people, most per-statement shifts cannot reach significance. The report says so instead of
   reporting "no change".
-- Pass is treated as the middle of agree · pass · disagree. People also pass when unsure or uninterested.
+- **Pass.** In a single poll's labels, pass counts as a non-answer: the label uses agree and disagree only, and
+  pass is shown separately. For grouping people and for change between polls, pass is the middle of
+  agree · pass · disagree. People also pass when they are unsure or uninterested, so a move into pass can mean
+  either.
 - Matching assumes one xid per person.
 - In external exports, platform behaviour (such as automatic responses) is inferred from the files, not checked
   in code.
@@ -248,7 +285,6 @@ A `*` means: significant at 95%, two-sided, after Holm correction within its fam
 of one kind in one report). A place gets a marker only if a test there makes a claim our principles allow:
 - it is not a claim about a wider population;
 - it is not circular (testing groups formed from the same responses);
-- it does not break the privacy rules.
 
 | Place | Test | Marker |
 |---|---|---|
