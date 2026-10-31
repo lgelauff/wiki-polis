@@ -44,6 +44,7 @@ _BLOCKED_CODES = {'blocked', 'autoblocked', 'blockedfrommail', 'globalblocking-b
 _MAXLAG = 5
 _MAXLAG_RETRIES = 2
 _MAXLAG_WAIT_CAP = 5.0
+_DEFAULT_OPTOUT_CATEGORY = 'Opted-out of message delivery'   # MassMessage's default
 
 
 class WikiBotError(Exception):
@@ -130,6 +131,7 @@ class WikiBotClient:
         self._session = session_factory()
         self._session.headers['User-Agent'] = user_agent
         self._logged_in = False
+        self._optout_category: str | None = None
 
     def close(self) -> None:
         self._session.close()
@@ -237,6 +239,32 @@ class WikiBotClient:
         text = (revisions[0].get('slots') or {}).get('main', {}).get('content') or ''
         account = self._credentials.account if self._credentials else ''
         return bot_allowed(text, account)
+
+    def optout_category(self) -> str:
+        """The wiki's MassMessage opt-out category, read once per client.
+
+        It is the content of MediaWiki:Massmessage-optout-category, which defaults to
+        "Opted-out of message delivery" and may be localised.
+        """
+        if self._optout_category is None:
+            payload = self._call('GET', {
+                'action': 'query', 'meta': 'allmessages',
+                'ammessages': 'massmessage-optout-category', 'amenableparser': '1',
+            })
+            messages = (payload.get('query') or {}).get('allmessages') or [{}]
+            name = (messages[0].get('content') or '').strip() if not messages[0].get('missing') else ''
+            self._optout_category = name or _DEFAULT_OPTOUT_CATEGORY
+        return self._optout_category
+
+    def talk_page_opted_out(self, username: str) -> bool:
+        """Whether the user's talk page (after a redirect) is in the opt-out category."""
+        category = f'Category:{self.optout_category()}'
+        payload = self._call('GET', {
+            'action': 'query', 'prop': 'categories', 'titles': f'User talk:{username}',
+            'clcategories': category, 'redirects': '1',
+        })
+        pages = (payload.get('query') or {}).get('pages') or [{}]
+        return bool(pages[0].get('categories'))
 
     # -- sends -------------------------------------------------------------------------
 
