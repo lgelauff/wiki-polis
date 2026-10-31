@@ -498,6 +498,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
     k = P.min_total
     overall = {c: P.tally(c) for c in P.opinion}
     lab = {c: label(overall[c], share, k) for c in P.opinion}
+    tested = run_slot(cfg, 'pass_rate', {c: (overall[c][2], overall[c][0] + overall[c][1]) for c in P.opinion})
     order = sorted(P.opinion, key=lambda c: (-(overall[c][0] - overall[c][1]), skey(c)))
     by_label = {key: [c for c in order if lab[c] == key] for key in ('agree', 'disagree', 'neither', 'few')}
     tot = [sum(overall[c][i] for c in P.opinion) for i in range(3)]
@@ -528,7 +529,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         for c in rows:
             a, d, s = overall[c]; n = a + d + s
             sens = to_change(overall[c], share) if key != 'few' else ''
-            tip = f'#{c}: {a} agree · {d} disagree · {s} pass (n={n})' + (f'; {sens}' if sens else '')
+            tip = f'#{c}: {a} agree · {d} disagree · {s} pass (n={n})' + (f'; {sens}' if sens else '') + (f'; {tested[c]}' if c in tested else '')
             bar = (f'<div class="div-bar" role="img" aria-label="{esc(tip)}"><div class="half left"><div class="seg dis" style="width:{pct(d, n):.1f}%"></div></div>'
                    f'<div class="half right"><div class="seg agr" style="width:{pct(a, n):.1f}%"></div></div></div>' if n >= k else
                    f'<div class="div-bar few"><span class="muted">fewer than {k} responses</span></div>')
@@ -560,7 +561,8 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         for c in sids:
             role = c in P.meta
             body += f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(P.text[c])}</th>'
-            rec = [c, P.text[c], 'role' if role else label_text(lab[c], share), '' if role or lab[c] == 'few' else to_change(overall[c], share)]
+            rec = [c, P.text[c], 'role' if role else label_text(lab[c], share), '' if role or lab[c] == 'few' else to_change(overall[c], share),
+                   tested.get(c, '')]
             for _, w, kind in cols:
                 a, d, s = P.tally(c, w)
                 if role and kind != 'all':      # role answers are not split by group (METHODOLOGY §7, §11)
@@ -575,7 +577,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
             csv_rows.append(rec)
     table = (f'<div class="tablewrap"><table class="vt"><caption>Agree · disagree · pass per statement, overall and per Polis group. {ORDER_NOTE}</caption>'
              f'<thead><tr>{head1}</tr><tr>{head2}</tr></thead><tbody>{body}</tbody></table></div>')
-    write_csv(out / f'poll-{P.key}-statements.csv', ['statement', 'text', 'label', 'label_sensitivity'] + [f'{n}_{x}' for n, _, _ in cols for x in ('agree', 'disagree', 'pass')], csv_rows)
+    write_csv(out / f'poll-{P.key}-statements.csv', ['statement', 'text', 'label', 'label_sensitivity', 'test'] + [f'{n}_{x}' for n, _, _ in cols for x in ('agree', 'disagree', 'pass')], csv_rows)
 
     # map
     pts, cutoff = project(P)
@@ -635,6 +637,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         f'<li><b>Left out, for focus:</b> every count is exact. A bar needs at least {k} responses and a label at least {k} agree + disagree responses; '
         f'below that the counts are shown on their own. Role answers are not shown for "Other". These limits are about how much a number can carry, not about privacy.</li>',
         f'<li><b>Participation:</b> median {median:g} of {len(P.opinion)} opinion statements per participant. Polis chooses the order in which each participant sees statements.</li>',
+        '<li><b>No significance:</b> this report shows observed counts and rule-based descriptions only; it applies no test and marks nothing as significant.</li>',
         f'<li><b>Labels</b> use {share:.0%} of agree + disagree; passes are not in the denominator. They are not Polis\'s group-informed consensus. '
         f'The hover text and the CSV give how many responses would have to change for a label to change; that describes these responses and is not a confidence interval. Role answers are self-reported.</li>',
     ]
@@ -680,12 +683,27 @@ def matched(PA, PB):
     return ia, ib, sorted(set(ia) & set(ib))
 
 
-def sign_test(up, down):
-    n = up + down
-    if n == 0:
-        return 1.0
-    k = min(up, down)
-    return min(1.0, 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n)
+# Significance slots: empty and switched off (METHODOLOGY §2 and §11). Owner, 2026-10-31: reports give observed
+# values only and mark nothing as significant. These are the "first" places of §11, kept so a test can be added later
+# as a small change. None of the tests named here has been reviewed: each is a suggestion, not the method, and §11
+# lists the questions to answer first (level and sides, family, correction, exact or approximate, marker form, not
+# tested versus not significant, minimum). A test may only add to what is shown; it never changes a count or a
+# reading. Each slot is a function {statement: counts} -> {statement: sentence}, given every statement at once so a
+# correction could be applied. A slot runs only when the config setting `significance` is true AND a function is set
+# here; none is set.
+SLOTS = {
+    'shift': None,          # Direction of shift per statement: (toward agree, toward disagree). Suggested, not reviewed: exact sign test
+    'switches': None,       # Direct agree<->disagree switches: (agree->disagree, disagree->agree). Suggested, not reviewed: exact McNemar
+    'pass_change': None,    # Change in pass rate: (into pass, out of pass). Suggested, not reviewed: exact McNemar
+    'pass_rate': None,      # Statements passed more often than others: (pass, not pass). Suggested, not reviewed: Cochran's Q,
+                            # then McNemar per statement; that would need per-participant counts, not only these totals
+}
+
+
+def run_slot(cfg, name, family):
+    """The sentences of one switched-on slot, or {} (the default: observed values only)."""
+    test = SLOTS.get(name)
+    return test(family) if cfg.get('significance') and test else {}
 
 
 def matched_labels(PA, PB, share):
@@ -726,30 +744,27 @@ def compare_reports(PA, PB, cfg, out, repro):
 
     mv = {c: movers(tabs[c]) for c in common}
     flips = {c: (tabs[c][('agree', 'disagree')], tabs[c][('disagree', 'agree')]) for c in common}
-    pv = {c: sign_test(mv[c][0], mv[c][1]) for c in common}
-    minp = {c: sign_test(mv[c][0] + mv[c][1], 0) for c in common}          # smallest p reachable with this many movers
     m = len(common)
-    holm, run = {}, 0.0
-    for i, c in enumerate(sorted(common, key=lambda c: (pv[c], skey(c)))):
-        run = max(run, min(1.0, (m - i) * pv[c])); holm[c] = run
-    no_raw = [c for c in common if minp[c] > 0.05]
+    to_pass = {c: sum(n for (a, b), n in tabs[c].items() if b == 'pass' and a in ('agree', 'disagree')) for c in common}
+    from_pass = {c: sum(n for (a, b), n in tabs[c].items() if a == 'pass' and b in ('agree', 'disagree')) for c in common}
+    tested = {}
+    for name, family in (('shift', {c: (mv[c][0], mv[c][1]) for c in common}), ('switches', flips),
+                         ('pass_change', {c: (to_pass[c], from_pass[c]) for c in common})):
+        for c, sentence in run_slot(cfg, name, family).items():
+            tested.setdefault(c, []).append(sentence)
+    tested = {c: '; '.join(v) for c, v in tested.items()}
 
     def reading(c):
-        """Significance where a test can say something, otherwise a rule-based description; never causal."""
+        """What was observed, as a rule-based sentence; never causal. A test's sentence follows only if the slot is on."""
         up, down = mv[c][0], mv[c][1]
-        n = up + down
-        side = 'agree' if up > down else 'disagree'
-        if n == 0:
-            return 'No observed movement.'
-        if minp[c] > 0.05:
-            return f'Too few people changed their response to tell ({up} toward agree, {down} toward disagree).'
-        if holm[c] < 0.05:
-            return f'More moved toward {side} than the other way; unlikely to be chance (p = {pv[c]:.3f}; {holm[c]:.3f} after correcting for {m} statements).'
-        if pv[c] < 0.05:
-            return f'More moved toward {side}; p = {pv[c]:.3f} on its own, not below 0.05 after correcting for {m} statements ({holm[c]:.2f}).'
-        return (f'No clear direction: if movers were equally likely to go either way, a split at least as uneven as {up} toward agree and '
-                f'{down} toward disagree would happen in about {round(100 * pv[c])}% of cases (p = {pv[c]:.2f}).')
-    no_holm = [c for c in common if minp[c] > 0.05 / m]
+        if up + down == 0:
+            text = 'No observed movement.'
+        elif up == down:
+            text = f'{up} moved toward agree and {down} toward disagree.'
+        else:
+            side, more, less = ('agree', up, down) if up > down else ('disagree', down, up)
+            text = f'More moved toward {side} ({more}) than the other way ({less}).'
+        return text + (f' ({tested[c]})' if c in tested else '')
     pooled = Counter()
     for c in common:
         pooled.update(tabs[c])
@@ -766,7 +781,6 @@ def compare_reports(PA, PB, cfg, out, repro):
         a, d, _ = A[c]
         return 1 if a > d else -1 if d > a else 0
     toward_mid = [c for c in with_net if a_side(c) and (net[c] > 0) != (a_side(c) > 0)]
-    small_cells = statistics.median(sum(1 for (a, b), n in tabs[c].items() if a != b and n < 5) for c in common) if common else 0
 
     # participants: role breakdown (small cells suppressed), times
     def role_counts(P, people, c):
@@ -797,8 +811,8 @@ def compare_reports(PA, PB, cfg, out, repro):
               [[c, PA.text[c], a, b, tabs[c][(a, b)]] for c in common for a in cats for b in cats])
     write_csv(out / 'transitions_pooled.csv', ['A_vote'] + [f'B_{b}' for b in cats], [[a] + [pooled[(a, b)] for b in cats] for a in cats])
     write_csv(out / 'movers.csv', ['statement', 'text', 'toward_agree', 'toward_disagree', 'stayed', 'no_vote_in_one_poll', 'agree_to_disagree',
-                                   'disagree_to_agree', 'movers', 'smallest_reachable_p', 'sign_test_p', 'holm_p', 'reading'],
-              [[c, PA.text[c], *mv[c], *flips[c], mv[c][0] + mv[c][1], f'{minp[c]:.4f}', f'{pv[c]:.3f}', f'{holm[c]:.3f}', reading(c)] for c in common])
+                                   'disagree_to_agree', 'movers', 'reading', 'test'],
+              [[c, PA.text[c], *mv[c], *flips[c], mv[c][0] + mv[c][1], reading(c), tested.get(c, '')] for c in common])
     comp = {}
     for c in common:
         def agr(P, people):
@@ -811,17 +825,12 @@ def compare_reports(PA, PB, cfg, out, repro):
     sub_common = (f'{N} participants with the same Polis xid in {esc(PA.name)} ({esc(PA.url)}) and {esc(PB.name)} ({esc(PB.url)}) · '
                   f'statements numbered as in {esc(PA.name)}')
     footer = f'Built by polis_report.py from the public Polis exports of reports {esc(PA.report)} and {esc(PB.report)} and the xid files. Counts only.'
-    sig = [c for c in common if holm[c] < 0.05]
-    raw_sig = [c for c in common if pv[c] < 0.05]
-    power_line = (f'With this many movers, {len(no_raw)} of {m} statements could not reach p &lt; 0.05 even without correction ({ids(no_raw)}), and '
-                  f'{len(no_holm)} of {m} could not reach the first Holm threshold 0.05/{m} ({ids(no_holm)}).')
-    plain_p = ('p is the probability of a split between toward-agree and toward-disagree at least this uneven if each mover were equally likely to go either way; '
-               'below 0.05 is the usual threshold, and Holm raises the bar to allow for testing every statement.')
     noise_line = (f'Baseline: of {len(with_net)} statements with net movement, {len(toward_mid)} moved away from the side that led in {esc(PA.name)} among these participants '
                   f'(toward the middle).')
-    test_note = (f'<li><b>Test:</b> exact two-sided sign test per statement on the direction of movement on the order agree · pass · disagree '
-                 f'(agree→pass counts the same as agree→disagree), Holm-corrected for {m} statements. Uncorrected p &lt; 0.05: {ids(raw_sig)}; after correction: {ids(sig)}. '
-                 f'{power_line} {plain_p}</li>')
+    test_note = ('<li><b>No significance:</b> this report shows observed counts only and applies no test. The counts describe these participants; '
+                 'a difference between the two polls is not a claim that it would recur. A test of the direction of movement per statement is planned.</li>'
+                 if not tested else
+                 '<li><b>Test:</b> the sentence in brackets after each reading comes from the test switched on in the report builder.</li>')
     scope_note = (f'<li><b>Scope:</b> paired results describe these {N} returners only. Labels among all voters differ from the labels among the {N} on: '
                   f'{esc(PA.name)} {ids([c for c in common if allA[c] != labA[c]])}; {esc(PB.name)} {ids([c for c in common if allB[c] != labB[c]])}. '
                   f'Statements in only one poll (not compared): {esc(PA.name)} {ids([c for c in PA.opinion if c not in common])}; '
@@ -856,7 +865,7 @@ def compare_reports(PA, PB, cfg, out, repro):
 <div class="tile"><b>{cl(labA)} → {cl(labB)}</b><span>statements {label_text("agree", share)} · {label_text("disagree", share)} · neither, among the {N}</span></div></div>
 <div class="card"><b>Summary.</b> {m} statements appear in both polls. Label changes among the {N}: {ids(changed)}.
 Votes that left agree went to disagree {left_agree.get("disagree", 0)} times and to pass {left_agree.get("pass", 0)} times.
-Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line} {noise_line}</div>
+{noise_line}</div>
 <h2>Statement by statement</h2>
 <p class="note">Top bar {esc(PA.name)}, bottom bar {esc(PB.name)}, for the same {N} people. Right: change in the number agreeing, and how many moved toward disagree (↘) and toward agree (↗). In statement order. {ORDER_NOTE}</p>
 {legend(LEG_ADP)}<div class="card">{rows}</div>
@@ -898,7 +907,7 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
         for c in common)
     grid = ''.join(f'<div class="mult"><p class="mtitle"><span class="num">#{c}</span> {esc(PA.text[c])}</p>{matrix(tabs[c], f"Transitions for #{c}")}'
                    f'<p class="mfoot">{mv[c][0]} toward agree · {mv[c][1]} toward disagree · agree→disagree {flips[c][0]} · disagree→agree {flips[c][1]} · '
-                   f'{mv[c][0] + mv[c][1]} movers, smallest reachable p {minp[c]:.3f}</p><p class="mfoot"><b>{esc(reading(c))}</b></p></div>' for c in common)
+                   f'{mv[c][0] + mv[c][1]} movers</p><p class="mfoot"><b>{esc(reading(c))}</b></p></div>' for c in common)
     pu, pdn, ps, pg = movers(pooled)
     two_way = [c for c in common if mv[c][0] and mv[c][1]]
     one_way = [c for c in common if bool(mv[c][0]) != bool(mv[c][1])]
@@ -914,14 +923,14 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
 <div class="tile"><b>{len(only_a)} · {len(only_b)}</b><span>voted only in {esc(PA.name)} · only in {esc(PB.name)}</span></div></div>
 <div class="card"><b>Summary.</b> Movement in both directions: {ids(two_way)}. One direction only: {ids(one_way)}. No observed movement: {ids(none)}.
 Agree↔disagree switches: {pooled[('agree', 'disagree')]} agree→disagree and {pooled[('disagree', 'agree')]} disagree→agree.
-Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line} {noise_line}</div>
+{noise_line}</div>
 <h2>Movers per statement</h2>
 <p class="note">How many of the {N} moved toward disagree (left) and toward agree (right) on the order agree · pass · disagree; both directions, never only the net. "Gap": voted in one poll only. Each half-bar runs to {scale} people. In statement order.</p>
 {legend([('dis', 'Toward disagree'), ('agr', 'Toward agree')])}<div class="card">{mrows}</div>
 <h2>All statements together</h2><p class="note">Rows: vote in {esc(PA.name)}; columns: vote in {esc(PB.name)}; "—" = no vote. Diagonal = unchanged; blue = toward agree, red = toward disagree.
-The {m} statements are summed, so one person counts up to {m} times; no test is applied to this table.</p>
+The {m} statements are summed, so one person counts up to {m} times.</p>
 <div class="card">{matrix(pooled, "All statements", True)}</div>
-<h2>Transition table per statement</h2><p class="note">Median {small_cells:g} of the 12 off-diagonal cells per statement hold fewer than 5 people, too few for Bowker's symmetry test, which is therefore not reported.</p><div class="mults">{grid}</div>
+<h2>Transition table per statement</h2><div class="mults">{grid}</div>
 <h2>Agree counts: matched vs one-poll-only</h2><p class="note">Agree votes / all votes on the statement, for the matched participants and for those who voted in only one poll.</p>
 <div class="tablewrap"><table class="vt"><caption>Agree / all votes per statement</caption><thead><tr><th rowspan="2" scope="col" class="sc">Statement</th><th colspan="2" scope="colgroup" class="first">In {esc(PA.name)}</th><th colspan="2" scope="colgroup" class="first">In {esc(PB.name)}</th></tr>
 <tr><th scope="col" class="first">Matched ({N})</th><th scope="col">Only {esc(PA.name)} ({len(only_a)})</th><th scope="col" class="first">Matched ({N})</th><th scope="col">Only {esc(PB.name)} ({len(only_b)})</th></tr></thead><tbody>{crow}</tbody></table></div>

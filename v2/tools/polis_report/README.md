@@ -22,6 +22,7 @@ this repository.
 | `statement_pairs` | optional `[[text in first poll, text in second poll], ...]` for statements edited between polls |
 | `min_participants_for_groups` | groups are shown only with at least this many participants (default 25) |
 | `min_total` | the fewest responses behind a percentage, bar or label, and the fewest members of a group shown on its own (default 10); below it the counts are shown without them |
+| `significance` | default false: observed values only, no tests. True runs only the tests set in `SLOTS` in polis_report.py, and none are set. The tests named there are suggestions, not reviewed; METHODOLOGY §11 lists the open questions |
 | `include_unmoderated` | also count statements Polis has not moderated yet (default: accepted only) |
 | `polls[].dir` | folder with `comments.csv`, `votes.csv`, `participant-votes.csv` (pol.is's name) or `participants-votes.csv` |
 | `polls[].xid` | the conversation's `participant,xid` file (owner view); both polls need one for the comparison reports |
@@ -35,7 +36,7 @@ Outputs in `out/`:
   table per group, a PCA map, and role questions.
 - `poll-ab-compared`: the two polls side by side, for participants with the same xid in both only.
 - `poll-ab-transitions`: for those participants, 4×4 vote transition tables (both directions, never only net change),
-  movers per statement, an exact sign test with Holm correction, and how those who voted in one poll only voted.
+  movers per statement, and how those who voted in one poll only voted. Observed counts only; no significance test.
 - CSVs of every table. Counts only: no xid or participant id is written. Every count is exact; `min_total` decides
   only where a percentage, bar or label is left out (METHODOLOGY §7).
 

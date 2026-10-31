@@ -168,13 +168,33 @@ def test_default_rule_shows_every_count_and_leaves_out_what_is_too_small_to_carr
     assert '1' in t.values()                                                              # transitions stay exact
 
 
-def test_power_and_baseline_lines(tmp_path):
+def test_observed_values_only_by_default(tmp_path):
     out = build(tmp_path)
-    page = (out / 'poll-ab-transitions.html').read_text(encoding='utf-8')
     m = {r['statement']: r for r in rows(out / 'movers.csv')}
-    assert m['0']['movers'] == '1' and m['0']['smallest_reachable_p'] == '1.0000'
-    assert 'could not reach p &lt; 0.05 even without correction' in page
+    assert m['0']['movers'] == '1' and m['0']['test'] == '' and 'sign_test_p' not in m['0']
+    for f in out.iterdir():
+        if f.suffix in {'.html', '.csv'}:
+            text = f.read_text(encoding='utf-8')
+            assert not any(w in text for w in ('p = ', 'p &lt;', 'Holm', 'reachable', 'unlikely to be chance')), f.name
+    for name in ('poll-a-report.html', 'poll-ab-compared.html', 'poll-ab-transitions.html'):   # every report says so (§2)
+        assert 'applies no test' in (out / name).read_text(encoding='utf-8'), name
+    page = (out / 'poll-ab-transitions.html').read_text(encoding='utf-8')
     assert 'answered role question' not in page and 'toward the middle' in page   # no role baseline; the middle count stays
+
+
+def test_a_significance_slot_runs_only_when_switched_on(tmp_path, monkeypatch):
+    assert all(v is None for v in polis_report.SLOTS.values())   # every slot ships empty
+    stub = lambda family: {c: f'stub on {u}/{d} of {len(family)}' for c, (u, d) in family.items()}   # not a real test
+    monkeypatch.setitem(polis_report.SLOTS, 'shift', stub)
+    off = build(tmp_path)                                     # a function in the slot, but the setting is off
+    assert all(r['test'] == '' for r in rows(off / 'movers.csv'))
+    on = build(tmp_path / 'on', significance=True)
+    m = {r['statement']: r for r in rows(on / 'movers.csv')}
+    assert m['0']['test'].startswith('stub on ') and m['0']['test'].endswith(' of 4')   # the whole family at once
+    assert m['0']['reading'].endswith(f"({m['0']['test']})")
+    monkeypatch.setitem(polis_report.SLOTS, 'shift', None)    # switched on, but no test in the slot: nothing shown
+    empty = build(tmp_path / 'empty', significance=True)
+    assert all(r['test'] == '' for r in rows(empty / 'movers.csv'))
 
 
 def test_groups_need_the_minimum_number_of_participants(tmp_path):
@@ -192,8 +212,8 @@ def test_groups_need_the_minimum_number_of_participants(tmp_path):
 def test_shift_readings_are_rule_based(tmp_path):
     out = build(tmp_path)
     m = {r['statement']: r for r in rows(out / 'movers.csv')}
-    assert m['0']['reading'].startswith('Too few people changed their response to tell')
-    assert m['2']['reading'] == 'No observed movement.' or m['2']['reading'].startswith('Too few')
+    assert m['0']['reading'] in {'More moved toward agree (1) than the other way (0).', 'More moved toward disagree (1) than the other way (0).'}
+    assert all(r['reading'] == 'No observed movement.' for r in m.values() if r['movers'] == '0')
 
 
 def test_comparison_tiles_divide_each_poll_by_its_own_responses(tmp_path):
