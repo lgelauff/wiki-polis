@@ -71,6 +71,9 @@ str(10)='en' (BCP-47) · `intro_text` / `outro_text` (sanitised HTML, nullable) 
   conversation can't be active or paused.
 - `paused` is reversible and does **not** start the reveal clock; `closed_at` is set on
   permanent close (irreversible) and drives the reveal timeline.
+- **Reminders (#577):** `reminder_wiki` str(32)='metawiki' (the wiki the bot sends from) ·
+  `reminder_talk_names_consultation` bool=F (a talk-page note is public, so it names the
+  consultation only when this is on).
 
 ### `participations` — one row per (participant, conversation)
 `id` PK · `participant_id` FK→participants (**RESTRICT**) · `conversation_id`
@@ -287,12 +290,41 @@ name/version, e.g. `char`, `semantic-v1`) · `value` float (similarity in `[0, 1
   row (unique on `(provenance_id, model)`).
 - Consumers prefer `semantic` when present and fall back to `char`.
 
+### `reminders` — one row per send action (#577)
+`id` PK · `conversation_id` FK→conversations (CASCADE) · `reminder_type` str(32)
+(`phase_opened`|`phase_closing`|`results`; a string so a new type needs no migration) ·
+`phase_key` str(32)='' (the phase it is about; '' for the final message) ·
+`send_day` date (UTC, no time) · `created_by_id` FK→participants (**SET NULL**, nullable) ·
+`created_at` · `triggered_by_id` FK→participants (**SET NULL**, nullable) / `triggered_at`
+nullable (a super admin's trigger on a wiki where the bot is not approved) · `recorded_at`
+nullable (when the batch recorded its deliveries). Unique
+`(conversation_id, reminder_type, phase_key, send_day)`: one reminder per moment.
+- A reminder with `recorded_at` set is never recorded again, so unlinking its rows cannot
+  lead to a second send.
+
+### `reminder_deliveries` — one row per (reminder, participation, channel) (#577)
+`id` PK · `reminder_id` FK→reminders (CASCADE) · `participation_id` FK→participations
+(**SET NULL**, nullable) · `channel` (`email`|`talk`) · `status`
+(`pending`|`sent`|`dry_run`|`combined`|`skipped_expired`|`skipped_optout`|`not_sent_limit`|`failed`) ·
+`reason` (only on `failed`, then required: `not_emailable`|`refused`|`nobots`|`throttled`|`blocked`|`lagged`|`outcome_unknown`|`api_error`,
+the reasons the bot client raises) · `error_code` str(64) nullable, only on `failed` (the wiki's code) · `sent_via` str(32) nullable (the wiki that
+sent it) · `claimed_at` / `attempted_at` nullable. Unique `(reminder_id, participation_id, channel)`.
+- No username and no message text. The per-person view is for super admins; organizers
+  see totals, which are counts over these rows.
+- Retention: once the consultation has ended and two weeks have passed since its last
+  message, each row is unlinked from the person (`participation_id`, `claimed_at` and
+  `attempted_at` cleared) and kept, so the totals stay. Removing a participation clears
+  only `participation_id` (the FK's SET NULL). Deleting the consultation deletes its
+  reminders and their rows, totals included: the one exception to keeping them.
+
 ## Foreign-key delete behaviour
 
 - `participations.participant_id` → **RESTRICT** (can't delete a participant who has participations).
 - `admin_roles.granted_by`, `audit_events.actor_participant_id`,
   `audit_events.conversation_id` → **SET NULL** (the audit trail must outlive a deleted
   participant or conversation).
+- `reminders.created_by_id` → **SET NULL** (a reminder outlives the account that made it).
+- `reminder_deliveries.participation_id` → **SET NULL** (the row keeps counting in the totals).
 - `voucher_codes.participant_id` → **SET NULL** (the code row outlives a deleted account,
   and stays unusable).
 - `arguments.proposer_pseudonym` has **no FK** (see `arguments` above).
@@ -306,7 +338,9 @@ proposer_pseudonym)`, `argument_votes(argument_id, participant_id)`,
 `argument_side_states(participant_id, featured_statement_id)`,
 `featured_statements(conversation_id)`, `voucher_batches(conversation_id)`, and
 `voucher_codes(batch_id)` / `voucher_codes(status)` (`voucher_codes.participant_id` is
-covered by its unique constraint). (See also the `audit_events` indexes noted in
+covered by its unique constraint), `reminders(conversation_id)` / `reminders(send_day)`,
+`reminder_deliveries(status)` / `reminder_deliveries(participation_id)`
+(`reminder_id` columns are covered by their unique constraints). (See also the `audit_events` indexes noted in
 its own section above.)
 
 ## Known discrepancies

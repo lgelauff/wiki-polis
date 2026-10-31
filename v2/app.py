@@ -41,8 +41,8 @@ from sqlalchemy.orm import joinedload
 from db import (ACCOUNT_KIND_VOUCHER, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
-                Participation, StatementProvenance, StatementSimilarityScore,
-                VoucherBatch, db)
+                Participation, Reminder, ReminderDelivery, StatementProvenance,
+                StatementSimilarityScore, VoucherBatch, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError,
                          polis_server_config_error)
@@ -5431,6 +5431,10 @@ def _delete_local_conversation(conv: Conversation) -> None:
             StatementProvenance.id.in_(provenance_ids)
         ).delete(synchronize_session=False)
 
+    reminder_ids = db.session.query(Reminder.id).filter_by(conversation_id=conv_id)
+    ReminderDelivery.query.filter(ReminderDelivery.reminder_id.in_(reminder_ids)).delete(
+        synchronize_session=False)
+    Reminder.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     ConversationBan.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     ConversationInvite.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     AdminRole.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
