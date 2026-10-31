@@ -196,3 +196,32 @@ def test_an_existing_participation_still_replays_after_close(auth_client, closed
 
 def test_joining_an_open_process_still_works(auth_client, conversation):
     assert _join(auth_client).status_code == 201
+
+
+# Joining stays open while a stage in which people take part (Explore, Arguments, the
+# informed vote) is current or still ahead on the route; then it closes (owner, 2026-10-31).
+@pytest.mark.parametrize('route, flag, open_', [
+    ('default_7', None, True),                         # preparation
+    ('default_7', 'phase_submission', True),
+    ('default_7', 'phase_personal_results', True),     # featured selection: arguments ahead
+    ('default_7', 'phase_cleanup', True),              # the informed vote is still ahead
+    ('default_7', 'phase_informed_voting', True),
+    ('default_7', 'phase_public_results', False),      # preliminary results: nothing left
+    ('no_informed_vote', 'phase_argument_mapping', True),
+    ('no_informed_vote', 'phase_cleanup', False),      # arguments were the last stage
+    ('short_results', 'phase_personal_results', False),  # Explore was the only stage
+])
+def test_joining_is_open_only_while_taking_part_is_still_possible(
+    auth_client, conversation, route, flag, open_,
+):
+    conversation.phase_route = route
+    for name in ('phase_submission', 'phase_personal_results', 'phase_argument_mapping',
+                 'phase_cleanup', 'phase_informed_voting', 'phase_public_results'):
+        setattr(conversation, name, name == flag)
+    db.session.commit()
+
+    response = _join(auth_client)
+
+    assert response.status_code == (201 if open_ else 409)
+    if not open_:
+        assert response.get_json()['error']['code'] == 'join_closed'

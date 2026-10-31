@@ -411,7 +411,7 @@ def create_api_v1_blueprint(
             )
         except JoinClosed:
             return error_response(
-                'join_closed', 'This consultation has closed and can no longer be joined.',
+                'join_closed', 'Joining has closed: there are no more rounds to take part in.',
                 409,
             )
         except EligibilityDenied as exc:

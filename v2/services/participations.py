@@ -21,9 +21,9 @@ class PseudonymUnavailable(RuntimeError):
 
 
 class JoinClosed(RuntimeError):
-    """The conversation has closed: nobody new can join it.
+    """Joining has ended: no stage is left in which a new participant could take part.
 
-    Joining after close would turn a public reader into a participant, and participants get
+    Joining then would only turn a public reader into a participant, and participants get
     the full report (exact counts, opinion groups; #233). An existing participation still
     replays.
     """
@@ -53,6 +53,7 @@ def join_conversation(
     notify_talk_page: bool,
     emailable: bool,
     check_eligibility: Callable[[Conversation, Participant], tuple[bool, str, dict]],
+    joining_open: bool,
 ) -> JoinResult:
     """Create one participation, returning the existing row on safe replay.
 
@@ -65,7 +66,7 @@ def join_conversation(
     ).first()
     if existing is not None:
         return JoinResult(participation=existing, created=False)
-    if conversation.closed_at is not None:
+    if not joining_open:
         raise JoinClosed()
 
     pseudonym = pseudonym.strip()

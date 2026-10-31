@@ -1033,7 +1033,7 @@
     "errorpage-500-hint": "This has been logged. Try again in a moment; if it keeps happening, report it to a site admin.",
     "accept-js-taken": "Someone just took that pseudonym. Choose another.",
     "accept-err-join": "Could not join this consultation. Please try again.",
-    "accept-err-closed": "This consultation has closed, so it can no longer be joined.",
+    "accept-err-closed": "Joining has closed: there are no more rounds to take part in.",
     "forbidden-elig-requirement-named": "This consultation has an eligibility requirement: $1.",
     "forbidden-voucher-heading": "You need an access code to take part",
     "forbidden-voucher-body": "<strong>$1</strong> is open to people who have an access code from its organizers.",

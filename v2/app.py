@@ -1309,6 +1309,28 @@ def _active_phases(conv) -> set:
     return phases
 
 
+# Stages in which a participant takes part: voting in Explore or the informed vote, and
+# adding or rating arguments (owner, 2026-10-31).
+_PARTICIPATION_STAGES = frozenset({'submission', 'argument_mapping', 'informed_voting'})
+
+
+def _joining_open(conv) -> bool:
+    """Whether someone new may still join (owner, 2026-10-31).
+
+    Open while the route still has a stage at or after the current one in which people take
+    part; closed once the last such stage is over, and always after close. Joining later would
+    give nothing to do and only the participants' full report (#233). In advanced mode the
+    current stage is the furthest-along phase that is on, so this errs towards closing early.
+    """
+    if conv.closed_at is not None:
+        return False
+    sequence = _phase_sequence_for(conv)
+    return any(
+        stage['key'] in _PARTICIPATION_STAGES
+        for stage in sequence[_current_stage_index(conv):]
+    )
+
+
 def _is_linear_phase_state(conv) -> bool:
     """True if at most one phase flag is on — the simple-mode invariant."""
     return sum(1 for f in _phase_flags_for(conv) if getattr(conv, f)) <= 1
@@ -2976,6 +2998,7 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
                           and participant.account_kind != ACCOUNT_KIND_VOUCHER),
         emailable=bool(session.get('emailable')),
         check_eligibility=_check_join_eligibility,
+        joining_open=_joining_open(conv),
     )
     participation = result.participation
     return ({
