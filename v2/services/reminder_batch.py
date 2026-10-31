@@ -13,6 +13,7 @@ running the batch twice never handles one twice.
 Nothing here logs or returns a username or any message text.
 """
 
+import random
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -54,6 +55,7 @@ class BatchResult:
     paused: bool = False
     reminders: int = 0
     waiting_for_trigger: int = 0           # due on a wiki where the bot is not approved
+    unknown_wiki: list = field(default_factory=list)   # reminder ids on a wiki the bot doesn't know
     counts: Counter = field(default_factory=Counter)   # (channel, status) -> rows
     blocked_wikis: set = field(default_factory=set)
     unlinked: int = 0
@@ -63,17 +65,27 @@ class ReminderNotFound(LookupError):
     pass
 
 
+class UnknownReminderWiki(ValueError):
+    """The consultation's reminder wiki is not one the bot knows."""
+
+
 def run_batch(
     day: date, *, now: datetime, active_phases: Callable[[Conversation], set[str]],
     sender: Sender, email_cap: int, paused: bool = False,
     approved: dict[str, str] | None = None, reminder_id: int | None = None,
+    triggered_by_id: int | None = None,
 ) -> BatchResult:
     """Handle one day's reminders.
 
     The scheduled run (``reminder_id`` empty) handles every reminder due on
     ``day`` whose consultation's wiki is approved for automatic sends; the
     others wait for a super admin. A super admin's trigger (``reminder_id``)
-    handles that one reminder now, on any wiki the bot knows.
+    handles that one reminder now, on any wiki the bot knows, and records who
+    triggered it and when.
+
+    A reminder's deliveries are recorded once: ``recorded_at`` is set in the
+    same transaction, and a recorded reminder is never recorded again, even
+    after retention unlinked its rows from their people.
     """
     result = BatchResult()
     if paused:
@@ -82,8 +94,13 @@ def run_batch(
 
     due = _due_reminders(day, approved, reminder_id, result)
     result.reminders = len(due)
+    if reminder_id is not None:
+        due[0].triggered_at = now
+        due[0].triggered_by_id = triggered_by_id
+        db.session.commit()
     for reminder in due:
-        _record_deliveries(reminder, active_phases(reminder.conversation))
+        if reminder.recorded_at is None:
+            _record_deliveries(reminder, active_phases(reminder.conversation), now)
 
     _hand_out(due, day=day, now=now, sender=sender, email_cap=email_cap, result=result)
     for reminder in due:
@@ -102,25 +119,36 @@ def _due_reminders(day, approved, reminder_id, result) -> list[Reminder]:
         reminder = db.session.get(Reminder, reminder_id)
         if reminder is None:
             raise ReminderNotFound(reminder_id)
+        if not reminder_wikis.is_known_wiki(reminder.conversation.reminder_wiki):
+            raise UnknownReminderWiki(reminder.conversation.reminder_wiki)
         return [reminder]
     due = []
     for reminder in Reminder.query.filter_by(send_day=day).order_by(Reminder.id):
-        if reminder_wikis.is_approved(reminder.conversation.reminder_wiki, approved):
+        if not reminder_wikis.is_known_wiki(reminder.conversation.reminder_wiki):
+            result.unknown_wiki.append(reminder.id)
+        elif reminder_wikis.is_approved(reminder.conversation.reminder_wiki, approved):
             due.append(reminder)
         else:
             result.waiting_for_trigger += 1
     return due
 
 
-def _record_deliveries(reminder: Reminder, phases: set[str]) -> None:
-    """One row per recipient and channel; an expired reminder is recorded as such."""
+def _record_deliveries(reminder: Reminder, phases: set[str], now: datetime) -> None:
+    """One row per recipient and channel; an expired reminder is recorded as such.
+
+    Recipients are inserted in random order, so a row's id says nothing about
+    who it was for once it is unlinked.
+    """
     expired = is_expired(reminder.reminder_type, reminder.phase_key, phases)
     existing = {
         (row.participation_id, row.channel)
         for row in ReminderDelivery.query.filter_by(reminder_id=reminder.id)
     }
+    shuffle = random.SystemRandom().shuffle
     for channel in REMINDER_CHANNELS:
-        for participation in recipients(reminder.conversation, channel):
+        people = recipients(reminder.conversation, channel)
+        shuffle(people)
+        for participation in people:
             if (participation.id, channel) in existing:
                 continue
             row = ReminderDelivery(
@@ -132,6 +160,7 @@ def _record_deliveries(reminder: Reminder, phases: set[str]) -> None:
                     db.session.add(row)
             except IntegrityError:
                 pass   # another run recorded it first
+    reminder.recorded_at = now
     db.session.commit()
 
 
@@ -236,8 +265,9 @@ def unlink_ended(now: datetime) -> int:
     """Unlink deliveries from their person once retention allows.
 
     A consultation's rows are unlinked once it has ended (archived or closed)
-    and two weeks have passed since its last message, whichever is later. The
-    rows stay, so the totals do.
+    and two weeks have passed since its last message, whichever is later:
+    the person, the timestamps, the wiki's error code and the sending wiki are
+    cleared. The rows stay, with channel, status and reason, so the totals do.
     """
     unlinked = 0
     ended = Conversation.query.filter(
@@ -257,7 +287,8 @@ def unlink_ended(now: datetime) -> int:
             continue
         unlinked += (
             ReminderDelivery.query.filter(ReminderDelivery.id.in_(ids))
-            .update({'participation_id': None, 'claimed_at': None, 'attempted_at': None},
+            .update({'participation_id': None, 'claimed_at': None, 'attempted_at': None,
+                     'error_code': None, 'sent_via': None},
                     synchronize_session=False)
         )
     db.session.commit()

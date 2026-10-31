@@ -150,7 +150,8 @@ from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
                                     ReminderSettings, ReminderTestMessage,
                                     ReminderTestRefused, default_client_factory,
                                     login_settings, missing_login_parts, send_test_message)
-from services.reminder_batch import DryRunSender, ReminderNotFound
+from services.reminder_batch import DryRunSender, ReminderNotFound, UnknownReminderWiki
+from services.reminders import can_send_reminders
 from services.reminder_batch import run_batch as run_reminder_batch
 from services.wiki_bot import WIKI_HOSTS
 
@@ -6325,17 +6326,32 @@ def create_app(test_config: dict | None = None) -> Flask:
                   help='The UTC day to handle (default: today).')
     @click.option('--reminder', 'reminder_id', type=int, default=None,
                   help="A super admin's trigger: handle this one reminder now, on any wiki.")
-    def process_reminders_cmd(day, reminder_id):
+    @click.option('--by', 'by_username', default=None,
+                  help='With --reminder: the super admin who triggers it (Wikimedia username).')
+    def process_reminders_cmd(day, reminder_id, by_username):
         """Handle one day's reminders (#577). Dry run: nothing is sent yet."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
+        triggered_by = None
+        if by_username is not None:
+            if reminder_id is None:
+                click.echo('--by needs --reminder.')
+                raise SystemExit(2)
+            triggered_by = Participant.query.filter_by(mw_username=by_username).first()
+            if not can_send_reminders(triggered_by, None, admin_usernames=ADMIN_USERS):
+                click.echo('--by must name a super admin.')
+                raise SystemExit(2)
         try:
             result = run_reminder_batch(
                 (day or now).date(), now=now, active_phases=_active_phases,
                 sender=DryRunSender(), email_cap=current_app.config['REMINDERS_EMAIL_DAILY_CAP'],
                 paused=current_app.config['REMINDERS_PAUSED'], reminder_id=reminder_id,
+                triggered_by_id=triggered_by.id if triggered_by else None,
             )
         except ReminderNotFound:
             click.echo(f'No reminder {reminder_id}.')
+            raise SystemExit(2)
+        except UnknownReminderWiki as exc:
+            click.echo(f'Reminder {reminder_id} is set to a wiki the bot does not know: {exc}.')
             raise SystemExit(2)
         if result.paused:
             click.echo('Reminders are paused (REMINDERS_PAUSED); nothing was handled.')
@@ -6344,12 +6360,19 @@ def create_app(test_config: dict | None = None) -> Flask:
                            for (channel, status), n in sorted(result.counts.items()))
         click.echo(f'Reminders handled: {result.reminders}; waiting for a super admin: '
                    f'{result.waiting_for_trigger}; rows unlinked: {result.unlinked}.')
+        if result.unknown_wiki:
+            current_app.logger.error('reminders on a wiki the bot does not know: %s',
+                                     result.unknown_wiki)
+            click.echo('Not handled, wiki unknown to the bot: reminder '
+                       + ', '.join(map(str, result.unknown_wiki)) + '.')
         if counts:
             click.echo(f'Deliveries: {counts}.')
         for channel, wiki in sorted(result.blocked_wikis):
             current_app.logger.error('reminder bot is blocked on %s; %s batch stopped there',
                                      wiki, channel)
             click.echo(f'The bot is blocked on {wiki}: {channel} stopped there.')
+        if result.unknown_wiki or result.blocked_wikis:
+            raise SystemExit(1)            # the job's failure mail names the run; the log says why
 
     @app.cli.command('send-test-reminder')
     @click.option('--wiki', required=True, type=click.Choice(sorted(WIKI_HOSTS)))

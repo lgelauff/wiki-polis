@@ -6,7 +6,7 @@ import pytest
 
 from db import Conversation, Participant, Participation, Reminder, ReminderDelivery, db
 from services.reminder_batch import (
-    DryRunSender, Outcome, ReminderNotFound, run_batch, unlink_ended,
+    DryRunSender, Outcome, ReminderNotFound, UnknownReminderWiki, run_batch, unlink_ended,
 )
 from services.reminders import PHASE_OPENED, RESULTS
 from tests.conftest import _xid
@@ -58,6 +58,7 @@ def _join(conv, person, *, email=True, talk=False):
 
 
 def _remind(conv, *, kind=PHASE_OPENED, phase='submission', day=DAY):
+    phase = phase or ''
     reminder = Reminder(conversation_id=conv.id, reminder_type=kind, phase_key=phase,
                         send_day=day)
     db.session.add(reminder)
@@ -174,9 +175,9 @@ def test_the_cap_counts_mail_already_sent_today(app):
     first = _remind(conv)
     _run(cap=2)
     assert _statuses(first).count(('email', 'not_sent_limit')) == 1
-    later = _remind(conv)
+    later = _remind(conv, phase='argument_mapping')
     sender = Recording()
-    _run(sender, cap=2, reminder_id=later.id)
+    _run(sender, cap=2, reminder_id=later.id, phases=lambda c: {'argument_mapping'})
     assert sender.calls == []
     assert _statuses(later) == [('email', 'not_sent_limit')] * 3
 
@@ -307,3 +308,98 @@ def test_the_command_stops_when_paused(app, monkeypatch):
     monkeypatch.setitem(app.config, 'REMINDERS_PAUSED', True)
     result = app.test_cli_runner().invoke(args=['process-reminders'])
     assert result.exit_code == 0 and 'paused' in result.output
+
+
+# ── Once only, triggers, unknown wikis (#587 review) ─────────────────────────
+
+def test_a_recorded_reminder_is_never_recorded_again_even_after_unlinking(app):
+    conv = _conversation()
+    _join(conv, _person())
+    reminder = _remind(conv, kind=RESULTS, phase=None)
+    closed = lambda c: {'closed'}
+    first = Recording()
+    _run(first, phases=closed)
+    assert len(first.calls) == 1 and reminder.recorded_at == NOW
+    ReminderDelivery.query.update({'participation_id': None, 'claimed_at': None,
+                                   'attempted_at': None})
+    db.session.commit()
+    again = Recording()
+    _run(again, phases=closed, reminder_id=reminder.id)
+    assert again.calls == [] and ReminderDelivery.query.count() == 1
+
+
+def test_a_super_admin_trigger_records_who_and_when(app, admin_participant):
+    conv = _conversation(wiki='nlwiki')
+    _join(conv, _person())
+    reminder = _remind(conv)
+    _run(approved={}, reminder_id=reminder.id, triggered_by_id=admin_participant.id)
+    db.session.refresh(reminder)
+    assert (reminder.triggered_by_id, reminder.triggered_at) == (admin_participant.id, NOW)
+
+
+def test_the_scheduled_run_reports_a_wiki_the_bot_does_not_know(app):
+    conv = _conversation(wiki='enwiki')
+    _join(conv, _person())
+    reminder = _remind(conv)
+    sender = Recording()
+    result = _run(sender, approved={'enwiki': 'x'})
+    assert result.unknown_wiki == [reminder.id] and result.waiting_for_trigger == 0
+    assert sender.calls == [] and ReminderDelivery.query.count() == 0
+
+
+def test_a_trigger_on_a_wiki_the_bot_does_not_know_is_refused(app):
+    conv = _conversation(wiki='enwiki')
+    reminder = _remind(conv)
+    with pytest.raises(UnknownReminderWiki):
+        _run(reminder_id=reminder.id)
+
+
+def test_unlinking_also_clears_the_error_code_and_the_sending_wiki(app):
+    conv = _conversation(active=False)
+    row = _sent_row(conv, NOW - timedelta(days=15))
+    row.status, row.reason, row.error_code = 'failed', 'api_error', 'readonly'
+    db.session.commit()
+    unlink_ended(NOW)
+    db.session.refresh(row)
+    assert (row.error_code, row.sent_via, row.participation_id) == (None, None, None)
+    assert (row.channel, row.status, row.reason) == ('email', 'failed', 'api_error')
+
+
+def test_rows_are_recorded_in_random_order(app):
+    conv = _conversation()
+    joined = [_join(conv, _person()) for _ in range(12)]
+    reminder = _remind(conv)
+    _run()
+    by_id = [row.participation_id for row in
+             ReminderDelivery.query.filter_by(reminder_id=reminder.id).order_by(ReminderDelivery.id)]
+    assert sorted(by_id) == [j.id for j in joined]
+    assert by_id != [j.id for j in joined]     # 1 in 12! to fail by chance
+
+
+@pytest.mark.parametrize('reason', ['lagged', 'outcome_unknown'])
+def test_the_bot_clients_own_reasons_are_recorded(app, reason):
+    conv = _conversation()
+    _join(conv, _person())
+    reminder = _remind(conv)
+    _run(Recording(lambda **kw: Outcome('failed', reason=reason, error_code='timeout')))
+    row = ReminderDelivery.query.filter_by(reminder_id=reminder.id).one()
+    assert (row.status, row.reason, row.error_code) == ('failed', reason, 'timeout')
+
+
+def test_the_command_records_the_super_admin_named_with_by(app, admin_participant):
+    conv = _conversation(phase_submission=True)
+    _join(conv, _person())
+    reminder = _remind(conv, day=datetime.now(timezone.utc).date())
+    result = app.test_cli_runner().invoke(args=[
+        'process-reminders', '--reminder', str(reminder.id), '--by', admin_participant.mw_username])
+    assert result.exit_code == 0, result.output
+    db.session.refresh(reminder)
+    assert reminder.triggered_by_id == admin_participant.id
+
+
+def test_the_command_refuses_by_for_someone_who_is_not_a_super_admin(app, participant):
+    conv = _conversation()
+    reminder = _remind(conv)
+    result = app.test_cli_runner().invoke(args=[
+        'process-reminders', '--reminder', str(reminder.id), '--by', participant.mw_username])
+    assert result.exit_code == 2 and 'super admin' in result.output
