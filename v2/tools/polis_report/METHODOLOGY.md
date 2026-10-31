@@ -27,10 +27,11 @@ everything that applies to external exports:
 
 ## 2. Reporting principles (both settings)
 
-1. **Show significance wherever a valid test exists; otherwise describe in words.** If a test can answer the
-   question, the report gives its result. Where it can't, the report describes the pattern by a stated rule.
-   Examples: too few people moved; the groups were formed from the same responses. Descriptions come with the
-   counts they rest on.
+1. **Observed values only; no significance.** Reports give what was observed: counts, and rule-based descriptions
+   of them. They run no significance tests and mark nothing as significant, and every report says so. These
+   reports have too many moving parts for a test to carry a clear meaning yet. How firm a reading is, is given
+   in people instead: how many responses would have to change for it to change ("3 responses changing from
+   agree to disagree would change this label", §6). **Planned:** significance, designed in §11 so it can be added later.
 2. **Never causal, never more certain than the numbers.** Reports say what was observed among these participants.
    They don't say why it happened, and they don't speak for a wider population. Each page and table states
    which participants its figures describe ("among the 34 matched participants") and gives the counts.
@@ -39,13 +40,12 @@ everything that applies to external exports:
 5. **Counts only, and exact.** The data is cleaned for privacy before it reaches the report. The report writes
    counts only: no xid or participant id is ever written. Every count is exact. The limits in §9 are about how
    much a number can carry, not about hiding anyone.
-6. **Descriptive first, statistics in fold-outs.** The main text gives counts and plain readings. Test details
-   (p-values, corrections, how close a label is to the line) sit in fold-out sections. The statistical claims are the tests listed in §11, each read against a model of
-   response noise among these same participants; everything else describes these participants and makes no
-   claim about a wider population.
+6. **Main text first, detail in fold-outs.** The main text gives counts and plain readings. Detail (for example how
+   close a label is to the line) sits in fold-out sections. Nothing in a report is a claim about a wider
+   population.
 7. **Every response counts, unless excluded.** Each exclusion has a rule, a reason and a count, and the report
-   lists them (§4). Changes to the settings that decide what counts are logged with a reason, and the log is
-   printed in every report it produced (§4).
+   lists them (§4). **Planned:** changes to the settings that decide what counts are logged with a reason, and
+   the log is printed in every report it produced (§4).
 
 **Wording review.** Every sentence a report can contain is a template in the code, so wording can only change in
 the pull request that changes a template. That pull request is reviewed for four problems: implied cause, more
@@ -72,9 +72,9 @@ Three kinds of input:
 | Statements, moderation, creation time, author | yes | | yes | yes (pol.is format) |
 | Responses with time; current response | yes | | yes | yes (pol.is format) |
 | Automatic responses (author + creation time) | yes | | yes | excluded, total counted |
-| Exclusions listed with rule, reason and count | yes | | yes | in #563 |
-| Settings change log, checked by the builder | yes | | yes | not yet |
-| Automatic responses by value (pass / agree) | yes | | yes | in #563 |
+| Exclusions listed with rule, reason and count | yes | | yes | not yet (counts only) |
+| Settings change log, checked by the builder | yes | | yes | **Planned** (its own pull request) |
+| Automatic responses by value (pass / agree) | yes | | yes | not yet |
 | Seed vs participant-written statement | no | | yes (`is_seed`) | not yet |
 | Role questions | named by text in the config | | yes (`is_meta`) | by config text |
 | Labels, PCA map | yes | | yes | yes (pol.is format) |
@@ -82,9 +82,8 @@ Three kinds of input:
 | Leiden groups | computed from responses | | computed from responses | **Planned** |
 | Label sensitivity (responses that would change a label) | yes | | yes | in #563 |
 | Minimum of 10 for percentages, bars, labels and groups (§9) | yes | | yes | in #563 |
-| Tarone's selection of testable statements (§8) | yes (shifts need the xid file) | | yes (shifts need the xid file) | not yet |
-| Statistics in fold-outs | yes | | yes | not yet |
-| `*` on significant results (§11) | yes (shifts need the xid file) | | yes (shifts need the xid file) | not yet |
+| Detail in fold-outs | yes | | yes | not yet |
+| Significance (§11) | yes (shifts need the xid file) | | yes (shifts need the xid file) | **Planned**; #563 still runs tests, to be removed |
 | Linking participants across conversations | no | yes | no | yes (with xid files) |
 | wiki-polis phases, arguments, featured statements | no | no | no | no |
 
@@ -106,11 +105,11 @@ kinds exist:
   conversation.
 - **A named participant's responses (`exclude_participants`):** optional, with a reason.
 
-**Change log.** The settings that decide what counts (exclusions, role questions, statement pairs, thresholds and
-minimums) have a log next to them: date, setting, old → new, reason. Every report prints the log in a fold-out.
-**Planned:** the builder fingerprints these settings, and refuses to run when they changed since the last logged
-fingerprint without a new entry, or when an exclusion has no reason. For an external partner the settings and log
-stay with their data, outside the repository.
+**Planned (its own pull request): change log.** The settings that decide what counts (exclusions, role questions,
+statement pairs, thresholds and minimums) get a log next to them: date, setting, old → new, reason. Every report
+prints the log in a fold-out. The builder fingerprints these settings, and refuses to run when they changed since
+the last logged fingerprint without a new entry, or when an exclusion has no reason. For an external partner the
+settings and log stay with their data, outside the repository.
 
 - **Automatic responses.**
   - **Rule (both settings):** a response by a statement's author on that statement, at the second the statement
@@ -119,8 +118,8 @@ stay with their data, outside the repository.
     who can also take part as ordinary participants.
   - **Reported as well as excluded.** Excluded responses are counted, so a reader can see what was left out and
     add it back. The line reconciles the report with Polis's own counts, e.g. "Automatic responses: 39 excluded
-    (39 passes, 0 agrees). Polis's own counts include them." **Planned:** in production, where `is_seed` is
-    available, the split by seed versus participant-written statement.
+    (39 passes, 0 agrees). Polis's own counts include them." **Planned:** the split by value, and in production,
+    where `is_seed` is available, by seed versus participant-written statement.
   - **What produces them,** as checked in code:
     - **Seed statements** (written by the moderator): the Polis server records a pass from the author, unless the
       author submitted a response (`lgelauff/polis` fork, `server/src/routes/comments.ts:507-513` and `:940-942`).
@@ -175,10 +174,8 @@ stay with their data, outside the repository.
 - **Close to the line.** A fold-out gives how many responses would have to change for the label to change
   (e.g. "6 responses changing from disagree to agree would change this label"). That describes these responses;
   it is not a confidence interval, which would assume a sample from a wider population.
-- **No significance marker.** Labels are descriptive, so they never carry the `*` (§11).
-- **Pass rate.** Statements that were passed more often than others get a `*`: one test across all statements
-  (Cochran's Q, since the same people respond to every statement), then a per-statement comparison with Holm
-  correction. Details are in the fold-out.
+- **Pass count.** Each statement's pass count is shown next to its label, as observed. No test compares pass rates
+  between statements (§11).
 
 ## 7. Opinion groups
 
@@ -218,36 +215,17 @@ stay with their data, outside the repository.
   - Counts of movers toward agree and toward disagree, on the order agree · pass · disagree: for change, pass is
     the middle (§10). Agree → pass counts as a move toward disagree.
   - Direct agree↔disagree switches, reported separately.
-- **Significance where it can exist.**
-  - Test: an exact two-sided sign test per statement on the direction of movement, Holm-corrected. It counts
-    direction, not distance: agree → pass and agree → disagree each count as one move. Full switches have their
-    own test (below).
-  - **Which statements are tested (Tarone's method).** With n movers, the smallest two-sided p a statement can
-    reach is 2 × 0.5ⁿ. A statement whose smallest reachable p cannot clear its Holm threshold is left out of the
-    correction, and the thresholds are recomputed until every statement left can reach its own. The choice uses
-    only the number of movers, never their direction, so it does not bias the test. Statements of interest are
-    not named in advance.
-  - Each statement gets a reading chosen by rule:
-    - no movers: "No observed movement";
-    - too few movers to be tested: "Too few people changed their response to tell", with the counts;
-    - significant after correction: the direction and both p-values;
-    - significant only before correction: said explicitly;
-    - otherwise: "No clear direction", with the probability of a split at least as uneven if movers were
-      equally likely to go either way.
-  - The report also counts how many statements had too few movers to be tested.
-  - **Marker:** a result that is significant at 95% (two-sided, after Holm correction within its family, §11)
-    gets a `*` in the main text, with a footnote saying so. Three families of per-statement tests carry it: the
-    direction of shift (sign test), direct agree↔disagree switches (McNemar on agree and disagree only), and the
-    change in pass rate (McNemar on pass versus not pass). Tarone's selection applies within each family.
-    Everything else about the test (p-values, the reading, how many movers) is in the fold-out.
-    The marker belongs to the test only: descriptive labels (≥70% agree, ≥70% disagree, neither) and other
-    counts never carry it.
-- **Noise baseline.** The report counts how many statements' net movement went toward the middle. Changes in
-  responses to opinion statements can be read against it. Rows are in statement order, not ranked by change,
+- **Observed values only.** No test is run on the shifts. Each statement gets a reading chosen by rule from its
+  counts:
+  - no movers: "No observed movement";
+  - otherwise: the counts in both directions, e.g. "5 moved toward agree, 3 toward disagree; 2 of them switched
+    directly between agree and disagree". The reading never names a direction as the result.
+  - Movement counts direction, not distance: agree → pass and agree → disagree each count as one move toward
+    disagree. Direct switches are given separately.
+- **Movement toward the middle.** The report counts how many statements' net movement went toward the middle. Rows are in statement order, not ranked by change,
   so the top rows don't read as findings.
-- **Planned:** a paired effect size per statement with a confidence interval (Newcombe), so the size and
-  uncertainty of a shift are visible together. A pre-specified person-level test across statements, if a pooled
-  question is wanted.
+- **Planned:** significance for shifts (§11, not reviewed), and possibly a paired effect size per statement with a
+  confidence interval (suggested, not reviewed: Newcombe).
 
 ## 9. What the report leaves out, and why
 
@@ -269,8 +247,8 @@ a number can carry, so the reader looks at what the data supports. They do not h
 ## 10. Known limits
 
 - Groups are weak and change between exports while the poll is open: Polis re-clusters on new responses.
-- With a few dozen people, most per-statement shifts cannot reach significance. The report says so instead of
-  reporting "no change".
+- Observed shifts are not tested. With a few dozen people, a few movers either way is ordinary; the report gives
+  the counts and does not read a direction into them.
 - **Pass.** In a single poll's labels, pass counts as a non-answer: the label uses agree and disagree only, and
   pass is shown separately. For grouping people and for change between polls, pass is the middle of
   agree · pass · disagree. People also pass when they are unsure or uninterested, so a move into pass can mean
@@ -279,28 +257,90 @@ a number can carry, so the reader looks at what the data supports. They do not h
 - In external exports, platform behaviour (such as automatic responses) is inferred from the files, not checked
   in code.
 
-## 11. Where a significance marker can appear
+## 11. Planned: where significance could appear
 
-A `*` means: significant at 95%, two-sided, after Holm correction within its family (the per-statement tests
-of one kind in one report). A place gets a marker only if a test there makes a claim our principles allow:
-- it is not a claim about a wider population;
-- it is not circular (testing groups formed from the same responses);
+Reports mark no significance today (§2). This section keeps the places where significance could be added later,
+and what would plug in at each. **None of the tests below has been reviewed.** Every test, correction and marker
+named here is a suggestion, listed with the questions to answer before it can become method.
 
-| Place | Test | Marker |
+**Which places.** A place could carry significance only if a test there makes a claim our principles allow: it is
+not a claim about a wider population, and it is not circular (testing groups formed from the same responses).
+Whether a place qualifies has been decided; the tests have not.
+
+| Place | Could carry significance | Suggested test (not reviewed) |
 |---|---|---|
-| Statement labels (≥70% agree / disagree / neither) | — | never: descriptive |
-| Agree versus disagree on one statement | — | never: no defensible noise model for one-off responses |
-| Differences between Polis groups on a statement | — | never: the groups were formed from these responses |
-| Opinion by role answer | — | never |
-| Polis group membership by role answer | Fisher / χ² | later |
-| Statements passed more often than others | Cochran's Q, then per statement | **yes** |
-| Map, participation, timing | — | never: no claim to test |
-| Direction of shift per statement | sign test | **yes** |
-| Direct agree↔disagree switches per statement | McNemar | **yes** |
-| Change in pass rate per statement | McNemar | **yes** |
-| Label changes between polls | — | never: a threshold crossing, not a test |
-| Overall drift; drift toward pass; movement toward the middle | per-person or per-statement test, decided in advance | later |
-| Shifts by role answer | — | not reported |
-| Shifts by Polis group in the first poll | — | later: designed together with confidence for groupings, since groups formed from the first poll's responses regress toward the middle |
-| Participants who responded in one poll only, versus returners | — | never |
-| All participants of one poll versus all of the other | — | never: only participants with the same xid are compared |
+| Statement labels (≥70% agree / disagree / neither) | never: descriptive | — |
+| Agree versus disagree on one statement | never: no defensible noise model for one-off responses | — |
+| Differences between Polis groups on a statement | never: the groups were formed from these responses | — |
+| Opinion by role answer | never | — |
+| Map, participation, timing | never: no claim to test | — |
+| Label changes between polls | never: a threshold crossing, not a test | — |
+| Participants who responded in one poll only, versus returners | never | — |
+| All participants of one poll versus all of the other | never: only participants with the same xid are compared | — |
+| Shifts by role answer | not reported | — |
+| Statements passed more often than others | yes, first | Cochran's Q, then per statement |
+| Direction of shift per statement | yes, first | exact sign test |
+| Direct agree↔disagree switches per statement | yes, first | exact McNemar |
+| Change in pass rate per statement | yes, first | exact McNemar |
+| Polis group membership by role answer | later | Fisher's exact / χ² |
+| Overall drift; drift toward pass; movement toward the middle | later | a person-level test, decided in advance |
+| Shifts by Polis group in the first poll | later | none yet: to be designed with confidence for groupings (§7), since groups formed from the first poll's responses regress toward the middle |
+
+**How it would plug in.** At each place the report already computes and shows the observed counts a test would
+need. Adding significance would add a test on those counts and show its result in a main-text marker and a
+fold-out, without changing any count or reading. One setting would switch it on, off by default.
+
+### Questions for every place
+
+- **Level and sides:** 95% or 90%; two-sided?
+- **Family:** what one correction covers: the statements of one place in one report, all places in one report, or
+  both polls together?
+- **Correction:** suggested, not reviewed: Holm over all compared statements. Alternatives: none, Bonferroni,
+  Benjamini–Hochberg (false discovery rate), Tarone's method (leaving out statements that cannot reach
+  significance; not now).
+- **Exact or approximate:** exact tests suit counts this small; is that the rule everywhere?
+- **Marker form:** suggested, not reviewed: a `*` next to the observed value, meaning significant after
+  correction, with p-values in the fold-out. Alternatives: no marker, only the fold-out; words instead of a symbol.
+- **Not tested versus not significant:** how the report shows a place where a test could not reach significance
+  with the counts it had.
+- **Minimum:** does a test need `min_total` (10) responses behind it, as percentages do (§9)?
+
+### Per place
+
+**Statements passed more often than others** (first)
+- Counts already shown: each statement's pass count; per participant, passed or not.
+- Suggested, not reviewed: Cochran's Q across statements, then McNemar per statement against the rest.
+- Open: which statements enter (all, or only those everyone saw, given statements added during the poll, §5);
+  "more often than what": the other statements, or a fixed rate; does a "no response" count?
+
+**Direction of shift per statement** (first)
+- Counts already shown: movers toward agree and toward disagree, on agree · pass · disagree.
+- Suggested, not reviewed: exact two-sided sign test.
+- Open: what counts as a mover (any change, or only across the middle); whether distance counts (agree → pass
+  versus agree → disagree; a signed-rank test would weigh it); whether no response in one poll is a move.
+
+**Direct agree↔disagree switches per statement** (first)
+- Counts already shown: agree → disagree and disagree → agree, from the transition table.
+- Suggested, not reviewed: exact McNemar.
+- Open: is this a separate family from the direction of shift, or the same question asked twice?
+
+**Change in pass rate per statement** (first)
+- Counts already shown: into pass and out of pass, from the transition table.
+- Suggested, not reviewed: exact McNemar.
+- Open: does a move from "no response" into pass count?
+
+**Polis group membership by role answer** (later)
+- Counts already shown: group × role answer.
+- Suggested, not reviewed: Fisher's exact test, χ² for larger tables.
+- Open: is this circular? Role questions are left out of clustering, so probably not, but this needs checking. How
+  does "Other" enter?
+
+**Overall drift; drift toward pass; movement toward the middle** (later)
+- Counts already shown: net movement per statement; the count of statements whose net movement went toward the
+  middle.
+- Suggested, not reviewed: a person-level test across statements, fixed before looking at the data.
+- Open: per person or per statement; how to weigh statements; how to fix it in advance.
+
+**Shifts by Polis group in the first poll** (later)
+- Counts already shown: movers per group per statement.
+- No test suggested: it needs the confidence-for-groupings work first (§7).
