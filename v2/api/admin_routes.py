@@ -236,7 +236,7 @@ def register_admin_routes(
         except ReminderTestRefused as exc:
             return error_response(
                 exc.code,
-                'Only the configured test accounts, wikis and channels can be used.', 400,
+                'Only the configured test accounts, and the wikis and channels the bot knows, can be used.', 400,
             )
         return _no_store(jsonify({'data': data}))
 

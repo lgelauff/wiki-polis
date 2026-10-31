@@ -686,7 +686,7 @@
     "admin-reminder-test-sent-fallback": "Sent from $1, because this account can't receive wiki-mail on $2.",
     "admin-reminder-test-failed-lagged": "Not sent: the wiki is too busy right now. Try again in a few minutes.",
     "admin-reminder-test-unknown": "Not confirmed: the wiki did not answer in time. The message may have been sent. Check the inbox or talk page before trying again.",
-    "admin-reminder-test-refused": "Not sent: only the test accounts, wikis and channels set on the server can be used. Nothing was checked or sent.",
+    "admin-reminder-test-refused": "Not sent: this test account, wiki or channel is not one the server allows. Nothing was checked or sent.",
     "admin-reminder-test-rate-limited": "Not sent: too many tests in a short time. Wait a minute and try again.",
     "admin-site-admin-configured": "set in the server configuration",
     "admin-site-own-protected": "You cannot remove your own site admin access.",

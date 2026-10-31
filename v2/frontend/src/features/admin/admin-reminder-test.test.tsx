@@ -127,11 +127,11 @@ test('changing the selection clears the previous result', async () => {
 
 test('a refused request is said in the console\'s own words', async () => {
   serve(state, () => HttpResponse.json({error: {
-    code: 'recipient_not_allowed', message: 'Only the configured test accounts, wikis and channels can be used.',
+    code: 'recipient_not_allowed', message: 'Only the configured test accounts, and the wikis and channels the bot knows, can be used.',
   }}, {status: 400}));
   await renderSection();
   fireEvent.click(await screen.findByRole('button', {name: 'Send test'}));
-  expect(await screen.findByText(/only the test accounts, wikis and channels set on the server/)).toBeTruthy();
+  expect(await screen.findByText(/not one the server allows/)).toBeTruthy();
 });
 
 test('too many tests in a minute are named as such', async () => {
