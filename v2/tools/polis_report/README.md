@@ -20,8 +20,7 @@ this repository.
 | `polls[].exclude_participants` | optional manual override: participant ids left out entirely, with `exclude_reason` (automatic votes are already removed by rule) |
 | `statement_pairs` | optional `[[text in first poll, text in second poll], ...]` for statements edited between polls |
 | `min_participants_for_groups` | groups are shown only with at least this many participants (default 25) |
-| `min_cell` | counts from 1 to `min_cell` − 1 are shown as "<3" (default 3); if that hides one count of a row, the row's next-smallest is shown as "≥3" |
-| `min_total` | a column or breakdown with fewer people is not shown (default 10); Polis groups under it are merged into "Other" |
+| `min_total` | the fewest responses behind a percentage, bar or label, and the fewest members of a group shown on its own (default 10); below it the counts are shown without them |
 | `include_unmoderated` | also count statements Polis has not moderated yet (default: accepted only) |
 | `polls[].dir` | folder with `comments.csv`, `votes.csv`, `participant-votes.csv` (pol.is's name) or `participants-votes.csv` |
 | `polls[].xid` | the conversation's `participant,xid` file (owner view); both polls need one for the comparison reports |
@@ -36,8 +35,8 @@ Outputs in `out/`:
 - `poll-ab-compared`: the two polls side by side, for participants with the same xid in both only.
 - `poll-ab-transitions`: for those participants, 4×4 vote transition tables (both directions, never only net change),
   movers per statement, an exact sign test with Holm correction, and how those who voted in one poll only voted.
-- CSVs of every table. Counts only: no xid or participant id is written. Small counts follow `min_cell` and `min_total`
-  everywhere except the per-person transition tables and movers, which are shown exactly.
+- CSVs of every table. Counts only: no xid or participant id is written. Every count is exact; `min_total` decides
+  only where a percentage, bar or label is left out (METHODOLOGY §7).
 
 Linking the two polls: Polis records, for each participant, the xid the organizer passed in (for example through the
 embed URL). The organizer decides what it is, so use the same xid for a person in both polls. The tool reads it from

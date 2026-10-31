@@ -67,20 +67,23 @@ the deterministic test suite.
 - A statement is labelled **≥70% agree**, **≥70% disagree** or **neither ≥70%**, counting agree + disagree only.
   The pass share is shown separately and is not in the denominator. The threshold is `label_share`.
 - The label is written as the rule itself, not as "consensus". It is not Polis's group-informed consensus.
-- **Close to the line.** When the 95% Wilson interval of the leading share crosses 70%, the report says so and
-  gives the interval. That is a description of uncertainty, not a test.
+- **Too few to label.** A statement with fewer than `min_total` (10) agree + disagree responses gets no label; its
+  counts are shown without one.
+- **Close to the line.** The hover text and the CSV give how many responses would have to change for the label to
+  change (e.g. "1 response changing from agree to disagree would change this label"). That describes these
+  responses; it is not a confidence interval, which would assume a sample from a wider population.
 
 ## 5. Opinion groups
 
 - **Current:** Polis's own groups (its k-means clustering, `group-id` in the export), shown only when at least
   `min_participants_for_groups` people took part. The interim value is **25**. Below it the report says "not
   computed" and gives the count.
-  - Groups under 5 members are merged into "Other".
+  - Groups under `min_total` (10) members are merged into "Other".
   - The groups are a snapshot at export time, computed by Polis over all responses, including responses before the
     window and automatic responses. The report names the Polis group of participants with only automatic responses.
 - **Descriptive only.** Testing differences between groups formed from these same responses would be circular, so
   no test is applied. The "largest difference between groups" chart uses this report's own measure: the range
-  across groups of (agree − disagree) / all responses, over groups of 5 or more. It is named as such on the page.
+  across groups of (agree − disagree) / all responses, over the groups shown (10 or more members). It is named as such on the page.
 - **Planned:** show k-means and Leiden community detection side by side, so readers see how much the grouping
   depends on the method. Replace the fixed minimum with a robustness measure: re-cluster on resampled
   participants, and show groups only when assignments stay stable above a stated threshold. Leiden needs an
@@ -118,19 +121,20 @@ the deterministic test suite.
   uncertainty of a shift are visible together. A pre-specified person-level test across statements, if a pooled
   question is wanted.
 
-## 7. Small cells and privacy
+## 7. What the report leaves out, and why
 
-- Counts of 1–2 are shown as "<3" in every table, chart and CSV (`min_cell`, default 3).
-- If that hides only one count of a row (agree · disagree · pass), the row's next-smallest count is shown as "≥3"
-  too. Otherwise the hidden count could be worked out from the row's total. Bars leave hidden counts out, and a
-  change in agree is shown only when both counts are exact.
-- A column or breakdown of fewer than 10 people is not shown (`min_total`, default 10): a Polis group, "Other", the
-  split by answer to a role question, and the one-poll-only columns. Polis groups under 10 are merged into "Other".
-- Role answers are never crossed with "Other".
-- Role answers over time are summarised as the number of differing answers, not tabulated per person.
-- Per-person opinion transitions and movers are shown exactly. Seeing single agree↔disagree switches is the point
-  of that table, and it contains no role answers. Its row and column sums are the matched participants' counts in
-  each poll, so those counts can be read from it even where the comparison page hides them.
+The data this tool reads is already cleaned for privacy before it reaches the report. The limits below are about
+how much a number can carry, so the reader looks at what the data supports. They do not hide anyone.
+
+- **Every count is exact,** in every table, chart and CSV, including counts of 1 and the per-person transition
+  tables and movers.
+- **Percentages and bars** need at least `min_total` (10) responses behind them. Below that the counts are shown on
+  their own ("fewer than 10 responses" in place of a bar, "3 of 9" in place of a percentage).
+- **Labels** need at least `min_total` agree + disagree responses (§4).
+- **Polis groups** are shown on their own only with at least `min_total` members, and only when at least
+  `min_participants_for_groups` (25) people took part (§5). Smaller groups are merged into "Other", which is shown
+  with its size.
+- Role answers are not shown for "Other". Role answers over time are summarised as the number of differing answers.
 - xids are used only to match people; they never appear in an output.
 
 ## 8. Known limits

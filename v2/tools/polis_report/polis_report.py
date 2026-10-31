@@ -26,15 +26,14 @@ Rules (all in the config):
   include_unmoderated   also treat statements with moderated == 0 as opinion statements (default: only accepted, 1)
   label_share           among agree + disagree: >= share agree / >= share disagree / neither (default 0.7)
   current vote          latest row per (participant, statement) in votes.csv; equal timestamps keep file order
+  min_total             the fewest responses behind a percentage, bar or label, and the fewest people in a Polis group
+                        shown on its own (default 10); below it the counts are shown without them. Every count is exact.
   groups                Polis's group-id from participant-votes.csv; groups under min_total participants are merged into "Other"
   statements            the second poll's statements are matched to the first by text and shown with the first poll's numbers
-  min_cell              counts from 1 to min_cell - 1 are shown as "<min_cell" (default 3); when that hides one count of a
-                        row, the row's next-smallest count is shown as ">=min_cell" too, so it cannot be worked out from the
-                        total. Not applied to the per-person transition tables and movers, which are the point of the pair.
-  min_total             a column or breakdown with fewer people than this is not shown (default 10)
 """
 import argparse, csv, datetime as dt, glob, hashlib, html, json, math, os, platform, random, shutil, statistics, subprocess, urllib.request
 from collections import Counter, defaultdict
+from fractions import Fraction
 from pathlib import Path
 
 POLIS_FILES = ['summary', 'comments', 'votes', 'participant-votes', 'comment-groups', 'participant-importance']
@@ -72,25 +71,9 @@ def pct(x, n):
     return 0.0 if not n else 100.0 * x / n
 
 
-def count(n, k):
-    """One count on its own: 1 to k - 1 is shown as "<k"."""
-    return f'<{k}' if 0 < n < k else str(n)
-
-
-def cells(vals, k):
-    """Counts that share a row (agree, disagree, pass): (texts, exact).
-
-    1 to k - 1 is shown as "<k". If that hides a single count, the smallest other non-zero count is
-    shown as ">=k" as well; otherwise the hidden one follows from the row's total. A count is drawn
-    in a bar only where `exact` is true."""
-    hidden = [i for i, v in enumerate(vals) if 0 < v < k]
-    texts = [f'<{k}' if i in hidden else str(v) for i, v in enumerate(vals)]
-    if len(hidden) == 1:
-        rest = [i for i, v in enumerate(vals) if v >= k]
-        if rest:
-            j = min(rest, key=lambda i: (vals[i], i))
-            texts[j] = f'≥{k}'
-    return texts, [t == str(v) for t, v in zip(texts, vals)]
+def share_of(x, n, k):
+    """A whole percent from at least k responses, otherwise the count itself ("x of n")."""
+    return f'{round(pct(x, n))}%' if n >= k else f'{x} of {n}'
 
 
 def sha(path):
@@ -136,8 +119,6 @@ class Poll:
         self.since = int(dt.datetime.fromisoformat(cfg['since'].replace('Z', '+00:00')).timestamp())
         self.exclude = set(pcfg.get('exclude_participants', []))
         self.exclude_reason = pcfg.get('exclude_reason', cfg.get('exclude_reason', 'listed in the config'))
-        self.min_cell = max(1, int(cfg.get('min_cell', 3)))
-        self.min_total = max(1, int(cfg.get('min_total', 10)))
 
         # statements, renumbered to the reference poll by text
         rows = read_csv(d / 'comments.csv')
@@ -220,6 +201,7 @@ class Poll:
         self.excluded_in_groups = sorted({self.group[p] for p in set(self.exclude) | set(self.auto_only) if p in self.group}, key=int)
         self.grouped_not_counted = sum(1 for p in self.group if p not in people and p not in self.exclude and p not in self.auto_only)
         self.group_floor = cfg.get('min_participants_for_groups', 25)
+        self.min_total = max(1, int(cfg.get('min_total', 10)))
         self.groups_computed = len(self.people) >= self.group_floor
         gids = sorted({g for p, g in self.group.items() if p in people}, key=int) if self.groups_computed else []
         self.members = {g: [p for p in self.people if self.group.get(p) == g] for g in gids}
@@ -227,7 +209,6 @@ class Poll:
         self.small = [g for g in gids if len(self.members[g]) < self.min_total]        # merged into "Other"
         self.gname = {g: f'Group {i + 1}' for i, g in enumerate(gids)}
         self.other = [p for g in self.small for p in self.members[g]]
-        self.other_shown = len(self.other) >= self.min_total                           # "Other" is a column too
         self.ungrouped = [p for p in self.people if self.group.get(p) not in gids]
 
         # statements created after the first counted vote: who could not have seen them
@@ -269,38 +250,34 @@ class Poll:
         return f"{t.strftime('%Y-%m-%d %H:%M')} UTC ({t.astimezone(tz).strftime('%H:%M')} {tzname})"
 
 
-def wilson(k, n, z=1.96):
+def to_change(t, share):
+    """How many responses would have to change for the label to change, as a sentence (descriptive, not an interval)."""
+    a, d, _ = t
+    n, q = a + d, Fraction(str(share))
     if n == 0:
-        return 0.0, 1.0
-    p = k / n
-    c = (p + z * z / (2 * n)) / (1 + z * z / n)
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
-    return max(0.0, c - h), min(1.0, c + h)
-
-
-def near_line(t, share):
-    """Rule-based wording when the 95% interval of the agree (or disagree) share among agree + disagree crosses the threshold."""
-    a, d, _ = t
-    if a + d == 0:
         return ''
-    side, k = ('agree', a) if a >= d else ('disagree', d)
-    lo, hi = wilson(k, a + d)
-    if lo < share <= hi:
-        return f'close to the {share:.0%} line: 95% range {lo:.0%}–{hi:.0%} {side} of {a + d} agree + disagree'
-    return ''
+    if a >= q * n:          # fewest agree -> disagree changes that bring agree below the share
+        j, frm, to = math.floor(a - q * n) + 1, 'agree', 'disagree'
+    elif d >= q * n:
+        j, frm, to = math.floor(d - q * n) + 1, 'disagree', 'agree'
+    else:                   # fewest changes that bring one side up to the share
+        j, frm, to = min((math.ceil(q * n - a), 'disagree', 'agree'), (math.ceil(q * n - d), 'agree', 'disagree'))
+    return f'{plural(j, "response")} changing from {frm} to {to} would change this label'
 
 
-def label(t, share):
+def label(t, share, k):
+    """agree / disagree / neither by share of agree + disagree; 'few' below k agree + disagree responses."""
     a, d, _ = t
-    if a + d == 0:
-        return 'neither'
+    if a + d < k:
+        return 'few'
     if a >= share * (a + d): return 'agree'
     if d >= share * (a + d): return 'disagree'
     return 'neither'
 
 
 def label_text(k, share):
-    return {'agree': f'≥{share:.0%} agree', 'disagree': f'≥{share:.0%} disagree', 'neither': f'neither ≥{share:.0%}'}[k]
+    return {'agree': f'≥{share:.0%} agree', 'disagree': f'≥{share:.0%} disagree', 'neither': f'neither ≥{share:.0%}',
+            'few': 'too few responses for a label'}[k]
 
 
 # ------------------------------------------------------------------ PCA map (stdlib, seeded)
@@ -377,8 +354,8 @@ def map_svg(P, pts):
         dots.append(marker(i, tx(x), ty(y)))
     counts = Counter(P.group.get(p) for p in pts)
     alt = (f'Scatter plot of {len(pts)} participants placed by similarity of their opinion votes; '
-           + '; '.join(f'{P.gname[g]}: {count(counts.get(g, 0), P.min_cell)}' for g in P.groups)
-           + (f'; Other: {count(sum(counts.get(g, 0) for g in P.small), P.min_cell)}' if P.other_shown else '') + '.')
+           + '; '.join(f'{P.gname[g]}: {counts.get(g, 0)}' for g in P.groups)
+           + (f'; Other: {sum(counts.get(g, 0) for g in P.small)}' if P.small else '') + '.')
     return (f'<svg class="map" viewBox="0 0 {W} {H}" role="img" aria-label="{esc(alt)}"><title>{esc(alt)}</title>'
             f'<rect width="{W}" height="{H}" class="mapbg"/><line x1="{tx(0):.1f}" y1="0" x2="{tx(0):.1f}" y2="{H}" class="axl"/>'
             f'<line x1="0" y1="{ty(0):.1f}" x2="{W}" y2="{ty(0):.1f}" class="axl"/>{"".join(dots)}</svg>')
@@ -387,7 +364,7 @@ def map_svg(P, pts):
 def map_legend(P):
     items = ''.join(f'<span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">{marker(i, 7, 7, 5)}</svg> {P.gname[g]} ({len(P.members[g])})</span>'
                     for i, g in enumerate(P.groups))
-    if P.other_shown:
+    if P.small:
         items += f'<span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">{marker(-1, 7, 7, 5)}</svg> Other ({len(P.other)})</span>'
     return f'<div class="legend">{items}</div>'
 
@@ -451,18 +428,12 @@ def page(title, h1, sub, body, footer, banner):
 
 
 def stack(a, d, s, cls='stack', label_text_='', *, k):
-    """Agree · disagree · pass bar. Counts the small-cell rule hides are not drawn."""
     n = a + d + s
-    (ta, td, ts), exact = cells((a, d, s), k)
-    a, d, s = (v if e else 0 for v, e in zip((a, d, s), exact))
-    aria = f' role="img" aria-label="{esc(label_text_ or f"{ta} agree, {td} disagree, {ts} pass")}"'
+    if n < k:
+        return f'<div class="{cls} few"><span class="muted">fewer than {k} responses</span></div>'
+    aria = f' role="img" aria-label="{esc(label_text_ or f"{a} agree, {d} disagree, {s} pass")}"'
     return (f'<div class="{cls}"{aria}><div class="seg agr" style="width:{pct(a, n):.1f}%"></div><div class="seg dis" style="width:{pct(d, n):.1f}%"></div>'
             f'<div class="seg pas" style="width:{pct(s, n):.1f}%"></div></div>')
-
-
-def nums(t, k):
-    """"a · d · s" with the small-cell rule, HTML-escaped."""
-    return esc(' · '.join(cells(t, k)[0]))
 
 
 def legend(items):
@@ -502,16 +473,16 @@ def repro_block(cfg, cfgp, polls):
 # ------------------------------------------------------------------ single-poll report
 def poll_report(P, cfg, out, repro, other_labels=None):
     share = cfg.get('label_share', 0.7)
+    k = P.min_total
     overall = {c: P.tally(c) for c in P.opinion}
-    lab = {c: label(overall[c], share) for c in P.opinion}
+    lab = {c: label(overall[c], share, k) for c in P.opinion}
     order = sorted(P.opinion, key=lambda c: (-(overall[c][0] - overall[c][1]), skey(c)))
-    by_label = {k: [c for c in order if lab[c] == k] for k in ('agree', 'disagree', 'neither')}
+    by_label = {key: [c for c in order if lab[c] == key] for key in ('agree', 'disagree', 'neither', 'few')}
     tot = [sum(overall[c][i] for c in P.opinion) for i in range(3)]
     nv = sum(tot)
     counts = [sum(1 for c in P.opinion if (p, c) in P.vote) for p in P.people]
     median = statistics.median(counts) if counts else 0
-    kc, kt = P.min_cell, P.min_total
-    sizes = ', '.join([f'{P.gname[g]} {len(P.members[g])}' for g in P.groups] + ([f'Other {len(P.other)}'] if P.other_shown else []))
+    sizes = ', '.join([f'{P.gname[g]} {len(P.members[g])}' for g in P.groups] + ([f'Other {len(P.other)}'] if P.small else []))
     measure_ok = len(P.groups) >= 2
 
     def spread(c):
@@ -526,23 +497,22 @@ def poll_report(P, cfg, out, repro, other_labels=None):
 
     # chart 1: statements by label
     ch1 = ''
-    for k in ('agree', 'disagree', 'neither'):
-        rows = by_label[k]
+    for key in ('agree', 'disagree', 'neither', 'few'):
+        rows = by_label[key]
         if not rows:
             continue
-        ch1 += f'<div class="block{" keep" if len(rows) <= 4 else ""}"><h3>{label_text(k, share)} (of agree + disagree) <span class="count">{len(rows)}</span></h3>'
+        head = (f'{label_text(key, share)} (of agree + disagree)' if key != 'few' else
+                f'Too few responses for a label (fewer than {k} agree + disagree)')
+        ch1 += f'<div class="block{" keep" if len(rows) <= 4 else ""}"><h3>{head} <span class="count">{len(rows)}</span></h3>'
         for c in rows:
             a, d, s = overall[c]; n = a + d + s
-            (ta, td, ts), exact = cells(overall[c], kc)
-            wa, wd = (a if exact[0] else 0), (d if exact[1] else 0)
-            tip = f'#{c}: {ta} agree · {td} disagree · {ts} pass (n={count(n, kc)})'
+            sens = to_change(overall[c], share) if key != 'few' else ''
+            tip = f'#{c}: {a} agree · {d} disagree · {s} pass (n={n})' + (f'; {sens}' if sens else '')
+            bar = (f'<div class="div-bar" role="img" aria-label="{esc(tip)}"><div class="half left"><div class="seg dis" style="width:{pct(d, n):.1f}%"></div></div>'
+                   f'<div class="half right"><div class="seg agr" style="width:{pct(a, n):.1f}%"></div></div></div>' if n >= k else
+                   f'<div class="div-bar few"><span class="muted">fewer than {k} responses</span></div>')
             ch1 += (f'<div class="row" data-tip="{esc(tip)}"><div class="stmt"><span class="num">#{c}</span> {esc(P.text[c])}</div>'
-                    f'<div class="div-bar" role="img" aria-label="{esc(tip)}"><div class="half left"><div class="seg dis" style="width:{pct(wd, n):.1f}%"></div></div>'
-                    f'<div class="half right"><div class="seg agr" style="width:{pct(wa, n):.1f}%"></div></div></div>'
-                    f'<div class="nums">{nums(overall[c], kc)}</div></div>')
-            nl = near_line(overall[c], share) if all(exact) else ''   # its interval would give the hidden count away
-            if nl:
-                ch1 += f'<p class="mfoot" style="margin:-4px 0 6px">#{c}: {esc(nl)}</p>'
+                    f'{bar}<div class="nums">{a} · {d} · {s}</div></div>')
         ch1 += '</div>'
 
     # chart 2: groups (only groups with >= min_total members)
@@ -552,11 +522,11 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         for g in P.groups:
             a, d, s = P.tally(c, P.members[g])
             ch2 += (f'<div class="grow"><div class="glabel">{P.gname[g]} <span class="muted">({len(P.members[g])})</span></div>'
-                    f'{stack(a, d, s, k=kc)}<div class="gnums">{nums((a, d, s), kc)}</div></div>')
+                    f'{stack(a, d, s, k=k)}<div class="gnums">{a} · {d} · {s}</div></div>')
         ch2 += '</div>'
 
-    # full table: All, shown groups, Other (small-cell rule throughout); role rows never crossed with Other
-    cols = [('All', P.people, 'all')] + [(P.gname[g], P.members[g], 'group') for g in P.groups] + ([('Other', P.other, 'other')] if P.other_shown else [])
+    # full table: All, shown groups, Other (small cells suppressed); role rows never crossed with Other
+    cols = [('All', P.people, 'all')] + [(P.gname[g], P.members[g], 'group') for g in P.groups] + ([('Other', P.other, 'other')] if P.small else [])
     head1 = '<th rowspan="2" scope="col" class="sc">Statement</th>' + ''.join(
         f'<th colspan="3" scope="colgroup" class="first">{n} <span class="muted">({len(w)})</span></th>' for n, w, _ in cols)
     head2 = ''.join('<th scope="col" class="first">Agr</th><th scope="col">Dis</th><th scope="col">Pass</th>' for _ in cols)
@@ -569,46 +539,40 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         for c in sids:
             role = c in P.meta
             body += f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(P.text[c])}</th>'
-            rec = [c, P.text[c], 'role' if role else label_text(lab[c], share)]
+            rec = [c, P.text[c], 'role' if role else label_text(lab[c], share), '' if role or lab[c] == 'few' else to_change(overall[c], share)]
             for _, w, kind in cols:
                 a, d, s = P.tally(c, w)
                 if kind == 'other' and role:
                     body += '<td class="first pc">—</td><td class="pc">—</td><td class="pc">—</td>'
                     rec += ['', '', '']
                     continue
-                ta, td, ts = cells((a, d, s), kc)[0]
-                ca = 'ca' if a + d and a >= share * (a + d) else ''
-                cd = 'cd' if a + d and d >= share * (a + d) else ''
-                body += f'<td class="first {ca}">{esc(ta)}</td><td class="{cd}">{esc(td)}</td><td class="pc">{esc(ts)}</td>'
-                rec += [ta, td, ts]
+                ca = 'ca' if a + d >= k and a >= share * (a + d) else ''
+                cd = 'cd' if a + d >= k and d >= share * (a + d) else ''
+                body += f'<td class="first {ca}">{a}</td><td class="{cd}">{d}</td><td class="pc">{s}</td>'
+                rec += [a, d, s]
             body += '</tr>'
             csv_rows.append(rec)
     table = (f'<div class="tablewrap"><table class="vt"><caption>Agree · disagree · pass per statement, overall and per Polis group. {ORDER_NOTE}</caption>'
              f'<thead><tr>{head1}</tr><tr>{head2}</tr></thead><tbody>{body}</tbody></table></div>')
-    write_csv(out / f'poll-{P.key}-statements.csv', ['statement', 'text', 'label'] + [f'{n}_{x}' for n, _, _ in cols for x in ('agree', 'disagree', 'pass')], csv_rows)
+    write_csv(out / f'poll-{P.key}-statements.csv', ['statement', 'text', 'label', 'label_sensitivity'] + [f'{n}_{x}' for n, _, _ in cols for x in ('agree', 'disagree', 'pass')], csv_rows)
 
     # map
     pts, cutoff = project(P)
     svg = map_svg(P, pts)
 
-    # roles: overall, and the split statement by answer to the first role question (small-cell rule)
+    # roles: overall, and the split statement by answer to the first role question (small cells suppressed)
     role_html = split_html = ''
     if P.roles:
         for c in P.roles:
             a, d, s = P.tally(c)
-            ty, tn, tp = cells((a, d, s), kc)[0]
             role_html += (f'<div class="row role"><div class="stmt"><span class="num">#{c}</span> {esc(P.text[c])}</div>'
-                          f'{stack(a, d, s, "stack wide", f"{ty} yes, {tn} no, {tp} pass", k=kc)}<div class="nums">{esc(f"{ty} yes · {tn} no · {tp} pass")}</div></div>')
+                          f'{stack(a, d, s, "stack wide", f"{a} yes, {d} no, {s} pass", k=k)}<div class="nums">{a} yes · {d} no · {s} pass</div></div>')
         r0 = P.roles[0]
         for nm, val in ((f'Yes to #{r0}', 1), (f'No to #{r0}', -1)):
             who = [p for p in P.people if P.vote.get((p, r0)) == val]
-            if len(who) < kt:
-                split_html += (f'<div class="grow"><div class="glabel wide-label">{esc(nm)} <span class="muted">({esc(count(len(who), kc))})</span></div>'
-                               f'<p class="note">Not shown: fewer than {kt} people.</p></div>')
-                continue
             a, d, s = P.tally(split, who)
             split_html += (f'<div class="grow"><div class="glabel wide-label">{esc(nm)} <span class="muted">({len(who)})</span></div>'
-                           f'{stack(a, d, s, k=kc)}<div class="gnums">{nums((a, d, s), kc)}</div></div>')
+                           f'{stack(a, d, s, k=k)}<div class="gnums">{a} · {d} · {s}</div></div>')
 
     # text
     reconcile = ''
@@ -617,18 +581,22 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         diff_l = [c for c in P.opinion if c in labs_m and labs_m[c] != lab[c]]
         reconcile = (f' Among the {n_m} participants who also voted in {esc(other_name)} (matched by xid), the label differs from this page on: {ids(diff_l)}.'
                      f' Paired results on the comparison pages describe those {n_m} only.')
+    few_note = f'; {len(by_label["few"])} with too few responses for a label' if by_label['few'] else ''
+    few_sum = (f'while {len(by_label["few"])} have fewer than {k} agree + disagree responses, too few for a label ({ids(by_label["few"])}); '
+               if by_label['few'] else '')
     tiles = (f'<div class="tiles"><div class="tile"><b>{len(P.people)}</b><span>participants with an opinion vote in the window</span></div>'
              f'<div class="tile"><b>{len(P.opinion)}</b><span>opinion statements, plus {plural(len(P.roles), "role question")}</span></div>'
-             f'<div class="tile"><b>{nv}</b><span>opinion votes: {round(pct(tot[0], nv))}% agree · {round(pct(tot[1], nv))}% disagree · {round(pct(tot[2], nv))}% pass</span></div>'
-             f'<div class="tile"><b>{len(by_label["agree"])} · {len(by_label["disagree"])} · {len(by_label["neither"])}</b><span>statements {label_text("agree", share)} · {label_text("disagree", share)} · neither</span></div></div>')
+             f'<div class="tile"><b>{nv}</b><span>opinion votes: {share_of(tot[0], nv, k)} agree · {share_of(tot[1], nv, k)} disagree · {share_of(tot[2], nv, k)} pass</span></div>'
+             f'<div class="tile"><b>{len(by_label["agree"])} · {len(by_label["disagree"])} · {len(by_label["neither"])}</b><span>statements {label_text("agree", share)} · {label_text("disagree", share)} · neither'
+             f'{few_note}</span></div></div>')
     summary = (f'<div class="card"><b>Summary.</b> Of {len(P.opinion)} opinion statements, {len(by_label["agree"])} have {label_text("agree", share)} ({ids(by_label["agree"])}), '
                f'{len(by_label["disagree"])} have {label_text("disagree", share)} ({ids(by_label["disagree"])}) and {len(by_label["neither"])} neither ({ids(by_label["neither"])}), '
-               f'counting agree + disagree only. Polis groups shown: {sizes or "none"}.{reconcile} {SELF_SELECTED}</div>')
+               f'{few_sum}counting agree + disagree only. Polis groups shown: {sizes or "none"}.{reconcile} {SELF_SELECTED}</div>')
     differ_note = (f'<p class="note">Measure (this report\'s own, not Polis\'s representativeness or group-informed consensus): for each statement, the range across '
-                   f'groups of (agree − disagree) / all votes in the group, over groups with at least {kt} members. The {word(len(differ))} statements with the '
+                   f'groups of (agree − disagree) / all votes in the group, over groups with at least {k} members. The {word(len(differ))} statements with the '
                    f'largest range are shown. Descriptive only: the groups were formed from these same votes, so no test is applied. {ORDER_NOTE}</p>'
                    if measure_ok else
-                   (f'<p class="note">Not computed: fewer than two Polis groups have at least {kt} members ({sizes or "none"}).</p>' if P.groups_computed else
+                   (f'<p class="note">Not computed: fewer than two Polis groups have at least {k} members ({sizes}).</p>' if P.groups_computed else
                     f'<p class="note">Not computed: {len(P.people)} participants, fewer than the {P.group_floor} needed before opinion groups are shown.</p>'))
     excl = (f'{plural(P.auto_votes, "automatic vote")} not counted (a vote by a statement\'s author on that statement at the second it was created); '
             f'{plural(len(P.auto_only), "participant")} cast only automatic votes. All other votes count, including those of statement authors.'
@@ -652,14 +620,12 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         f'{plural(P.grouped_not_counted, "participant")} with a group-id {"has" if P.grouped_not_counted == 1 else "have"} no opinion vote in this window. Polis group sizes as exported: '
         f'{", ".join(f"{P.gname.get(g, chr(35) + g)} {n}" for g, n in sorted(P.polis_sizes.items(), key=lambda t: int(t[0])))}. '
         f'Groups are shown only with at least {P.group_floor} participants (here {len(P.people)}: {"shown" if P.groups_computed else "not shown"}); '
-        f'groups with fewer than {kt} participants are merged into "Other", which is shown only if it has at least {kt} '
-        f'(here {len(P.other)}: {"shown" if P.other_shown else "not shown"}); {plural(len(P.ungrouped), "participant")} without a group count in "All" only.</li>',
-        f'<li><b>Small counts:</b> counts of 1 to {kc - 1} are shown as "&lt;{kc}". Where that hides a single count of a row, the next-smallest count '
-        f'of the row is shown as "≥{kc}", so the hidden one cannot be worked out from the total; bars leave hidden counts out. A column or split '
-        f'with fewer than {kt} people is not shown. Role answers are not shown for "Other".</li>'
-        + (f'<li><b>Few participants:</b> {len(P.people)} participants, fewer than {kt}; most counts on this page are small.</li>' if len(P.people) < kt else ''),
+        f'groups with fewer than {k} participants are merged into "Other"; {plural(len(P.ungrouped), "participant")} without a group count in "All" only.</li>',
+        f'<li><b>Left out, for focus:</b> every count is exact. A bar needs at least {k} responses and a label at least {k} agree + disagree responses; '
+        f'below that the counts are shown on their own. Role answers are not shown for "Other". These limits are about how much a number can carry, not about privacy.</li>',
         f'<li><b>Participation:</b> median {median:g} of {len(P.opinion)} opinion statements per participant. Polis chooses the order in which each participant sees statements.</li>',
-        f'<li><b>Labels</b> use {share:.0%} of agree + disagree; passes are not in the denominator. They are not Polis\'s group-informed consensus. Role answers are self-reported.</li>',
+        f'<li><b>Labels</b> use {share:.0%} of agree + disagree; passes are not in the denominator. They are not Polis\'s group-informed consensus. '
+        f'The hover text and the CSV give how many responses would have to change for a label to change; that describes these responses and is not a confidence interval. Role answers are self-reported.</li>',
     ]
     if P.unmatched:
         caveats.append(f'<li>Statements not found in the reference poll: {ids(P.unmatched)}.</li>')
@@ -670,7 +636,7 @@ def poll_report(P, cfg, out, repro, other_labels=None):
         role_sec = (f'<h2>Role questions</h2><p class="note">Left out of everything above. Answers are self-reported. Numbers are yes · no · pass.</p>'
                     f'{legend([("agr", "Yes"), ("dis", "No"), ("pas", "Pass")])}<div class="card">{role_html}</div>'
                     f'<div class="keep"><h3>#{split} by answer to #{P.roles[0]}</h3><p class="note">#{split} is the opinion statement with the smallest gap between '
-                    f'agree and disagree. Counts of 1 to {kc - 1} are shown as "&lt;{kc}"; an answer given by fewer than {kt} people is not shown. {ORDER_NOTE}</p>{legend(LEG_ADP)}<div class="card">{split_html}</div></div>')
+                    f'agree and disagree. {ORDER_NOTE}</p>{legend(LEG_ADP)}<div class="card">{split_html}</div></div>')
     body = f'''{tiles}{summary}
 <h2>How each statement was voted</h2>
 <p class="note">Bars run left for disagree and right for agree, as a share of all votes on the statement; the remainder is passes. {ORDER_NOTE}</p>
@@ -714,14 +680,14 @@ def sign_test(up, down):
 def matched_labels(PA, PB, share):
     ia, ib, both = matched(PA, PB)
     common = [c for c in PA.opinion if c in PB.opinion]
-    la = {c: label(PA.tally(c, [ia[x] for x in both]), share) for c in common}
-    lb = {c: label(PB.tally(c, [ib[x] for x in both]), share) for c in common}
+    la = {c: label(PA.tally(c, [ia[x] for x in both]), share, PA.min_total) for c in common}
+    lb = {c: label(PB.tally(c, [ib[x] for x in both]), share, PA.min_total) for c in common}
     return len(both), la, lb
 
 
 def compare_reports(PA, PB, cfg, out, repro):
     share = cfg.get('label_share', 0.7)
-    kc, kt = PA.min_cell, PA.min_total
+    k = PA.min_total
     ia, ib, both = matched(PA, PB)
     N = len(both)
     files_both = len(set(PA.xid.values()) & set(PB.xid.values()))
@@ -778,8 +744,8 @@ def compare_reports(PA, PB, cfg, out, repro):
         pooled.update(tabs[c])
     A = {c: list(PA.tally(c, [ia[x] for x in both])) for c in common}
     B = {c: list(PB.tally(c, [ib[x] for x in both])) for c in common}
-    labA = {c: label(A[c], share) for c in common}; labB = {c: label(B[c], share) for c in common}
-    allA = {c: label(PA.tally(c), share) for c in common}; allB = {c: label(PB.tally(c), share) for c in common}
+    labA = {c: label(A[c], share, k) for c in common}; labB = {c: label(B[c], share, k) for c in common}
+    allA = {c: label(PA.tally(c), share, k) for c in common}; allB = {c: label(PB.tally(c), share, k) for c in common}
 
     # noise baselines
     role_diff = {c: sum(n for (a, b), n in tabs[c].items() if a != b and a in RANK and b in RANK) for c in roles}
@@ -796,22 +762,19 @@ def compare_reports(PA, PB, cfg, out, repro):
     # participants: role breakdown (small cells suppressed), times
     def role_counts(P, people, c):
         return P.tally(c, people)
-    groups3_all = [('Matched', PA, [ia[x] for x in both]), (f'Only {PA.name}', PA, [ia[x] for x in only_a]), (f'Only {PB.name}', PB, [ib[x] for x in only_b])]
-    groups3 = [g for g in groups3_all if len(g[2]) >= kt]
-    left_out = [f'{n} ({count(len(pp), kc)})' for n, _, pp in groups3_all if len(pp) < kt]
+    groups3 = [('Matched', PA, [ia[x] for x in both]), (f'Only {PA.name}', PA, [ia[x] for x in only_a]), (f'Only {PB.name}', PB, [ib[x] for x in only_b])]
     role_rows = ''
     for c in roles:
         role_rows += f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(PA.text[c])}</th>'
         for _, P, people in groups3:
-            ta, td, ts = cells(role_counts(P, people, c), kc)[0]
-            role_rows += f'<td class="first">{esc(ta)}</td><td>{esc(td)}</td><td class="pc">{esc(ts)}</td>'
+            a, d, s = role_counts(P, people, c)
+            role_rows += f'<td class="first">{a}</td><td>{d}</td><td class="pc">{s}</td>'
         role_rows += '</tr>'
-    role_left = f' Not shown, fewer than {kt} people: {esc(", ".join(left_out))}.' if left_out else ''
     role_table = (f'<div class="tablewrap"><table class="vt"><caption>Answers to the role questions (yes · no · pass), as given in the poll each group voted in '
-                  f'(matched: {esc(PA.name)}). Counts of 1 to {kc - 1} are shown as "&lt;{kc}".{role_left} Self-reported.</caption><thead><tr><th rowspan="2" scope="col" class="sc">Role question</th>'
+                  f'(matched: {esc(PA.name)}). Self-reported.</caption><thead><tr><th rowspan="2" scope="col" class="sc">Role question</th>'
                   + ''.join(f'<th colspan="3" scope="colgroup" class="first">{esc(n)} ({len(p)})</th>' for n, _, p in groups3)
                   + '</tr><tr>' + ''.join('<th scope="col" class="first">Yes</th><th scope="col">No</th><th scope="col">Pass</th>' for _ in groups3)
-                  + f'</tr></thead><tbody>{role_rows}</tbody></table></div>') if roles and groups3 else ''
+                  + f'</tr></thead><tbody>{role_rows}</tbody></table></div>') if roles else ''
     gap_h = (PB.first_ts - PA.last_ts) / 3600 if PA.last_ts and PB.first_ts else None
     who_block = (f'<h2>Participants</h2><p class="note">{SELF_SELECTED} {N} participants have the same xid in both polls and an opinion vote in both windows '
                  f'({files_both} xids occur in both xid files); {len(only_a)} voted only in {esc(PA.name)}, {len(only_b)} only in {esc(PB.name)}. '
@@ -828,23 +791,14 @@ def compare_reports(PA, PB, cfg, out, repro):
                                    'disagree_to_agree', 'movers', 'smallest_reachable_p', 'sign_test_p', 'holm_p', 'reading'],
               [[c, PA.text[c], *mv[c], *flips[c], mv[c][0] + mv[c][1], f'{minp[c]:.4f}', f'{pv[c]:.3f}', f'{holm[c]:.3f}', reading(c)] for c in common])
     comp = {}
-    comp_pops = [len(both), len(only_a), len(both), len(only_b)]
     for c in common:
         def agr(P, people):
             vals = [P.vote[(p, c)] for p in people if (p, c) in P.vote]
             return sum(v == 1 for v in vals), len(vals)
         comp[c] = [*agr(PA, [ia[x] for x in both]), *agr(PA, [ia[x] for x in only_a]), *agr(PB, [ib[x] for x in both]), *agr(PB, [ib[x] for x in only_b])]
-
-    def comp_cell(c, i):
-        """Agree and n for column i, or None when that population is under min_total."""
-        if comp_pops[i] < kt:
-            return None
-        return count(comp[c][2 * i], kc), count(comp[c][2 * i + 1], kc)
     write_csv(out / 'composition.csv', ['statement', 'text', 'A_matched_agree', 'A_matched_n', 'A_only_agree', 'A_only_n',
-                                        'B_matched_agree', 'B_matched_n', 'B_only_agree', 'B_only_n'],
-              [[c, PA.text[c], *[v for i in range(4) for v in (comp_cell(c, i) or ('', ''))]] for c in common])
+                                        'B_matched_agree', 'B_matched_n', 'B_only_agree', 'B_only_n'], [[c, PA.text[c], *comp[c]] for c in common])
 
-    few_note = f' Only {N} matched participants, fewer than {kt}: most counts are small.' if N < kt else ''
     sub_common = (f'{N} participants with the same Polis xid in {esc(PA.name)} ({esc(PA.url)}) and {esc(PB.name)} ({esc(PB.url)}) · '
                   f'statements numbered as in {esc(PA.name)}')
     footer = f'Built by polis_report.py from the public Polis exports of reports {esc(PA.report)} and {esc(PB.report)} and the xid files. Counts only.'
@@ -869,37 +823,28 @@ def compare_reports(PA, PB, cfg, out, repro):
     # --- compared
     def pair(t, who):
         a, d, s = t
-        return f'<div class="pair"><span class="who">{who}</span>{stack(a, d, s, k=kc)}<span class="gnums">{nums(t, kc)}</span></div>'
-
-    def change(c):
-        """B agree − A agree, only when both counts are shown exactly."""
-        if cells(A[c], kc)[1][0] and cells(B[c], kc)[1][0]:
-            return f'{B[c][0] - A[c][0]:+d}'
-        return '—'
+        return f'<div class="pair"><span class="who">{who}</span>{stack(a, d, s, k=k)}<span class="gnums">{a} · {d} · {s}</span></div>'
     rows = ''
     for c in common:
         lb = f'<span class="lab">{label_text(labA[c], share)} → <b>{label_text(labB[c], share)}</b></span>' if labA[c] != labB[c] else ''
         lb += f'<span class="lab">{esc(reading(c))}</span>'
         rows += (f'<div class="crow"><div class="stmt"><span class="num">#{c}</span> {esc(PA.text[c])}{lb}</div>'
                  f'<div class="bars">{pair(A[c], "A")}{pair(B[c], "B")}</div>'
-                 f'<div class="delta">{change(c)}<small> agree</small><span class="mvd">{mv[c][1]}↘ {mv[c][0]}↗</span></div></div>')
-    def tds(t):
-        ta, td, ts = (esc(x) for x in cells(t, kc)[0])
-        return f'<td class="first">{ta}</td><td>{td}</td><td class="pc">{ts}</td>'
-    trows = ''.join(f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(PA.text[c])}</th>{tds(A[c])}'
-                    f'{tds(B[c])}<td class="first lab2">{label_text(labA[c], share)}</td><td class="lab2">{label_text(labB[c], share)}</td>'
-                    f'<td class="first">{change(c)}</td><td>{mv[c][1]}</td><td>{mv[c][0]}</td></tr>' for c in common)
+                 f'<div class="delta">{B[c][0] - A[c][0]:+d}<small> agree</small><span class="mvd">{mv[c][1]}↘ {mv[c][0]}↗</span></div></div>')
+    trows = ''.join(f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(PA.text[c])}</th><td class="first">{A[c][0]}</td><td>{A[c][1]}</td><td class="pc">{A[c][2]}</td>'
+                    f'<td class="first">{B[c][0]}</td><td>{B[c][1]}</td><td class="pc">{B[c][2]}</td><td class="first lab2">{label_text(labA[c], share)}</td><td class="lab2">{label_text(labB[c], share)}</td>'
+                    f'<td class="first">{B[c][0] - A[c][0]:+d}</td><td>{mv[c][1]}</td><td>{mv[c][0]}</td></tr>' for c in common)
     ta = [sum(A[c][i] for c in common) for i in range(3)]; tb = [sum(B[c][i] for c in common) for i in range(3)]
     na, nb = sum(ta), sum(tb)  # each poll's share is out of that poll's own responses
 
     def cl(L):
         v = list(L.values())
-        return f"{v.count('agree')} · {v.count('disagree')} · {v.count('neither')}"
+        return f"{v.count('agree')} · {v.count('disagree')} · {v.count('neither')}" + (f" · {v.count('few')} too few" if 'few' in v else '')
     changed = [c for c in common if labA[c] != labB[c]]
     left_agree = Counter(b for c in common for (a, b), n in tabs[c].items() for _ in range(n) if a == 'agree' and b != 'agree')
     body = f'''<div class="tiles"><div class="tile"><b>{N}</b><span>matched participants; all figures on this page are among these {N}</span></div>
-<div class="tile"><b>{round(pct(ta[0], na))}% → {round(pct(tb[0], nb))}%</b><span>of opinion votes agree, among the {N}</span></div>
-<div class="tile"><b>{round(pct(ta[2], na))}% → {round(pct(tb[2], nb))}%</b><span>of opinion votes pass, among the {N}</span></div>
+<div class="tile"><b>{share_of(ta[0], na, k)} → {share_of(tb[0], nb, k)}</b><span>of opinion votes agree, among the {N}</span></div>
+<div class="tile"><b>{share_of(ta[2], na, k)} → {share_of(tb[2], nb, k)}</b><span>of opinion votes pass, among the {N}</span></div>
 <div class="tile"><b>{cl(labA)} → {cl(labB)}</b><span>statements {label_text("agree", share)} · {label_text("disagree", share)} · neither, among the {N}</span></div></div>
 <div class="card"><b>Summary.</b> {m} statements appear in both polls. Label changes among the {N}: {ids(changed)}.
 Votes that left agree went to disagree {left_agree.get("disagree", 0)} times and to pass {left_agree.get("pass", 0)} times.
@@ -913,8 +858,7 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
 {who_block}
 <h2>Method and caveats</h2><ul class="caveats">{scope_note}{test_note}
 <li><b>Polis groups</b> are not compared: Polis forms them over everyone in each poll.</li>
-<li><b>Labels</b> use {share:.0%} of agree + disagree. Each poll's window, exclusions and current-vote rule are those of its own report.</li>
-<li><b>Small counts:</b> counts of 1 to {kc - 1} are shown as "&lt;{kc}"; where that hides a single count of a row, the next-smallest is shown as "≥{kc}". The change in agree is shown only when both counts are exact; bars leave hidden counts out. Movers are shown exactly, as on the transitions page.{few_note}</li></ul>
+<li><b>Labels</b> use {share:.0%} of agree + disagree and need at least {k} agree + disagree responses; bars need at least {k} responses. Every count is exact. Each poll's window, exclusions and current-vote rule are those of its own report.</li></ul>
 {repro}'''
     write_page(out / 'poll-ab-compared.html', page(f'{cfg.get("banner", "")} {PA.name} and {PB.name} compared'.strip(),
                                                    f'{cfg["title"]}: {PA.name} and {PB.name} compared', sub_common, body, footer, cfg.get('banner')))
@@ -952,15 +896,12 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
     one_way = [c for c in common if bool(mv[c][0]) != bool(mv[c][1])]
     none = [c for c in common if not mv[c][0] and not mv[c][1]]
 
-    def fr(c, i):
-        v = comp_cell(c, i)
-        if v is None:
-            return 'not shown'
-        return esc(f'{v[0]}/{v[1]}') if comp[c][2 * i + 1] else '—'
-    crow = ''.join(f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(PA.text[c])}</th><td class="first">{fr(c, 0)}</td><td>{fr(c, 1)}</td>'
-                   f'<td class="first">{fr(c, 2)}</td><td>{fr(c, 3)}</td></tr>' for c in common)
+    def fr(a, n):
+        return f'{a}/{n}' if n else '—'
+    crow = ''.join(f'<tr><th scope="row" class="sc"><span class="num">#{c}</span> {esc(PA.text[c])}</th><td class="first">{fr(comp[c][0], comp[c][1])}</td><td>{fr(comp[c][2], comp[c][3])}</td>'
+                   f'<td class="first">{fr(comp[c][4], comp[c][5])}</td><td>{fr(comp[c][6], comp[c][7])}</td></tr>' for c in common)
     body = f'''<div class="tiles"><div class="tile"><b>{N}</b><span>matched participants ({files_both} xids in both files)</span></div>
-<div class="tile"><b>{round(pct(ps, pu + pdn + ps))}%</b><span>of paired opinion votes unchanged{"; " + ", ".join(f"#{c} answered differently by {role_diff[c]}" for c in roles) if roles else ""}</span></div>
+<div class="tile"><b>{share_of(ps, pu + pdn + ps, k)}</b><span>of paired opinion votes unchanged{"; " + ", ".join(f"#{c} answered differently by {role_diff[c]}" for c in roles) if roles else ""}</span></div>
 <div class="tile"><b>{pu} · {pdn}</b><span>moved toward agree · toward disagree; agree↔disagree switches: {pooled[('agree', 'disagree')]} agree→disagree, {pooled[('disagree', 'agree')]} disagree→agree</span></div>
 <div class="tile"><b>{len(only_a)} · {len(only_b)}</b><span>voted only in {esc(PA.name)} · only in {esc(PB.name)}</span></div></div>
 <div class="card"><b>Summary.</b> Movement in both directions: {ids(two_way)}. One direction only: {ids(one_way)}. No observed movement: {ids(none)}.
@@ -973,7 +914,7 @@ Statements with a Holm-corrected sign-test p below 0.05: {ids(sig)}. {power_line
 The {m} statements are summed, so one person counts up to {m} times; no test is applied to this table.</p>
 <div class="card">{matrix(pooled, "All statements", True)}</div>
 <h2>Transition table per statement</h2><p class="note">Median {small_cells:g} of the 12 off-diagonal cells per statement hold fewer than 5 people, too few for Bowker's symmetry test, which is therefore not reported.</p><div class="mults">{grid}</div>
-<h2>Agree counts: matched vs one-poll-only</h2><p class="note">Agree votes / all votes on the statement, for the matched participants and for those who voted in only one poll. Counts of 1 to {kc - 1} are shown as "&lt;{kc}"; a column of fewer than {kt} people is not shown.</p>
+<h2>Agree counts: matched vs one-poll-only</h2><p class="note">Agree votes / all votes on the statement, for the matched participants and for those who voted in only one poll.</p>
 <div class="tablewrap"><table class="vt"><caption>Agree / all votes per statement</caption><thead><tr><th rowspan="2" scope="col" class="sc">Statement</th><th colspan="2" scope="colgroup" class="first">In {esc(PA.name)}</th><th colspan="2" scope="colgroup" class="first">In {esc(PB.name)}</th></tr>
 <tr><th scope="col" class="first">Matched ({N})</th><th scope="col">Only {esc(PA.name)} ({len(only_a)})</th><th scope="col" class="first">Matched ({N})</th><th scope="col">Only {esc(PB.name)} ({len(only_b)})</th></tr></thead><tbody>{crow}</tbody></table></div>
 {who_block}
