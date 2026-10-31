@@ -1,16 +1,16 @@
 """Send one test message from the Proto bot to a test account (#577, bot approval #581 #582).
 
-Two guards, both empty by default, decide whether anything really leaves Proto:
-  - `live_wikis`: the wikis where real sends are switched on;
-  - `test_recipients`: the only accounts that may receive anything.
-A recipient outside the list is refused. A wiki that is not live, or a channel whose bot
-login is not set, gives a dry run: nothing is sent and the result says why.
+A test goes only to an account on `test_recipients` (empty by default); any other recipient
+is refused. Test sends are allowed on every wiki the bot knows, approved or not: the
+pre-approved test list is the guard (owner, 2026-10-30). Sends to participants are limited
+to the wikis where the bot is approved; that is #577, not this module. A channel whose bot
+login is not set gives a dry run: nothing is sent and the result says why.
 
 Wiki-mail and talk-page posts log in with separate bot passwords, each with only the grants
 its channel needs (owner, 2026-10-29).
 
 Wiki-mail is checked on the chosen wiki first. If the account can't receive it there, it is
-checked on Meta and sent from Meta, when Meta is live too.
+checked on Meta and sent from Meta.
 """
 
 from __future__ import annotations
@@ -31,11 +31,7 @@ DRY_RUN = 'dry_run'
 FAILED = 'failed'
 UNKNOWN = 'unknown'   # a send got no answer: it may have been delivered
 
-# Code on a not_emailable failure when Meta was not tried, because Meta is not live.
-FALLBACK_NOT_LIVE = 'fallback_not_live'
-
 # Why a test was a dry run.
-WIKI_NOT_LIVE = 'wiki_not_live'
 NO_CREDENTIALS = 'no_credentials'
 
 
@@ -81,7 +77,6 @@ def _as_list(value) -> list[str]:
 class ReminderSettings:
     email_credentials: BotCredentials | None
     talk_credentials: BotCredentials | None
-    live_wikis: frozenset[str]
     test_recipients: tuple[str, ...]
     user_agent: str
 
@@ -94,9 +89,6 @@ class ReminderSettings:
         return cls(
             email_credentials=login(LOGIN_PREFIX['email']),
             talk_credentials=login(LOGIN_PREFIX['talk']),
-            live_wikis=frozenset(
-                wiki for wiki in _as_list(config.get('REMINDERS_LIVE_WIKIS')) if wiki in WIKI_HOSTS
-            ),
             test_recipients=tuple(dict.fromkeys(
                 normalize_username(name) for name in _as_list(config.get('REMINDERS_TEST_RECIPIENTS'))
             )),
@@ -149,8 +141,6 @@ def send_test_message(*, wiki: str, channel: str, recipient: str, settings: Remi
     recipient = normalize_username(recipient)
     if recipient not in settings.test_recipients:
         raise ReminderTestRefused('recipient_not_allowed')
-    if wiki not in settings.live_wikis:
-        return ReminderTestResult(DRY_RUN, WIKI_NOT_LIVE)
     credentials = settings.credentials_for(channel)
     if credentials is None:
         return ReminderTestResult(DRY_RUN, NO_CREDENTIALS)
@@ -163,7 +153,7 @@ def send_test_message(*, wiki: str, channel: str, recipient: str, settings: Remi
             return client
         try:
             if channel == 'email':
-                return _send_email(wiki, recipient, settings, message, open_client)
+                return _send_email(wiki, recipient, message, open_client)
             client = open_client(wiki)
             if not client.talk_page_allows_bot(recipient):
                 return ReminderTestResult(FAILED, NOBOTS)
@@ -177,13 +167,11 @@ def send_test_message(*, wiki: str, channel: str, recipient: str, settings: Remi
             return ReminderTestResult(outcome, exc.reason, code=exc.code)
 
 
-def _send_email(wiki, recipient, settings, message, open_client) -> ReminderTestResult:
+def _send_email(wiki, recipient, message, open_client) -> ReminderTestResult:
     client = open_client(wiki)
     if not client.is_emailable(recipient):
         if wiki == FALLBACK_WIKI:
             return ReminderTestResult(FAILED, NOT_EMAILABLE)
-        if FALLBACK_WIKI not in settings.live_wikis:
-            return ReminderTestResult(FAILED, NOT_EMAILABLE, code=FALLBACK_NOT_LIVE)
         client = open_client(FALLBACK_WIKI)
         if not client.is_emailable(recipient):
             return ReminderTestResult(FAILED, NOT_EMAILABLE)

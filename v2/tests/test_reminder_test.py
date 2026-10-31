@@ -7,7 +7,7 @@ import pytest
 
 from db import AuditEvent
 from services.reminder_test import (
-    DRY_RUN, FAILED, FALLBACK_NOT_LIVE, NO_CREDENTIALS, SENT, UNKNOWN, WIKI_NOT_LIVE,
+    DRY_RUN, FAILED, NO_CREDENTIALS, SENT, UNKNOWN,
     ReminderSettings, ReminderTestMessage, ReminderTestRefused, normalize_username,
     send_test_message,
 )
@@ -50,11 +50,11 @@ class FakeBot:
         return 1
 
 
-def settings(*, live=('nlwiki', 'metawiki'), recipients=('Tester',), credentials=True):
+def settings(*, recipients=('Tester',), credentials=True):
     return ReminderSettings(
         email_credentials=BotCredentials('Protowikibot@mail', 'pw') if credentials else None,
         talk_credentials=BotCredentials('Protowikibot@talk', 'pw') if credentials else None,
-        live_wikis=frozenset(live), test_recipients=tuple(recipients), user_agent='x',
+        test_recipients=tuple(recipients), user_agent='x',
     )
 
 
@@ -85,10 +85,22 @@ def test_requests_outside_the_configuration_are_refused_before_anything_happens(
     assert log == []
 
 
-def test_a_wiki_that_is_not_live_is_a_dry_run():
-    result, log = run(conf=settings(live=()), emailable=('nlwiki',))
-    assert (result.outcome, result.reason) == (DRY_RUN, WIKI_NOT_LIVE)
-    assert log == []
+@pytest.mark.parametrize('wiki', ['nlwiki', 'metawiki'])
+@pytest.mark.parametrize('channel', ['email', 'talk'])
+def test_a_test_send_goes_out_on_every_known_wiki_without_a_live_switch(wiki, channel):
+    # The pre-approved test list is the guard; bot approval of the wiki is not needed.
+    result, log = run(wiki, channel, emailable=(wiki,))
+    assert (result.outcome, result.sent_via) == (SENT, wiki)
+    assert log[-2][:3] == (channel, wiki, 'Tester')
+
+
+def test_an_old_live_wiki_setting_is_ignored():
+    conf = ReminderSettings.from_config({
+        'REMINDERS_LIVE_WIKIS': 'enwiki', 'REMINDERS_TEST_RECIPIENTS': 'Tester',
+        'REMINDERS_BOT_EMAIL_USERNAME': 'Protowikibot@mail', 'REMINDERS_BOT_EMAIL_PASSWORD': 'pw',
+    }, user_agent='x')
+    result, _ = run(conf=conf, emailable=('nlwiki',))
+    assert result.outcome == SENT
 
 
 def test_no_bot_login_is_a_dry_run():
@@ -110,13 +122,6 @@ def test_email_falls_back_to_meta():
     assert log[-2][:2] == ('email', 'metawiki')
 
 
-def test_no_fallback_when_meta_is_not_live_and_the_result_says_so():
-    result, log = run(conf=settings(live=('nlwiki',)), emailable=('metawiki',))
-    assert (result.outcome, result.reason, result.code) == (FAILED, NOT_EMAILABLE, FALLBACK_NOT_LIVE)
-    assert not [entry for entry in log if entry[0] == 'email']
-    assert not [entry for entry in log if entry[1] == 'metawiki']   # Meta was not even asked
-
-
 def test_not_emailable_after_trying_meta_has_no_fallback_code():
     result, log = run(emailable=())
     assert (result.reason, result.code) == (NOT_EMAILABLE, None)
@@ -130,9 +135,8 @@ def test_a_send_without_an_answer_has_an_unknown_outcome():
 
 def test_settings_accept_a_comma_separated_string():
     conf = ReminderSettings.from_config({
-        'REMINDERS_LIVE_WIKIS': 'nlwiki, enwiki', 'REMINDERS_TEST_RECIPIENTS': 'tester, Tester two,',
+        'REMINDERS_TEST_RECIPIENTS': 'tester, Tester two,',
     }, user_agent='x')
-    assert conf.live_wikis == frozenset({'nlwiki'})
     assert conf.test_recipients == ('Tester', 'Tester two')
     assert conf.email_credentials is None and conf.talk_credentials is None
 
@@ -153,7 +157,7 @@ def test_talk_page_note_is_signed():
 def test_each_channel_needs_its_own_login():
     conf = ReminderSettings(
         email_credentials=BotCredentials('Protowikibot@mail', 'pw'), talk_credentials=None,
-        live_wikis=frozenset({'nlwiki'}), test_recipients=('Tester',), user_agent='x',
+        test_recipients=('Tester',), user_agent='x',
     )
     talk, log = run(channel='talk', conf=conf)
     assert (talk.outcome, talk.reason) == (DRY_RUN, NO_CREDENTIALS) and log == []
@@ -178,7 +182,7 @@ def test_a_wiki_error_is_reported_with_its_reason_and_code():
 def configured(app):
     app.config.update(
         REMINDERS_BOT_EMAIL_USERNAME='Protowikibot@mail', REMINDERS_BOT_EMAIL_PASSWORD='pw',
-        REMINDERS_LIVE_WIKIS=['nlwiki'], REMINDERS_TEST_RECIPIENTS=['Tester'],
+        REMINDERS_TEST_RECIPIENTS=['Tester'],
     )
     log = []
     with patch('services.reminder_test.WikiBotClient',
@@ -199,9 +203,10 @@ def test_state_lists_wikis_test_accounts_and_login(admin_client, configured):
     data = admin_client.get('/api/v1/admin/reminder-test').get_json()['data']
     assert data['recipients'] == ['Tester']
     assert data['credentialsSet'] == {'email': True, 'talk': False}
-    assert {(row['key'], row['live']) for row in data['wikis']} == {
-        ('nlwiki', True), ('metawiki', False),
-    }
+    assert data['wikis'] == [
+        {'key': 'metawiki', 'host': 'meta.wikimedia.org'},
+        {'key': 'nlwiki', 'host': 'nl.wikipedia.org'},
+    ]
 
 
 def test_send_returns_the_result_and_audits_without_the_name(admin_client, configured):
@@ -252,15 +257,6 @@ def test_cli_sends_and_reports(app, configured):
     assert 'sent (sent from nlwiki)' in result.output
     event = AuditEvent.query.filter_by(operation='reminder.test').one()
     assert event.detail['actor_kind'] == 'cli'
-
-
-def test_cli_dry_run_on_a_wiki_that_is_not_live(app, configured):
-    result = app.test_cli_runner().invoke(args=[
-        'send-test-reminder', '--wiki', 'metawiki', '--channel', 'talk', '--to', 'Tester',
-    ])
-    assert result.exit_code == 0, result.output
-    assert 'dry_run, reason wiki_not_live' in result.output
-    assert configured == []
 
 
 def test_cli_names_the_settings_to_fill_when_a_login_is_missing(app, configured):

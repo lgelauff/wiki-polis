@@ -175,7 +175,6 @@ TAGS:
     - admin-reminder-test-channel-email
     - admin-reminder-test-channel-talk
     - admin-reminder-test-dry-no-login
-    - admin-reminder-test-dry-not-live
     - admin-reminder-test-empty
     - admin-reminder-test-failed-blocked
     - admin-reminder-test-failed-error
@@ -183,7 +182,6 @@ TAGS:
     - admin-reminder-test-failed-nobots
     - admin-reminder-test-failed-not-bot-password
     - admin-reminder-test-failed-not-emailable
-    - admin-reminder-test-failed-not-emailable-here
     - admin-reminder-test-failed-throttled
     - admin-reminder-test-heading
     - admin-reminder-test-intro
@@ -199,7 +197,6 @@ TAGS:
     - admin-reminder-test-sent-fallback
     - admin-reminder-test-talk-summary
     - admin-reminder-test-unknown
-    - admin-reminder-test-wiki-dry
     - admin-roles-assigned
     - admin-roles-change
     - admin-roles-empty
