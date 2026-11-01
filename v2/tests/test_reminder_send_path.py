@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+import i18n
+
 from services.reminder_batch import Outcome
 from services.reminder_messages import MessageSettings, build_email, build_talk
 from services.reminder_sender import LiveSender
@@ -281,9 +283,13 @@ def test_a_mail_keeps_the_title_as_written(app):
     assert '<nowiki>' not in build_email([_rem()], SETTINGS).body
 
 
-def test_one_language_per_message(app):
-    message = build_email([_rem(language='nl')], SETTINGS)
-    assert 'Explore' in message.body and 'phase has opened' in message.body
+def test_messages_are_english_even_when_the_language_has_the_texts(app, monkeypatch):
+    dutch = {key: f'NL {key}' for key in i18n._MESSAGES['en'] if key.startswith('reminder-')}
+    monkeypatch.setitem(i18n._MESSAGES, 'nl', {**i18n._MESSAGES.get('nl', {}), **dutch})
+    mail = build_email([_rem(language='nl')], SETTINGS)
+    talk = build_talk([_rem(conversation=_conv(language='nl', named=True))], SETTINGS)
+    for text in (mail.subject, mail.body, talk.subject, talk.body, talk.summary):
+        assert 'NL reminder-' not in text
 
 
 def test_the_footer_counts_consultations_not_reminders(app):

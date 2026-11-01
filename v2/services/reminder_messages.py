@@ -10,8 +10,10 @@ Proto consultation" and links to Proto's front page, not to the consultation.
 On a talk page the organizer-written title is shown as plain text, never as
 wikitext.
 
-One message is in one language: the consultations' language when they all
-share it and the reminder texts exist in it, otherwise English.
+Every message is in English for now. A message in the consultation's language
+would tell anyone reading a public talk page, or the wiki-mail log, which
+language community's consultation the person joined, so the language choice
+waits for its own decision.
 """
 
 from dataclasses import dataclass
@@ -39,11 +41,6 @@ class MessageSettings:
 
 
 def _locale(reminders) -> str:
-    languages = {(r.conversation.language or i18n.SOURCE_LOCALE).split('-')[0] for r in reminders}
-    if len(languages) == 1:
-        language = languages.pop()
-        if i18n.has_message('reminder-mail-footer', language):
-            return language
     return i18n.SOURCE_LOCALE
 
 
