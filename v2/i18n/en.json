@@ -1069,9 +1069,9 @@
     "reminder-item-unnamed-phase_closing": "In a Proto consultation you joined, the $1 phase closes soon.",
     "reminder-item-unnamed-results": "A Proto consultation you joined has closed, and its results are available.",
     "reminder-talk-see-proto": "Your consultations are in Proto: $1",
-    "reminder-mail-footer": "You get this message because you asked for reminders when you joined {{PLURAL:$1|this consultation|these consultations}} in Proto. Proto sends it through the account Protowikibot, run by $2. To stop the reminders for a consultation, change your choice on its page in Proto. Replies to this message are not read; for questions, write on $3",
-    "reminder-talk-footer-named": "You get this note because you asked for reminders when you joined {{PLURAL:$1|this consultation|these consultations}} in Proto. Proto posts it through the account Protowikibot, run by [[m:User:$2|$2]]. To stop the reminders for a consultation, change your choice on its page in Proto.",
-    "reminder-talk-footer-unnamed": "You get this note because you asked for reminders when you joined {{PLURAL:$1|a consultation|consultations}} in Proto. Proto posts it through the account Protowikibot, run by [[m:User:$2|$2]]. To stop the reminders, change your choice in Proto.",
+    "reminder-mail-footer": "You get this message because you asked for reminders when you joined {{PLURAL:$1|this consultation|these consultations}} in Proto. Proto sends it through the account Protowikibot. To stop the reminders for a consultation, change your choice on its page in Proto. Replies to this message are not read; for questions, write on $2",
+    "reminder-talk-footer-named": "You get this note because you asked for reminders when you joined {{PLURAL:$1|this consultation|these consultations}} in Proto. Proto posts it through the account Protowikibot. To stop the reminders for a consultation, change your choice on its page in Proto.",
+    "reminder-talk-footer-unnamed": "You get this note because you asked for reminders when you joined {{PLURAL:$1|a consultation|consultations}} in Proto. Proto posts it through the account Protowikibot. To stop the reminders, change your choice in Proto.",
     "reminder-talk-title": "Proto: {{PLURAL:$1|an update|$1 updates}} on consultations you joined",
     "reminder-talk-summary": "Proto: reminder you asked for"
 }

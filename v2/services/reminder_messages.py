@@ -2,7 +2,8 @@
 
 Fixed texts from the message catalogue, with the consultation and a link filled
 in. Whoever triggers a send cannot add free text. Every message ends with the
-same footer: why the person gets it, who sends it, and how to stop it.
+same footer: why the person gets it, that Proto sends it through Protowikibot,
+and how to stop it. No operator is named.
 
 A talk page is public. A consultation is named on a talk page only when its
 ``reminder_talk_names_consultation`` setting is on; otherwise the note says "a
@@ -37,7 +38,6 @@ class ReminderMessage:
 @dataclass(frozen=True)
 class MessageSettings:
     base_url: str          # Proto's public address, e.g. https://wiki-polis.toolforge.org
-    operator: str          # the operator's Wikimedia username
 
 
 def _locale(reminders) -> str:
@@ -94,7 +94,7 @@ def build_email(reminders, settings: MessageSettings) -> ReminderMessage:
         subject = i18n.resolve('reminder-mail-subject-combined', locale, (len(reminders),))
     items = [_item(r, settings, locale, named=True) for r in reminders]
     footer = i18n.resolve('reminder-mail-footer', locale, (
-        _consultations(reminders), _user_page_url(settings.operator), _user_page_url(BOT_ACCOUNT).replace(
+        _consultations(reminders), _user_page_url(BOT_ACCOUNT).replace(
             '/wiki/User:', '/wiki/User_talk:'),
     ))
     body = '\n\n'.join(items + ['--', footer])
@@ -113,7 +113,7 @@ def build_talk(reminders, settings: MessageSettings) -> ReminderMessage:
                                   (settings.base_url.rstrip('/'),)))
     footer = i18n.resolve('reminder-talk-footer-named' if all(named) else
                           'reminder-talk-footer-unnamed', locale,
-                          (_consultations(reminders), settings.operator))
+                          (_consultations(reminders),))
     title = i18n.resolve('reminder-talk-title', locale, (len(reminders),))
     body = '\n\n'.join([f'* {item}' for item in items] + [f"''{footer}''"])
     summary = i18n.resolve('reminder-talk-summary', locale)

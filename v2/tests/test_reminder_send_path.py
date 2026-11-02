@@ -19,7 +19,7 @@ from services.wiki_bot import (
 )
 from tests.test_wiki_bot import FakeSession
 
-SETTINGS = MessageSettings(base_url='https://proto.example/', operator='Some Operator')
+SETTINGS = MessageSettings(base_url='https://proto.example/')
 EN = json.loads((Path(__file__).parents[1] / 'i18n' / 'en.json').read_text(encoding='utf-8'))
 
 
@@ -53,7 +53,8 @@ def test_a_mail_names_the_consultation_links_to_it_and_ends_with_the_footer(app)
     assert 'https://proto.example/c/library-hours' in message.body
     assert 'Explore' in message.body                       # the phase name, reused
     assert 'asked for reminders' in message.body
-    assert 'User:Some_Operator' in message.body             # the operator's user page
+    assert 'User_talk:Protowikibot' in message.body         # where questions go
+    assert 'run by' not in message.body                      # no operator is named
     assert 'User_talk:Protowikibot' in message.body          # where questions go
     assert 'not read' in message.body
 
@@ -72,6 +73,8 @@ def test_a_talk_note_does_not_name_the_consultation_unless_its_setting_is_on(app
     assert 'https://proto.example' in unnamed.body           # Proto's front page instead
     named = build_talk([_rem(named=True)], SETTINGS)
     assert 'Library hours' in named.body and '/c/library-hours' in named.body
+    for note in (unnamed, named):
+        assert 'User:' not in note.body and 'run by' not in note.body   # no operator is named
 
 
 def test_a_mixed_talk_note_names_only_the_consultations_that_allow_it(app):
