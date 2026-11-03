@@ -45,9 +45,13 @@ def _locale(reminders) -> str:
 
 
 def _plain_wikitext(text: str) -> str:
-    """Organizer-written text shown literally in wikitext: one line, inside <nowiki>."""
+    """Organizer-written text shown literally in wikitext: one line, inside <nowiki>.
+
+    Every '<' becomes '&lt;', so no tag in the title can close the nowiki, in any
+    case or spacing. MediaWiki decodes the entity inside nowiki, so readers see '<'.
+    """
     flat = ' '.join(str(text).split())
-    return '<nowiki>' + flat.replace('</nowiki', '&lt;/nowiki') + '</nowiki>'
+    return '<nowiki>' + flat.replace('<', '&lt;') + '</nowiki>'
 
 
 def _consultations(reminders) -> int:

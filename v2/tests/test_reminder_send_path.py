@@ -271,8 +271,11 @@ def test_the_default_category_is_used_when_the_wiki_has_none():
 HOSTILE = "{{subst:x}} [[Category:y]] [[User:Z]] ~~~~ <!-- '' </nowiki>\n== h =="
 
 
-def test_an_organizer_title_is_plain_text_on_a_talk_page(app):
-    body = build_talk([_rem(named=True, title=HOSTILE)], SETTINGS).body
+@pytest.mark.parametrize('close', ['</nowiki>', '</NOWIKI>', '</NoWiki >', '</nowiki\t>'])
+def test_an_organizer_title_is_plain_text_on_a_talk_page(app, close):
+    body = build_talk([_rem(named=True, title=HOSTILE.replace('</nowiki>', close))],
+                      SETTINGS).body
+    assert len(re.findall(r'<\s*/\s*nowiki', body, re.IGNORECASE)) == 1
     inner = body.split('<nowiki>', 1)[1].split('</nowiki>', 1)[0]
     outside = body.replace('<nowiki>' + inner + '</nowiki>', '')
     assert 'Category:y' in inner and '\n' not in inner
