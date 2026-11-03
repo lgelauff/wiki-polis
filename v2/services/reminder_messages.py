@@ -44,14 +44,18 @@ def _locale(reminders) -> str:
     return i18n.SOURCE_LOCALE
 
 
+def _one_line(text) -> str:
+    """Organizer-written text on one line, so it cannot fake lines of its own."""
+    return ' '.join(str(text).split())
+
+
 def _plain_wikitext(text: str) -> str:
     """Organizer-written text shown literally in wikitext: one line, inside <nowiki>.
 
     Every '<' becomes '&lt;', so no tag in the title can close the nowiki, in any
     case or spacing. MediaWiki decodes the entity inside nowiki, so readers see '<'.
     """
-    flat = ' '.join(str(text).split())
-    return '<nowiki>' + flat.replace('<', '&lt;') + '</nowiki>'
+    return '<nowiki>' + _one_line(text).replace('<', '&lt;') + '</nowiki>'
 
 
 def _consultations(reminders) -> int:
@@ -71,7 +75,7 @@ def _item(reminder, settings, locale, *, named: bool, wikitext: bool = False) ->
     if kind not in _TYPES:
         raise ValueError(f'unknown reminder type: {kind}')
     conv = reminder.conversation
-    title = _plain_wikitext(conv.title) if wikitext else conv.title
+    title = _plain_wikitext(conv.title) if wikitext else _one_line(conv.title)
     if not named:
         params = () if kind == RESULTS else (_phase(reminder, locale),)
         return i18n.resolve(f'reminder-item-unnamed-{kind}', locale, params)
@@ -93,7 +97,7 @@ def build_email(reminders, settings: MessageSettings) -> ReminderMessage:
     if len(reminders) == 1:
         only = reminders[0]
         subject = i18n.resolve(f'reminder-mail-subject-{only.reminder_type}', locale,
-                               (only.conversation.title,))
+                               (_one_line(only.conversation.title),))
     else:
         subject = i18n.resolve('reminder-mail-subject-combined', locale, (len(reminders),))
     items = [_item(r, settings, locale, named=True) for r in reminders]

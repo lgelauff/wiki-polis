@@ -30,7 +30,7 @@ from typing import Callable
 from services import reminder_wikis
 from services.reminder_batch import Outcome
 from services.reminder_messages import MessageSettings, build_email, build_talk
-from services.wiki_bot import FALLBACK_WIKI, NOT_EMAILABLE, NOBOTS, WikiBotError
+from services.wiki_bot import BLOCKED, FALLBACK_WIKI, NOT_EMAILABLE, NOBOTS, WikiBotError
 
 ClientFor = Callable[[str, str], object]    # (wiki, channel) -> WikiBotClient
 
@@ -47,6 +47,7 @@ class LiveSender:
         self._clock = clock
         self._clients: dict[tuple[str, str], object] = {}
         self._last_post: dict[str, float] = {}
+        self._mail_blocked: set[str] = set()   # wikis where the bot is blocked from mail
 
     def __enter__(self) -> 'LiveSender':
         return self
@@ -82,6 +83,10 @@ class LiveSender:
                 if not client.is_emailable(username):
                     if wiki == FALLBACK_WIKI:
                         return Outcome('failed', reason=NOT_EMAILABLE, sent_via=wiki)
+                    if FALLBACK_WIKI in self._mail_blocked:
+                        # The batch keys a block on the consultation's wiki, so a block
+                        # on Meta during a fallback is remembered here.
+                        return Outcome('failed', reason=BLOCKED, sent_via=FALLBACK_WIKI)
                     client = self._client(FALLBACK_WIKI, 'email')
                     answering = client.wiki
                     if not client.is_emailable(username):
@@ -89,6 +94,8 @@ class LiveSender:
                 return self._email(client, username, message)
             return self._talk(wiki, username, message)
         except WikiBotError as exc:
+            if channel == 'email' and exc.reason == BLOCKED:
+                self._mail_blocked.add(answering)
             return Outcome('failed', reason=exc.reason, error_code=exc.code, sent_via=answering)
 
     def _email(self, client, username, message) -> Outcome:

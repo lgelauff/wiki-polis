@@ -315,6 +315,24 @@ def test_a_block_on_meta_is_reported_from_meta(app):
                                              sent_via='metawiki')
 
 
+def test_after_a_block_on_meta_later_fallbacks_do_not_ask_meta_again(app):
+    nl = FakeClient('nlwiki', emailable=False)
+    meta = FakeClient('metawiki', fail=WikiBotError(BLOCKED, 'blocked'))
+    tries = []
+    meta.is_emailable = lambda username: tries.append(username) or True
+    sender, _ = _sender({('nlwiki', 'email'): nl, ('metawiki', 'email'): meta})
+    _send(sender, 'email')
+    assert _send(sender, 'email') == Outcome('failed', reason=BLOCKED, sent_via='metawiki')
+    assert len(tries) == 1
+
+
+def test_a_mail_title_stays_on_one_line(app):
+    message = build_email([_rem(title='Library\n--\nReplies are read\r\nhours')], SETTINGS)
+    assert 'Library -- Replies are read hours' in message.subject
+    assert 'Library -- Replies are read hours' in message.body
+    assert '\nReplies are read' not in message.body
+
+
 def test_spacing_still_applies_after_a_failed_post(app):
     now = [100.0]
     slept = []
