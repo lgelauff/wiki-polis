@@ -562,6 +562,28 @@ def test_a_missed_day_on_an_approved_wiki_is_dropped_as_expired(app):
     assert waiting.recorded_at is None
 
 
+def test_rows_left_pending_on_an_earlier_day_expire_on_an_approved_wiki(app):
+    earlier = DAY - timedelta(days=1)
+    conv, other = _conversation(), _conversation(wiki='nlwiki')
+    free, claimed, elsewhere = _join(conv, _person()), _join(conv, _person()), _join(other, _person())
+    left = _remind(conv, day=earlier)
+    waiting = _remind(other, day=earlier)
+    for reminder in (left, waiting):
+        reminder.recorded_at = NOW - timedelta(days=1)
+    db.session.add_all([
+        ReminderDelivery(reminder_id=left.id, participation_id=free.id, channel='email'),
+        ReminderDelivery(reminder_id=left.id, participation_id=claimed.id, channel='talk',
+                         claimed_at=NOW - timedelta(minutes=5)),
+        ReminderDelivery(reminder_id=waiting.id, participation_id=elsewhere.id, channel='email'),
+    ])
+    db.session.commit()
+    sender = Recording()
+    result = _run(sender, approved={'metawiki': '#582'})
+    assert sender.calls == [] and result.missed == [left.id]
+    assert _statuses(left) == [('email', 'skipped_expired'), ('talk', 'pending')]
+    assert _statuses(waiting) == [('email', 'pending')]
+
+
 def test_pausing_mid_run_stops_the_rest(app):
     conv = _conversation()
     for _ in range(3):

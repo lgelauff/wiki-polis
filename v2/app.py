@@ -6355,7 +6355,8 @@ def create_app(test_config: dict | None = None) -> Flask:
             refuse('--by needs --reminder.')
 
         def paused():
-            # Read at use, so a changed Toolforge setting stops even a running job.
+            # Read when the run starts. A running process never sees a changed
+            # setting, so stopping a running job means stopping the job itself.
             return (_truthy(os.environ.get('REMINDERS_PAUSED', ''))
                     or bool(current_app.config['REMINDERS_PAUSED']))
 
