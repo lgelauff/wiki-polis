@@ -124,6 +124,12 @@ class Conversation(db.Model):
     scheduled_transition_frozen = db.Column(db.Boolean, nullable=False, default=False,
                                             server_default=sa.false())
     report_filter_snapshot = db.Column(db.JSON, nullable=True)
+    # Reminders (#577): the wiki the bot sends from, and whether a talk-page note
+    # names the consultation (it is public, so off by default).
+    reminder_wiki = db.Column(db.String(32), nullable=False, default='metawiki',
+                              server_default='metawiki')
+    reminder_talk_names_consultation = db.Column(db.Boolean, nullable=False, default=False,
+                                                 server_default=sa.false())
 
     # Phase toggles — each controls whether that phase is available to participants.
     # Independent, default off; admin sets them via the conversation panel.
@@ -598,6 +604,103 @@ class VoucherCode(db.Model):
     participant = db.relationship('Participant')
 
 
+# ── Reminders (#577) ──────────────────────────────────────────────────────────
+# A reminder is one send action: a message type for one consultation on one send
+# day (UTC), recorded before anyone is picked. Its deliveries are one row per
+# participation and channel, with no username and no message text. Totals are
+# counts over the deliveries. Under the retention rule a delivery is unlinked from
+# the person (participation and timestamps cleared) and kept, so totals stay.
+REMINDER_CHANNELS = ('email', 'talk')
+REMINDER_DELIVERY_STATUSES = (
+    'pending', 'sent', 'dry_run', 'combined', 'skipped_expired', 'skipped_optout',
+    'not_sent_limit', 'failed',
+)
+# Every reason the bot client (services/wiki_bot.py) can raise is one of these.
+REMINDER_FAILURE_REASONS = (
+    'not_emailable', 'refused', 'nobots', 'throttled', 'blocked', 'lagged', 'outcome_unknown',
+    'api_error',
+)
+
+
+def _in_list(column: str, values: tuple[str, ...]) -> str:
+    return f"{column} IN ({', '.join(repr(v) for v in values)})"
+
+
+class Reminder(db.Model):
+    # One reminder per moment: the same type and phase for one consultation on one
+    # day is sent once (owner, 2026-10-31).
+    __tablename__ = 'reminders'
+    __table_args__ = (
+        db.UniqueConstraint('conversation_id', 'reminder_type', 'phase_key', 'send_day',
+                            name='uq_reminder_moment'),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+                                nullable=False)
+    # A string, not a check constraint, so a new type needs no migration.
+    reminder_type   = db.Column(db.String(32), nullable=False)
+    # The phase the reminder is about (opened, closing soon); '' for the final message,
+    # not NULL, so the one-per-moment key covers it too.
+    phase_key       = db.Column(db.String(32), nullable=False, default='', server_default='')
+    send_day        = db.Column(db.Date, nullable=False)
+    created_by_id   = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'),
+                                nullable=True)
+    created_at      = db.Column(db.DateTime, nullable=False,
+                                default=lambda: datetime.now(timezone.utc))
+    # A super admin's trigger on a wiki where the bot is not approved (#576).
+    triggered_by_id = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'),
+                                nullable=True)
+    triggered_at    = db.Column(db.DateTime, nullable=True)
+    # Set when the batch recorded this reminder's deliveries; a recorded reminder is
+    # never recorded again, even after its rows were unlinked from their people.
+    recorded_at     = db.Column(db.DateTime, nullable=True)
+
+    conversation = db.relationship('Conversation')
+    deliveries   = db.relationship('ReminderDelivery', back_populates='reminder',
+                                   cascade='all, delete-orphan', passive_deletes=True)
+
+
+class ReminderDelivery(db.Model):
+    __tablename__ = 'reminder_deliveries'
+    __table_args__ = (
+        db.UniqueConstraint('reminder_id', 'participation_id', 'channel',
+                            name='uq_reminder_delivery_target'),
+        db.CheckConstraint(_in_list('channel', REMINDER_CHANNELS),
+                           name='ck_reminder_delivery_channel'),
+        db.CheckConstraint(_in_list('status', REMINDER_DELIVERY_STATUSES),
+                           name='ck_reminder_delivery_status'),
+        db.CheckConstraint(
+            f"(status = 'failed' AND reason IS NOT NULL AND {_in_list('reason', REMINDER_FAILURE_REASONS)}) "
+            "OR (status <> 'failed' AND reason IS NULL)",
+            name='ck_reminder_delivery_reason',
+        ),
+        # The wiki's own error code is kept only on a failure.
+        db.CheckConstraint("error_code IS NULL OR status = 'failed'",
+                           name='ck_reminder_delivery_error_code'),
+    )
+
+    id               = db.Column(db.Integer, primary_key=True)
+    reminder_id      = db.Column(db.Integer, db.ForeignKey('reminders.id', ondelete='CASCADE'),
+                                 nullable=False)
+    # Cleared when the row is unlinked from the person (retention, or the
+    # participation removed); the row stays for the totals.
+    participation_id = db.Column(db.Integer,
+                                 db.ForeignKey('participations.id', ondelete='SET NULL'),
+                                 nullable=True)
+    channel          = db.Column(db.String(8), nullable=False)
+    status           = db.Column(db.String(16), nullable=False, default='pending',
+                                 server_default='pending')
+    reason           = db.Column(db.String(16), nullable=True)
+    error_code       = db.Column(db.String(64), nullable=True)   # the wiki's code, for api_error
+    sent_via         = db.Column(db.String(32), nullable=True)   # the wiki that sent it
+    claimed_at       = db.Column(db.DateTime, nullable=True)
+    attempted_at     = db.Column(db.DateTime, nullable=True)
+
+    reminder      = db.relationship('Reminder', back_populates='deliveries')
+    participation = db.relationship('Participation')
+
+
 # ── Explicit indexes ──────────────────────────────────────────────────────────
 db.Index('ix_participations_participant_id', Participation.participant_id)
 db.Index('ix_participations_conversation_id', Participation.conversation_id)
@@ -619,3 +722,7 @@ db.Index('ix_featured_statements_phase6_polis_statement_id',
 db.Index('ix_voucher_codes_batch_id', VoucherCode.batch_id)
 db.Index('ix_voucher_codes_status', VoucherCode.status)
 db.Index('ix_voucher_batches_conversation_id', VoucherBatch.conversation_id)
+db.Index('ix_reminders_conversation_id', Reminder.conversation_id)
+db.Index('ix_reminders_send_day', Reminder.send_day)
+db.Index('ix_reminder_deliveries_status', ReminderDelivery.status)
+db.Index('ix_reminder_deliveries_participation_id', ReminderDelivery.participation_id)
