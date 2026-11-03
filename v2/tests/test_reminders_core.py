@@ -107,6 +107,13 @@ def test_access_code_and_demo_accounts_are_never_recipients(conversation):
     assert recipients(conversation, 'talk') == []
 
 
+def test_an_access_code_account_with_a_wikimedia_username_is_not_a_recipient(conversation):
+    _join(conversation, email=True, talk=True, account_kind=ACCOUNT_KIND_VOUCHER,
+          conversation_id=conversation.id)
+    assert recipients(conversation, 'email') == []
+    assert recipients(conversation, 'talk') == []
+
+
 def test_a_banned_participant_is_not_a_recipient_until_the_ban_is_lifted(conversation):
     joined = _join(conversation, email=True)
     ban = ConversationBan(conversation_id=conversation.id, participant_id=joined.participant_id)
@@ -290,6 +297,24 @@ def test_an_unlinked_delivery_keeps_counting_in_the_totals(conversation):
     totals = db.session.query(ReminderDelivery.status, sa.func.count()).filter_by(
         reminder_id=reminder.id).group_by(ReminderDelivery.status).all()
     assert totals == [('sent', 2)]
+
+
+def test_deleting_a_participation_keeps_its_delivery_row_unlinked(conversation):
+    reminder = _reminder(conversation)
+    joined = _join(conversation, email=True)
+    db.session.add(ReminderDelivery(reminder_id=reminder.id, participation_id=joined.id,
+                                    channel='email', status='sent'))
+    db.session.commit()
+    participation_id = joined.id
+    db.session.close()
+    connection = db.session.connection()
+    connection.exec_driver_sql('PRAGMA foreign_keys=ON')
+    assert connection.exec_driver_sql('PRAGMA foreign_keys').scalar() == 1
+    connection.execute(sa.delete(Participation.__table__).where(
+        Participation.__table__.c.id == participation_id))
+    db.session.commit()
+    row = db.session.execute(sa.select(ReminderDelivery.__table__)).one()
+    assert row.participation_id is None and row.status == 'sent'
 
 
 def test_deleting_a_consultation_deletes_its_reminders(admin_client, conversation):

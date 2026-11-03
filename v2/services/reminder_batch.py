@@ -148,7 +148,8 @@ def run_batch(
     triggered it first and when.
 
     ``paused`` may be a callable; it is checked before the run and between
-    messages, so pausing mid-run stops the rest.
+    messages. The command's pause comes from the environment, which a running
+    process never re-reads, so in practice it is read at the start of a run.
     """
     is_paused = paused if callable(paused) else (lambda: paused)
     result = BatchResult(day=day)
@@ -207,7 +208,9 @@ def _due_reminders(day, approved, reminder_id, result) -> list[Reminder]:
 
 
 def _record_missed(day, approved, now, result) -> None:
-    """Approved-wiki reminders whose day passed unrecorded are dropped as expired.
+    """Approved-wiki reminders whose day passed are dropped as expired.
+
+    That covers reminders never recorded, and recorded rows never handed out.
 
     Reminders on a wiki that is not approved keep waiting for a super admin;
     on an unknown wiki they are reported on every run.
@@ -223,6 +226,24 @@ def _record_missed(day, approved, now, result) -> None:
             result.missed.append(reminder.id)
         else:
             result.waiting_for_trigger.append(reminder.id)
+    # Rows recorded but never handed out (a pause, a crash, or a run past
+    # midnight) on an approved wiki: their day has passed, so they expire too.
+    # Claimed rows are left to _settle_stale_claims.
+    leftovers = (
+        db.session.query(ReminderDelivery.id, Reminder.id, Conversation.reminder_wiki)
+        .join(Reminder, Reminder.id == ReminderDelivery.reminder_id)
+        .join(Conversation, Conversation.id == Reminder.conversation_id)
+        .filter(Reminder.send_day < day, ReminderDelivery.status == 'pending',
+                ReminderDelivery.claimed_at.is_(None))
+        .all()
+    )
+    expire = {(row_id, reminder_id) for row_id, reminder_id, wiki in leftovers
+              if reminder_wikis.is_known_wiki(wiki) and reminder_wikis.is_approved(wiki, approved)}
+    if expire:
+        (ReminderDelivery.query.filter(ReminderDelivery.id.in_([r for r, _ in expire]))
+         .update({'status': 'skipped_expired'}, synchronize_session=False))
+        db.session.commit()
+        result.missed.extend(sorted({rid for _, rid in expire} - set(result.missed)))
 
 
 def _record_deliveries(reminder: Reminder, phases: set[str], now: datetime,
