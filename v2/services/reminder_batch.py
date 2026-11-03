@@ -15,6 +15,9 @@ Safety, in order of the steps:
   ``failed``/``outcome_unknown`` and never resent: it may have gone out.
 - Just before sending, the person must still be a recipient (ticks, bans) and
   the reminder must not have expired.
+- The cap and the one-a-day rule count every message that may have gone out,
+  including one still being sent and one whose outcome is unknown.
+- The run checks that it still holds its lock before each message.
 
 The sender is passed in. In this version it is a dry run: it records what it
 would send and calls no wiki. Nothing here logs or returns a username or any
@@ -30,7 +33,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Callable, Protocol
 
 import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from db import (
     Conversation, Participation, Reminder, ReminderDelivery, REMINDER_CHANNELS,
@@ -112,21 +115,58 @@ def email_cap_from(value) -> int:
     return min(cap, MAX_EMAIL_CAP)
 
 
+class LockLost(RuntimeError):
+    """The run no longer holds the lock, so another run may have started."""
+
+
+class _NoLock:
+    """SQLite (tests, local) has one process anyway."""
+
+    def held(self) -> bool:
+        return True
+
+
+class _NamedLock:
+    """A MariaDB named lock on a connection of its own.
+
+    A named lock belongs to the connection that took it. The session hands its
+    connection back to the pool at every commit, so the lock is held on a
+    separate connection that stays open for the whole run.
+    """
+
+    def __init__(self, connection):
+        self._connection = connection
+
+    def held(self) -> bool:
+        try:
+            return self._connection.execute(
+                sa.text('SELECT IS_USED_LOCK(:n) = CONNECTION_ID()'), {'n': _LOCK_NAME}
+            ).scalar() == 1
+        except DBAPIError:
+            return False        # the connection died, and the lock with it
+
+
 @contextmanager
-def single_flight():
-    """One reminder run at a time. MariaDB has a named lock; SQLite (tests, local) has
-    one process anyway."""
-    bind = db.session.get_bind()
-    if bind.dialect.name not in ('mysql', 'mariadb'):
-        yield
+def single_flight(engine=None):
+    """One reminder run at a time. Yields the lock; check ``held()`` before each send."""
+    engine = engine or db.engine
+    if engine.dialect.name not in ('mysql', 'mariadb'):
+        yield _NoLock()
         return
-    got = db.session.execute(sa.text('SELECT GET_LOCK(:n, 0)'), {'n': _LOCK_NAME}).scalar()
-    if got != 1:
-        raise BatchBusy()
+    connection = engine.connect()
     try:
-        yield
+        got = connection.execute(sa.text('SELECT GET_LOCK(:n, 0)'), {'n': _LOCK_NAME}).scalar()
+        if got != 1:
+            raise BatchBusy()
+        try:
+            yield _NamedLock(connection)
+        finally:
+            try:
+                connection.execute(sa.text('SELECT RELEASE_LOCK(:n)'), {'n': _LOCK_NAME})
+            except DBAPIError:
+                log.warning('reminders: could not release the run lock; it ends with the connection')
     finally:
-        db.session.execute(sa.text('SELECT RELEASE_LOCK(:n)'), {'n': _LOCK_NAME})
+        connection.close()
 
 
 def run_batch(
@@ -159,7 +199,7 @@ def run_batch(
     if reminder_id is not None and triggered_by_id is None:
         raise TriggerNeedsSuperAdmin()
 
-    with single_flight():
+    with single_flight() as lock:
         result.stale_claims = _settle_stale_claims(now)
         due = _due_reminders(day, approved, reminder_id, result)
         if reminder_id is not None and due[0].triggered_at is None:
@@ -173,7 +213,7 @@ def run_batch(
             _record_missed(day, approved, now, result)
 
         _hand_out(due, now=now, sender=sender, email_cap=email_cap, result=result,
-                  active_phases=active_phases, is_paused=is_paused)
+                  active_phases=active_phases, is_paused=is_paused, lock=lock)
         result.due = [r.id for r in due]
         for reminder in due:
             for status, channel, count in (
@@ -328,7 +368,9 @@ def _valid(outcome: Outcome) -> Outcome:
     return Outcome('failed', reason='outcome_unknown')
 
 
-def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused) -> None:
+def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused,
+              lock=None) -> None:
+    lock = lock or _NoLock()
     reminder_ids = [r.id for r in due]
     if not reminder_ids:
         return
@@ -341,16 +383,6 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused) 
         .order_by(ReminderDelivery.reminder_id, ReminderDelivery.id)
         .all()
     )
-    # Still a recipient, and the reminder still current, at the moment of sending.
-    current = {}
-    phases = {}
-    for row in pending:
-        conv = row.reminder.conversation
-        if (conv.id, row.channel) not in current:
-            current[(conv.id, row.channel)] = {p.id for p in recipients(conv, row.channel)}
-        if conv.id not in phases:
-            phases[conv.id] = active_phases(conv)
-
     groups: dict[tuple, list[ReminderDelivery]] = defaultdict(list)
     for row in pending:
         wiki = row.reminder.conversation.reminder_wiki
@@ -367,14 +399,23 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused) 
         if is_paused():
             log.warning('reminders paused mid-run; the rest stays for later')
             break
+        if not lock.held():
+            log.error('reminders: the run lost its lock; stopping before the next message')
+            raise LockLost()
         rows = _claim(groups[key], now)
         if not rows:
             continue
         channel, person = key[0], key[1]
+        # Still a recipient, and the reminder still current, read after the claim:
+        # a throttled run can take minutes, and people untick or get banned meanwhile.
+        current, phases = {}, {}
         live, gone = [], []
         for row in rows:
             conv = row.reminder.conversation
-            if row.participation_id not in current[(conv.id, channel)]:
+            if conv.id not in current:
+                current[conv.id] = {p.id for p in recipients(conv, channel)}
+                phases[conv.id] = active_phases(conv)
+            if row.participation_id not in current[conv.id]:
                 gone.append((row, Outcome('skipped_optout')))
             elif is_expired(row.reminder.reminder_type, row.reminder.phase_key,
                             phases[conv.id]):
@@ -406,7 +447,7 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused) 
                 # The bot itself is blocked on the wiki that answered (a fallback mail
                 # answers from Meta): stop that wiki's batch for this channel.
                 result.blocked_wikis.add((channel, outcome.sent_via or wiki))
-            if channel == 'email' and outcome.status in _DELIVERED:
+            if channel == 'email' and _may_have_gone_out(outcome):
                 room -= 1
             _finish(live[:1], outcome, now, result)
             if live[1:]:
@@ -415,14 +456,37 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused) 
         db.session.commit()
 
 
+def _may_have_gone_out(outcome: Outcome) -> bool:
+    return outcome.status in _DELIVERED or outcome.reason == 'outcome_unknown'
+
+
+def _maybe_delivered():
+    """Rows whose message went out or may have: delivered, a claim still being
+    sent, or an outcome nobody knows. The cap and the one-a-day rule count all of
+    them, so a crash or an overlapping run cannot send a second message."""
+    return sa.or_(
+        ReminderDelivery.status.in_(_DELIVERED),
+        sa.and_(ReminderDelivery.status == 'failed',
+                ReminderDelivery.reason == 'outcome_unknown'),
+        sa.and_(ReminderDelivery.status == 'pending',
+                ReminderDelivery.claimed_at.isnot(None)),
+    )
+
+
+def _when():
+    """When the run took the row: every handed-out row has a claim time."""
+    return sa.func.coalesce(ReminderDelivery.claimed_at, ReminderDelivery.attempted_at)
+
+
 def _delivered_mail_today(day_start: datetime) -> int:
+    """Mails today, counted per person: a combined mail is one mail."""
     return (
-        ReminderDelivery.query
-        .filter(ReminderDelivery.channel == 'email',
-                ReminderDelivery.status.in_(_DELIVERED),
-                ReminderDelivery.attempted_at >= day_start,
-                ReminderDelivery.attempted_at < day_start + timedelta(days=1))
-        .count()
+        db.session.query(sa.func.count(sa.distinct(Participation.participant_id)))
+        .select_from(ReminderDelivery)
+        .join(Participation, ReminderDelivery.participation_id == Participation.id)
+        .filter(ReminderDelivery.channel == 'email', _maybe_delivered(),
+                _when() >= day_start, _when() < day_start + timedelta(days=1))
+        .scalar()
     )
 
 
@@ -448,8 +512,8 @@ def _already_messaged_today(person, channel, wiki, day_start, *, exclude) -> boo
         .join(Conversation, Conversation.id == Reminder.conversation_id)
         .filter(Participation.participant_id == person,
                 ReminderDelivery.channel == channel,
-                ReminderDelivery.status.in_(_DELIVERED),
-                ReminderDelivery.attempted_at >= day_start,
+                _maybe_delivered(),
+                _when() >= day_start, _when() < day_start + timedelta(days=1),
                 ReminderDelivery.id.notin_([row.id for row in exclude]))
     )
     if channel == 'talk':
