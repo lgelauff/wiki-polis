@@ -663,3 +663,113 @@ def test_a_run_that_breaks_off_exits_3(app, monkeypatch):
     monkeypatch.setattr('app.run_reminder_batch', broken)
     result = app.test_cli_runner().invoke(args=['process-reminders'])
     assert result.exit_code == 3
+
+
+# ── Before real sending: the lock, what counts as sent, consent per message ──
+
+class _FakeConnection:
+    def __init__(self, calls, held=True):
+        self.calls, self._held = calls, held
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        self.calls.append(sql.split('(')[0].replace('SELECT ', ''))
+        answer = 1 if 'GET_LOCK' in sql or 'RELEASE_LOCK' in sql else int(self._held)
+        return type('R', (), {'scalar': lambda self: answer})()
+
+    def close(self):
+        self.calls.append('close')
+
+
+class _FakeEngine:
+    def __init__(self, calls):
+        self.dialect = type('D', (), {'name': 'mysql'})()
+        self.connections = []
+        self._calls = calls
+
+    def connect(self):
+        self.connections.append(_FakeConnection(self._calls))
+        return self.connections[-1]
+
+
+def test_the_lock_lives_on_one_connection_of_its_own_for_the_whole_run(app):
+    calls = []
+    engine = _FakeEngine(calls)
+    with reminder_batch.single_flight(engine) as lock:
+        assert lock.held()
+    assert len(engine.connections) == 1
+    assert calls == ['GET_LOCK', 'IS_USED_LOCK', 'RELEASE_LOCK', 'close']
+
+
+def test_a_lost_lock_stops_the_run_before_the_next_message(app, monkeypatch):
+    from contextlib import contextmanager
+    conv = _conversation()
+    for _ in range(3):
+        _join(conv, _person())
+    reminder = _remind(conv)
+    answers = iter([True, False])
+
+    class Lock:
+        def held(self):
+            return next(answers, False)
+
+    @contextmanager
+    def losing():
+        yield Lock()
+    monkeypatch.setattr(reminder_batch, 'single_flight', losing)
+    sender = Recording()
+    with pytest.raises(reminder_batch.LockLost):
+        _run(sender)
+    assert len(sender.calls) == 1
+    rows = ReminderDelivery.query.filter_by(reminder_id=reminder.id).all()
+    assert sorted(r.status for r in rows) == ['dry_run', 'pending', 'pending']
+    assert all(r.claimed_at is None for r in rows if r.status == 'pending')
+
+
+def test_a_mail_whose_outcome_is_unknown_uses_up_the_cap(app):
+    earlier = _conversation()
+    joined = _join(earlier, _person())
+    old = _remind(earlier)
+    old.recorded_at = NOW
+    db.session.add(ReminderDelivery(reminder_id=old.id, participation_id=joined.id,
+                                    channel='email', status='failed', reason='outcome_unknown',
+                                    claimed_at=NOW - timedelta(hours=2),
+                                    attempted_at=NOW - timedelta(hours=1)))
+    db.session.commit()
+    conv = _conversation()
+    _join(conv, _person())
+    reminder = _remind(conv)
+    sender = Recording()
+    _run(sender, cap=1)
+    assert sender.calls == [] and _statuses(reminder) == [('email', 'not_sent_limit')]
+
+
+def test_a_message_another_run_is_still_sending_counts_for_one_a_day(app):
+    person = _person()
+    one, two = _conversation(), _conversation()
+    joined = _join(one, person)
+    _join(two, person)
+    in_flight = _remind(one)
+    in_flight.recorded_at = NOW
+    db.session.add(ReminderDelivery(reminder_id=in_flight.id, participation_id=joined.id,
+                                    channel='email', claimed_at=NOW - timedelta(minutes=1)))
+    db.session.commit()
+    second = _remind(two)
+    sender = Recording()
+    _run(sender)
+    assert sender.calls == [] and _statuses(second) == [('email', 'not_sent_limit')]
+
+
+def test_someone_who_unticks_while_the_run_is_going_is_not_messaged(app):
+    conv = _conversation()
+    first, second = _join(conv, _person()), _join(conv, _person())
+    reminder = _remind(conv)
+
+    def answer(**kw):
+        second.notify_email = False      # unticked while the first mail goes out
+        db.session.commit()
+        return Outcome('dry_run', sent_via=kw['wiki'])
+    sender = Recording(answer)
+    _run(sender)
+    assert [c['participation'].id for c in sender.calls] == [first.id]
+    assert sorted(s for _, s in _statuses(reminder)) == ['dry_run', 'skipped_optout']
