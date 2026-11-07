@@ -546,7 +546,7 @@ def test_archive_api_is_reversible_without_publication_side_effects(
     db.session.refresh(conversation)
     assert conversation.active is True
     assert conversation.paused is False
-    assert conversation.phase_public_results is False
+    assert conversation.phase_public_results is True  # results stay as they were (#258)
     assert conversation.closed_at is None
     assert conversation.report_filter_snapshot is None
     assert conversation.scheduled_transition_at is None
