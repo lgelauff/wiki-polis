@@ -15,6 +15,7 @@ import {AdminModerationFlagsPage} from './admin-moderation-flags-page';
 import {AdminModerationPeoplePage} from './admin-moderation-people-page';
 import {AdminModerationQueuePage} from './admin-moderation-queue-page';
 import {AdminParticipantsPage} from './admin-participants-page';
+import {AdminReportPreviewPage} from './admin-report-preview-page';
 import {AdminRolesPage} from './admin-roles-page';
 import {AdminSettingsPage, AdminSettingsVouchersPage} from './admin-settings-page';
 import {AdminStatementsPage} from './admin-statements-page';
@@ -79,6 +80,7 @@ type AdminRouteKind =
   | 'moderation-people'
   | 'moderation-queue'
   | 'participants'
+  | 'report-preview'
   | 'settings-access'
   | 'settings-basics'
   | 'settings-invitations'
@@ -101,6 +103,8 @@ function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
       return <AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} tab="basics" />;
     case 'settings-access':
       return <AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} tab="access" />;
+    case 'report-preview':
+      return <AdminReportPreviewPage conversationId={conversationId} />;
     case 'termination':
       return <><AdminHeader /><AdminTerminationPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
     case 'statements':
@@ -168,6 +172,8 @@ export function AdminSectionIndexRoute({firstTab}: {firstTab: string}) {
   return <Navigate replace to={{pathname: firstTab, search, hash}} />;
 }
 export const AdminTerminationRoute = () => <AdminRoute kind="termination" />;
+/** `…/report-preview`: a site admin's preview of the results report, never published. */
+export const AdminReportPreviewRoute = () => <AdminRoute kind="report-preview" />;
 export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;
 export const AdminParticipantsRoute = () => <AdminRoute kind="participants" />;
 export const AdminModerationQueueRoute = () => <AdminRoute kind="moderation-queue" />;

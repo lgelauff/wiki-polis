@@ -128,6 +128,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/reminder-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return what the reminder test can use: wikis, the test accounts, whether the bot login is set */
+        get: operations["getReminderTest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reminder-test-sends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send one test message from the Proto bot to a configured test account, on any wiki the bot knows; a channel without a bot login gives a dry run */
+        post: operations["postReminderTestSend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/termination": {
         parameters: {
             query?: never;
@@ -717,6 +751,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/report-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Preview the results report in any phase, for site admins only
+         * @description Never publishes, snapshots or changes the conversation. Uses the live moderation filter. It has the published report's full shape (cross-round comparison, opinion groups, rows sorted by shift) even while informed voting is open, unlike the public results endpoint; context.status is always provisional. Once the report is published it answers 409 conversation_closed with details.report, the published report's path. Publication is always 'preview', the viewer is always a non-participant, and links.conversation points back to the admin console. Each call writes one report.preview audit event.
+         */
+        get: operations["getAdminConversationReportPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/eligibility-policies": {
         parameters: {
             query?: never;
@@ -1190,6 +1246,36 @@ export interface components {
                 catalog: components["schemas"]["AdminCatalog"];
             };
         };
+        ReminderTestResponse: {
+            data: {
+                wikis: {
+                    key: string;
+                    host: string;
+                }[];
+                recipients: string[];
+                /** @description Whether the bot login for each channel is set */
+                credentialsSet: {
+                    email: boolean;
+                    talk: boolean;
+                };
+            };
+        };
+        ReminderTestSendRequest: {
+            wiki: string;
+            /** @enum {string} */
+            channel: "email" | "talk";
+            recipient: string;
+        };
+        ReminderTestSendResponse: {
+            data: {
+                /** @enum {string} */
+                outcome: "sent" | "dry_run" | "failed" | "unknown";
+                /** @enum {string|null} */
+                reason: "no_credentials" | "not_emailable" | "nobots" | "throttled" | "blocked" | "lagged" | "outcome_unknown" | "api_error" | null;
+                code: string | null;
+                sentVia: string | null;
+            };
+        };
         AdminTerminationResponse: {
             data: components["schemas"]["AdminTermination"];
         };
@@ -1350,6 +1436,8 @@ export interface components {
             guidance: {
                 recommendedCount: number;
                 note: string;
+                agreementFloor: number;
+                agreementMarkShare: number;
             };
             capabilities: {
                 manage: boolean;
@@ -1382,11 +1470,15 @@ export interface components {
             seed: boolean;
             provenance: null | components["schemas"]["AdminStatementProvenance"];
             votes: {
-                agree: number;
-                pass: number;
-                disagree: number;
+                /** @description Null below guidance.agreementFloor agree + disagree responses, with pass and disagree: the split would give back the withheld share. */
+                agree: number | null;
+                pass: number | null;
+                disagree: number | null;
                 total: number;
+                /** @description Whole percent of agree among agree + disagree, rounded once by the server; null below guidance.agreementFloor agree + disagree responses. */
                 agreementPercent: number | null;
+                /** @description The agree share is at least guidance.agreementMarkShare; false when agreementPercent is null. */
+                agreementMarked: boolean;
             };
         };
         AdminStatementProvenance: {
@@ -1731,6 +1823,7 @@ export interface components {
                 useAdvancedPhases: boolean;
                 initializePhase6: boolean;
                 archive: boolean;
+                previewReport: boolean;
             };
             links: {
                 self: string;
@@ -2511,7 +2604,7 @@ export interface components {
             slug: string;
             title: string;
             /** @enum {string} */
-            publication: "preliminary" | "final";
+            publication: "preliminary" | "final" | "preview";
             resultsAvailable: boolean;
             /** Format: date-time */
             openedAt: string;
@@ -2531,6 +2624,9 @@ export interface components {
             dataAvailability: {
                 detailedCounts: boolean;
                 opinionGroups: boolean;
+                personalLens: boolean;
+                /** @description Fewest responses a tally needs to be shown, for the "fewer than" text of a tally with belowFloor. */
+                responseFloor: number;
             };
             moderation: {
                 excludedStatements: number;
@@ -2551,22 +2647,38 @@ export interface components {
             statement: string;
             initial: components["schemas"]["VoteTally"] | null;
             informed: components["schemas"]["VoteTally"] | null;
+            /** @description Informed minus initial agree share, whole points from the exact shares; null unless both rounds have at least 10 responses. */
             agreementShift: number | null;
             /** @enum {string|null} */
             viewerChoice: "agree" | "pass" | "disagree" | null;
+            /** @enum {string|null} */
+            viewerGroupChoice: "agree" | "pass" | "disagree" | null;
+            viewerMatchesGroup: boolean | null;
+            personalDelta: components["schemas"]["PersonalDelta"] | null;
+        };
+        PersonalDelta: {
+            /** @enum {string} */
+            initial: "agree" | "pass" | "disagree";
+            /** @enum {string} */
+            informed: "agree" | "pass" | "disagree";
+            changed: boolean;
         };
         VoteTally: {
+            /** @description Fewer responses than the reporting floor (10): counts and percentages are null. */
+            belowFloor: boolean;
+            /** @description Exact counts; null below the floor and in the public view. */
             counts: {
                 agree: number;
                 pass: number;
                 disagree: number;
                 voters: number;
-            };
+            } | null;
+            /** @description Whole percent of all responses, rounded half up once by the server; null below the floor. */
             percentages: {
                 agree: number;
                 pass: number;
                 disagree: number;
-            };
+            } | null;
         };
         ResultsOpinionGroup: {
             label: string;
@@ -2842,7 +2954,19 @@ export interface components {
             error: {
                 code: string;
                 message: string;
+                /** @description Depends on the code. For validation_failed it is ValidationFailedDetails. */
                 details?: unknown;
+            };
+        };
+        /** @description The details of a 400 validation_failed: what is wrong with each refused request field. */
+        ValidationFailedDetails: {
+            /** @description For each refused request field, keyed by its name, the reasons in English. */
+            fields?: {
+                [key: string]: string[];
+            };
+            /** @description For a field refused for a reason a client may put in its reader's language, keyed by the field's name, that reason; the field is in fields too. Sent for eligibilityEventId when a save names a policy that cannot be stored. */
+            codes?: {
+                [key: string]: "eligibility_policy_unlisted" | "eligibility_policies_unavailable" | "eligibility_policies_not_configured";
             };
         };
     };
@@ -3190,6 +3314,104 @@ export interface operations {
             };
             /** @description Refused, nothing changed: a site admin cannot remove their own site admin access (own_site_admin_protected); a site admin set in the server configuration cannot be removed here (configured_site_admin_protected); a username set in the server configuration cannot also be granted in the app (already_configured_site_admin) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getReminderTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reminder test state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderTestResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postReminderTestSend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderTestSendRequest"];
+            };
+        };
+        responses: {
+            /** @description Test result: sent, dry_run, failed, or unknown (the wiki did not answer a send in time, so it may have been delivered), with the reason */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderTestSendResponse"];
+                };
+            };
+            /** @description Invalid request, or a wiki, channel or account that is not configured (unknown_wiki, unknown_channel, recipient_not_allowed); nothing was attempted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many test sends */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5088,6 +5310,64 @@ export interface operations {
             };
             /** @description Vote verification unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationReportPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsReportResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The report is already published; details.report is its path */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

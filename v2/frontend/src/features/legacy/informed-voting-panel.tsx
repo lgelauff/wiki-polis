@@ -56,19 +56,15 @@ function ArgumentSide({side, items}: {
   );
 }
 
-function Completion({workspace, onSelectPreliminary}: {
-  workspace: Workspace;
-  onSelectPreliminary: () => void;
-}) {
+// No pointer to preliminary results: they open with the Report phase, after this round
+// (owner, 2026-10-13), so a participant finishing it never has a results tab beside it.
+function Completion({workspace}: {workspace: Workspace}) {
   const msg = useMessage();
-  const hasPreliminaryResults = workspace.tabs.some((tab) => tab.key === 'p6-results');
   const deliberationOpen = workspace.tabs.some((tab) => tab.key === 'vote' || tab.key === 'arguments');
   return (
     <div className="p6-done">
       <h2 className="p6-done-heading">{msg('conv-p6-done-heading')}</h2>
-      {hasPreliminaryResults ? (
-        <p className="p6-done-text">{withNodes(msg('conv-p6-done-see', nodeSlot(0)), <InternalLink href="#" onClick={(event) => { event.preventDefault(); onSelectPreliminary(); }}>{msg('conv-tab-preliminary')}</InternalLink>)}</p>
-      ) : deliberationOpen ? (
+      {deliberationOpen ? (
         <p className="p6-done-text">{msg('conv-p6-done-open')}</p>
       ) : workspace.status === 'open' ? (
         <p className="p6-done-text">{msg('conv-p6-done-willpublish')}</p>
@@ -84,10 +80,9 @@ function Completion({workspace, onSelectPreliminary}: {
   );
 }
 
-export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPreliminary}: {
+export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   workspace: Workspace;
   csrfToken: string;
-  onSelectPreliminary: () => void;
 }) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
@@ -224,6 +219,6 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
         </div>
       </div>;
     })}
-    {done && <Completion workspace={workspace} onSelectPreliminary={onSelectPreliminary} />}
+    {done && <Completion workspace={workspace} />}
   </>;
 }

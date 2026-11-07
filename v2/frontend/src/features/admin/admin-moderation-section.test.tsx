@@ -554,7 +554,7 @@ test('Featured without the statistics database leaves out its suggestions, and e
       conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
       selected: [], candidates: [],
       dataAvailability: {candidates: false}, phase: {argumentMappingActive: false, informedVotingLive: false},
-      guidance: {recommendedCount: 15, note: ''}, capabilities: {manage: true},
+      guidance: {recommendedCount: 15, note: '', agreementFloor: 10, agreementMarkShare: 0.7}, capabilities: {manage: true},
       links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/admin/conversations/7'},
     }}),
   ));

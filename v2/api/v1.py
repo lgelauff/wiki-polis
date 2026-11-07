@@ -17,7 +17,7 @@ import i18n
 from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
 from services.participations import (EligibilityDenied, InvalidPseudonym,
-                                     PseudonymUnavailable)
+                                     JoinClosed, PseudonymUnavailable)
 from services.explore import ExploreUpstreamError, StatementAlreadyExists
 from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
                                   InvalidIdempotencyKey,
@@ -97,6 +97,8 @@ def create_api_v1_blueprint(
     create_admin_conversation: Callable[[dict], dict],
     grant_global_admin: Callable[[dict], dict],
     set_global_admin: Callable[[int, dict], dict],
+    resolve_reminder_test: Callable[[], dict],
+    send_reminder_test: Callable[[dict], dict],
     resolve_admin_participants: Callable[[int], dict],
     set_admin_participant_access: Callable[[int, int, dict], dict],
     resolve_admin_flags: Callable[[int], dict],
@@ -130,6 +132,7 @@ def create_api_v1_blueprint(
     set_admin_schedule: Callable[[int, dict], dict],
     set_admin_phases: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
+    resolve_admin_report_preview: Callable[[int], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -243,6 +246,8 @@ def create_api_v1_blueprint(
         create_admin_conversation=create_admin_conversation,
         grant_global_admin=grant_global_admin,
         set_global_admin=set_global_admin,
+        resolve_reminder_test=resolve_reminder_test,
+        send_reminder_test=send_reminder_test,
         resolve_admin_participants=resolve_admin_participants,
         set_admin_participant_access=set_admin_participant_access,
         resolve_admin_flags=resolve_admin_flags,
@@ -276,6 +281,7 @@ def create_api_v1_blueprint(
         set_admin_schedule=set_admin_schedule,
         set_admin_phases=set_admin_phases,
         publish_admin_report=publish_admin_report,
+        resolve_admin_report_preview=resolve_admin_report_preview,
     )
 
     @bp.get('/conversations')
@@ -401,6 +407,11 @@ def create_api_v1_blueprint(
             return error_response(
                 'pseudonym_unavailable',
                 'That pseudonym was just taken. Choose another.',
+                409,
+            )
+        except JoinClosed:
+            return error_response(
+                'join_closed', 'Joining has closed: there are no more rounds to take part in.',
                 409,
             )
         except EligibilityDenied as exc:

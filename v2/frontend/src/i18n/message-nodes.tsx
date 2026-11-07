@@ -6,7 +6,7 @@ import {Fragment, type ReactNode} from 'react';
  *
  *  Pass `nodeSlot(n)` as the nth parameter, then hand the resolved text to `withNodes`:
  *
- *    withNodes(msg('conv-p6-done-see', nodeSlot(0)), <InternalLink …>…</InternalLink>)
+ *    withNodes(msg('conv-p6-reveal-recorded', nodeSlot(0)), <strong>{pseudonym}</strong>)
  *
  *  The call stays a literal message call with its key inline, so the key-existence guard in
  *  `tests/test_i18n.py` still sees it. */

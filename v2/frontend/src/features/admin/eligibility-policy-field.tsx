@@ -1,4 +1,4 @@
-import {useEffect, useId, useState, type KeyboardEvent} from 'react';
+import {useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {useQuery, type QueryClient} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -162,9 +162,23 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
     setActive(at ?? Math.max(current, 0));
   }
 
+  // After a choice or Escape the box keeps the focus and shows the choice again; its text
+  // is selected once that render is on screen, so typing replaces it here too.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const reselect = useRef(false);
+  // Set by the mousedown that focuses the box. WebKit places the caret on that click's
+  // mouseup, after every handler has run, which would undo the selection.
+  const focusingClick = useRef(false);
+  useLayoutEffect(() => {
+    if (!reselect.current) return;
+    reselect.current = false;
+    inputRef.current?.select();
+  });
+
   function close() {
     setOpen(false);
     setQuery(null);
+    if (document.activeElement === inputRef.current) reselect.current = true;
   }
 
   function choose(option: EligibilityPolicy | null) {
@@ -204,6 +218,7 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
     <div className="policy-combobox">
       <div className="policy-combobox__box">
         <input
+          ref={inputRef}
           id={inputId}
           type="text"
           role="combobox"
@@ -221,8 +236,29 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
             setActive(0);
           }}
           onKeyDown={onKeyDown}
-          onClick={() => { if (!open) openList(); }}
-          onBlur={close}
+          // The shown title is selected, so typing replaces it instead of adding to it. Also on
+          // a click, where the mouseup of the click that focuses the box would put the caret
+          // back; a click in a box that already has focus still places the caret.
+          onFocus={(event) => event.currentTarget.select()}
+          onMouseDown={(event) => {
+            focusingClick.current = document.activeElement !== event.currentTarget;
+          }}
+          onMouseUp={(event) => {
+            if (focusingClick.current) event.preventDefault();
+            focusingClick.current = false;
+          }}
+          onClick={(event) => {
+            if (!open) {
+              openList();
+              event.currentTarget.select();
+            }
+          }}
+          // Not close(): a window blur keeps the box the active element, and a selection
+          // waiting for the next render would swallow the first key typed on return.
+          onBlur={() => {
+            setOpen(false);
+            setQuery(null);
+          }}
         />
         {/* Only a picture: a click anywhere on the box opens the list, the keyboard has the
             arrow keys, so there is no second control to name. */}
@@ -255,12 +291,12 @@ function PolicyCombobox({policies, value, onChoose, invalid, inputId, labelledBy
 
 /**
  * After a save the server refused because of the policy, read canivote's list again: it
- * may have dropped the policy, or come back, since this page loaded it, and the list is
- * otherwise kept for ten minutes.
+ * may have dropped the policy, or come back, since this page loaded it, and a list that
+ * loaded is otherwise kept for ten minutes.
  */
 export function refreshPoliciesAfterRefusal(queryClient: QueryClient, error: unknown) {
   if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return;
-  const codes = (error.details as {codes?: Record<string, string>} | undefined)?.codes;
+  const codes = (error.details as components['schemas']['ValidationFailedDetails'] | undefined)?.codes;
   if (codes?.eligibilityEventId) {
     void queryClient.invalidateQueries({queryKey: adminEligibilityPoliciesQuery().queryKey});
   }

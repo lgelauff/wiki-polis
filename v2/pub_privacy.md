@@ -10,7 +10,7 @@ we collect, how your participation is kept private, and how long we keep it.
 ## What we collect
 
 - Some login information. Such as your Wikimedia login (username and user ID), through Wikimedia OAuth — no password. 
-- A pseudonym you choose for each conversation. This is connected to your login information, until the conversation is archived.
+- A pseudonym you choose for each conversation. It is linked internally to your login; see below for how long that link is kept.
 - The opinions you submit — your votes, and any statements or arguments. We call these collectively your *opinions* below.
 - A notification preference, if you set one (see *Email and notifications*). Currently this happens only via wiki-mail and talkpage messages on Wikimedia. 
 
@@ -54,9 +54,9 @@ After a conversation closes you may choose to publicly attach your Wikimedia use
 ## How long we keep things
 
 - Your opinions (under your pseudonym) are kept forever so results and any published datasets stay valid. Because they are part of a community process, we are unable to delete them unless there are exceptional reasons to do so (e.g. a mistaken copypaste of private data or breach of the Code of Conduct)
-- The internal link between your Wikimedia account and your pseudonym — held only by the platform managers, for the technical purposes above — may be kept for up to 180 days after a conversation closes, then removed. It is never public.
+- The internal link between your Wikimedia account and your pseudonym is never public. We intend to remove it 180 days after a conversation closes. That removal is not automated yet; until it is, the link is kept.
 - A public connection you chose to make (above) is permanent, by your choice.
-- You cannot ask us to delete the internal link early: otherwise someone could influence a consultation and then erase the evidence. The 180-day removal is the mechanism.
+- You cannot ask us to delete the internal link early: otherwise someone could influence a consultation and then erase the evidence.
 
 ## Your choices
 

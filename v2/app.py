@@ -38,11 +38,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from db import (ACCOUNT_KIND_VOUCHER, AdminRole, Argument,
+from db import (ACCOUNT_KIND_VOUCHER, ACCOUNT_KIND_WIKIMEDIA, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
-                Participation, StatementProvenance, StatementSimilarityScore,
-                VoucherBatch, db)
+                Participation, Reminder, ReminderDelivery, StatementProvenance,
+                StatementSimilarityScore, VoucherBatch, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError,
                          polis_server_config_error)
@@ -66,7 +66,8 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
-from services.results_report import build_results_report
+from services import reporting_rules
+from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
     InvitationNotInConversation, add_conversation_invites, build_invitation_roster,
@@ -146,6 +147,15 @@ from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
+from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
+                                    ReminderSettings, ReminderTestMessage,
+                                    ReminderTestRefused, default_client_factory,
+                                    login_settings, missing_login_parts, send_test_message)
+from services.reminder_batch import (BatchBusy, DryRunSender, ReminderNotFound,
+                                     UnknownReminderWiki, email_cap_from)
+from services.reminders import can_send_reminders
+from services.reminder_batch import run_batch as run_reminder_batch
+from services.wiki_bot import WIKI_HOSTS
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -869,10 +879,6 @@ class Phase6ResultsFilter:
         )
 
 
-def _pct(n: int, total: int) -> float:
-    return round(n / total * 100, 1) if total else 0.0
-
-
 # ── Phase 6 results aggregate cache ───────────────────────────────────────────
 # The results / report surfaces recompute ~5 Postgres + Particiapi round trips per
 # view, and the aggregate is identical for every viewer. Memoise the fetched
@@ -950,6 +956,14 @@ def _invalidate_phase6_results_cache(conv=None) -> None:
                 _phase6_agg_cache.pop(k, None)
 
 
+def _sort_by_shift(statements: list[dict]) -> None:
+    """Order report rows by the size of their cross-round shift, largest first."""
+    statements.sort(
+        key=lambda s: abs(s['shift']) if s['shift'] is not None else -1,
+        reverse=True,
+    )
+
+
 def _build_phase6_results(
     conv,
     participation,
@@ -963,20 +977,18 @@ def _build_phase6_results(
       {
         'statements': [{
           'text', 'fs_id',
-          'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
-          'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
-          'shift': float | None,     # aggregate: p6_pct_agree - p2_pct_agree (population comparison,
+          'p2': {n_agree, n_disagree, n_pass, n_voters} | None,   # exact counts, unfloored:
+          'p6': {n_agree, n_disagree, n_pass, n_voters},          #   never serve them as they are;
+                                     #   services.results_report applies the reporting rules
+          'shift': int | None,       # aggregate: P6 minus P2 agree share in whole points, None
+                                     #   below the floor in either round (population comparison,
                                      #   NOT individual-level delta — see 'matched_participants')
           'my_p2_vote': int | None,  # raw Polis vote; None if participation absent or PG unavail
           'my_p6_vote': int | None,
         }],
         'p6_participants': int | None,
         'p2_participants': int | None,
-        'matched_participants': None,  # int | None — participants who voted in BOTH rounds;
-                                       # requires xid→pid mapping (not yet stored, see TODO below).
-                                       # Individual-level delta + CI extrapolation depend on this.
-        'p2_consensus': list,   # top-3 statements by Phase 2 agree rate (population consensus)
-        'p2_divisive':  list,   # top-3 statements by balanced agree/disagree split (most divisive)
+        'matched_participants': None,  # Report-only matched-round aggregate; not computed here.
         'filter': Phase6ResultsFilter,
         'source_divergence': float | None,  # abs diff between PG count and Particiapi count
         'is_preliminary': bool,   # True while conversation is still active
@@ -1055,16 +1067,12 @@ def _build_phase6_results(
     p2_total_participants = _agg['p2_total']
     pa_results            = _agg['pa_results']
 
-    # ── Personal votes (per-request; only when participation is present) ───────
+    # The personal group comparison is a privacy-gated metric. Its release criterion
+    # is still unresolved in the stability policy (#233), so do not resolve or query
+    # participant/group identities here until that gate is defined.
     my_p2_votes: dict[int, int] = {}
     my_p6_votes: dict[int, int] = {}
-    if participation and pg_available:
-        # We need the Polis pid for the participant. Polis pids are not stored in
-        # our DB — we use xid (hashed mw_user_id). The personal-votes query
-        # therefore cannot run until we have a xid→pid mapping.
-        # For now this is left as empty dicts (personal votes show as None).
-        # TODO: store or derive Polis pid to enable per-participant vote display.
-        pass
+    personal_lens_available = False
 
     clusters = None
     source_divergence = None
@@ -1096,52 +1104,37 @@ def _build_phase6_results(
         p6_row = (p6_counts or {}).get(p6_tid, {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0})
         p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid is not None else None
 
-        p6_n = p6_row['n_voters']
-        p6_pct_agree    = _pct(p6_row['n_agree'],    p6_n)
-        p6_pct_disagree = _pct(p6_row['n_disagree'], p6_n)
-        p6_pct_pass     = _pct(p6_row['n_pass'],     p6_n)
-
-        p2_pct_agree = p2_pct_disagree = p2_pct_pass = None
-        if p2_row:
-            p2_n = p2_row['n_voters']
-            p2_pct_agree    = _pct(p2_row['n_agree'],    p2_n)
-            p2_pct_disagree = _pct(p2_row['n_disagree'], p2_n)
-            p2_pct_pass     = _pct(p2_row['n_pass'],     p2_n)
-
-        shift = round(p6_pct_agree - p2_pct_agree, 1) if p2_pct_agree is not None else None
+        # From the exact shares, rounded once; withheld unless both rounds pass the floor.
+        shift = (
+            reporting_rules.shift(
+                p2_row['n_agree'], p2_row['n_voters'], p6_row['n_agree'], p6_row['n_voters'],
+            ) if p2_row else None
+        )
 
         statements.append({
             'text':        fs.statement_text,
             'fs_id':       fs.id,
-            'p6': {**p6_row, 'pct_agree': p6_pct_agree,
-                   'pct_disagree': p6_pct_disagree, 'pct_pass': p6_pct_pass},
-            'p2': ({**p2_row, 'pct_agree': p2_pct_agree,
-                    'pct_disagree': p2_pct_disagree, 'pct_pass': p2_pct_pass}
-                   if p2_row else None),
+            'p6': dict(p6_row),
+            'p2': dict(p2_row) if p2_row else None,
             'shift':       shift,
             'my_p2_vote':  my_p2_votes.get(p2_tid),
-            'my_p6_vote':  my_p6_votes.get(p6_tid),
+            'my_p6_vote': my_p6_votes.get(p6_tid),
+            'my_group_votes': None,  # withheld until the #233 privacy gate is defined
         })
 
-    # Sort by largest absolute shift first; statements with no shift data go last.
-    statements.sort(key=lambda s: abs(s['shift']) if s['shift'] is not None else -1, reverse=True)
-
-    # Phase 2 consensus / divisiveness derived from the same data.
-    p2_with_data = [s for s in statements if s['p2'] is not None and s['p2']['n_voters'] > 0]
-    p2_consensus = sorted(p2_with_data,
-                          key=lambda s: s['p2']['pct_agree'] or 0, reverse=True)[:3]
-    # Most divisive = smallest gap between agree and disagree (most 50/50 split).
-    p2_divisive  = sorted(p2_with_data,
-                          key=lambda s: abs((s['p2']['pct_agree'] or 0) - (s['p2']['pct_disagree'] or 0)))[:3]
+    if conv.closed_at:
+        # The final Report may rank statements by its cross-round comparison.
+        _sort_by_shift(statements)
+    else:
+        # Preliminary output is single-round; its order must not encode P2-to-P6 deltas.
+        statements.sort(key=lambda s: s['fs_id'])
 
     return {
         'statements':            statements,
         'p6_participants':       p6_total_participants,
         'p2_participants':       p2_total_participants,
-        # TODO: compute once xid→pid mapping is available (see personal-votes TODO above).
-        'matched_participants':  None,
-        'p2_consensus':          p2_consensus,
-        'p2_divisive':           p2_divisive,
+        'matched_participants': None,  # report-only aggregate, not computed in this slice.
+        'personal_lens_available': personal_lens_available,
         'filter':                filt,
         'source_divergence':     source_divergence,
         'is_preliminary':        bool(conv.active),
@@ -1318,6 +1311,28 @@ def _active_phases(conv) -> set:
     if conv.closed_at:
         phases.add('closed')
     return phases
+
+
+# Stages in which a participant takes part: voting in Explore or the informed vote, and
+# adding or rating arguments (owner, 2026-10-31).
+_PARTICIPATION_STAGES = frozenset({'submission', 'argument_mapping', 'informed_voting'})
+
+
+def _joining_open(conv) -> bool:
+    """Whether someone new may still join (owner, 2026-10-31).
+
+    Open while the route still has a stage at or after the current one in which people take
+    part; closed once the last such stage is over, and always after close. Joining later would
+    give nothing to do and only the participants' full report (#233). In advanced mode the
+    current stage is the furthest-along phase that is on, so this errs towards closing early.
+    """
+    if conv.closed_at is not None:
+        return False
+    sequence = _phase_sequence_for(conv)
+    return any(
+        stage['key'] in _PARTICIPATION_STAGES
+        for stage in sequence[_current_stage_index(conv):]
+    )
 
 
 def _is_linear_phase_state(conv) -> bool:
@@ -2626,6 +2641,7 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/admin/conversations/\d+/settings/vouchers',
     r'/admin/conversations/\d+/settings/roles',
     r'/admin/conversations/\d+/termination',
+    r'/admin/conversations/\d+/report-preview',
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
@@ -2725,7 +2741,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
 
     phase6_results_available = False
     if (conv.phase_public_results and conv.phase6_polis_conversation_id
-            and participation is not None):
+            and participation is not None and not _informed_round_open(conv)):
         phase6_results = _build_phase6_results(conv, participation)
         phase6_results_available = bool(
             phase6_results and phase6_results.get('statements')
@@ -2749,7 +2765,8 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         links['intermediateResults'] = url_for(
             'api_v1.get_intermediate_results', slug=slug,
         )
-        links['results'] = url_for('api_v1.get_results_report', slug=slug)
+        if not _informed_round_open(conv):
+            links['results'] = url_for('api_v1.get_results_report', slug=slug)
     if can_moderate:
         links['manage'] = _path_admin_conversation(conv.id)
 
@@ -2985,6 +3002,7 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
                           and participant.account_kind != ACCOUNT_KIND_VOUCHER),
         emailable=bool(session.get('emailable')),
         check_eligibility=_check_join_eligibility,
+        joining_open=_joining_open(conv),
     )
     participation = result.participation
     return ({
@@ -3306,10 +3324,20 @@ def _informed_vote_api_payload(
         _save_phase6_gateway(conv, gateway, key, states)
 
 
+def _informed_round_open(conv: Conversation) -> bool:
+    """True while the informed-vote round still takes responses: no results may show."""
+    return bool(conv.phase_informed_voting and not conv.closed_at)
+
+
 def _results_report_api_payload(slug: str) -> dict:
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     _check_conversation_access(conv, participant)
+    # No live informed-round results: they appear once that round has ended (owner,
+    # 2026-10-13; spec_results-access C2). While informed voting is open nothing opens
+    # here, whichever results flag an organizer has set alongside it.
+    if _informed_round_open(conv):
+        abort(409, description='Results are not published while informed voting is open.')
     if not (conv.phase_public_results or conv.phase_personal_results):
         abort(409, description='Results are not published for this conversation.')
     if conv.phase_personal_results and not conv.phase_public_results and participant is None:
@@ -3345,6 +3373,10 @@ def _results_report_api_payload(slug: str) -> dict:
             _path_conversation(slug, page='reveal')
             if reveal else None
         ),
+        # Participants, the process's organizers and site admins see the full report (exact
+        # counts, groups); everyone else the public one (owner, 2026-10-31). No one gets a
+        # personalised view of someone else's.
+        full_view=participation is not None or _can_organize(conv, participant),
     )
 
 
@@ -3985,6 +4017,68 @@ def _grant_global_admin_api_payload(body: dict) -> dict:
     }
 
 
+def _reminder_settings() -> ReminderSettings:
+    return ReminderSettings.from_config(current_app.config, user_agent=_MW_USER_AGENT)
+
+
+def _run_reminder_test(*, wiki: str, channel: str, recipient: str):
+    """One test message from the bot (#577): the API's test button and the CLI share this.
+
+    Raises `ReminderTestRefused` for a request that is not allowed; otherwise returns a
+    `ReminderTestResult`. Either way it writes one audit row (outcome, wiki, channel,
+    reason; never the recipient's name)."""
+    settings = _reminder_settings()
+    message = ReminderTestMessage(
+        subject=i18n.resolve('admin-reminder-test-mail-subject'),
+        body=i18n.resolve('admin-reminder-test-mail-body'),
+        summary=i18n.resolve('admin-reminder-test-talk-summary'),
+    )
+    # A command-line run has no signed-in actor; say so instead of leaving it unexplained.
+    origin = {} if has_request_context() else {'actor_kind': 'cli'}
+    # Only known values go into the audit row: a refused request may carry anything.
+    audited = {
+        'wiki': wiki if wiki in WIKI_HOSTS else 'other',
+        'channel': channel if channel in REMINDER_CHANNELS else 'other',
+    }
+    try:
+        result = send_test_message(
+            wiki=wiki, channel=channel, recipient=recipient, settings=settings,
+            message=message, client_factory=default_client_factory(settings),
+        )
+    except ReminderTestRefused as exc:
+        record_audit('reminder.test', outcome='refused', reason=exc.code, **audited, **origin)
+        raise
+    record_audit(
+        'reminder.test', outcome=result.outcome, reason=result.reason, code=result.code,
+        sent_via=result.sent_via, **audited, **origin,
+    )
+    return result
+
+
+def _reminder_test_api_payload() -> dict:
+    if not _is_global_admin():
+        _refuse_admin()
+    settings = _reminder_settings()
+    return {
+        'wikis': [{'key': wiki, 'host': host} for wiki, host in WIKI_HOSTS.items()],
+        'recipients': list(settings.test_recipients),
+        'credentialsSet': {channel: settings.credentials_for(channel) is not None
+                           for channel in REMINDER_CHANNELS},
+    }
+
+
+def _send_reminder_test_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        _refuse_admin()
+    result = _run_reminder_test(
+        wiki=body['wiki'], channel=body['channel'], recipient=body['recipient'],
+    )
+    return {
+        'outcome': result.outcome, 'reason': result.reason, 'code': result.code,
+        'sentVia': result.sent_via,
+    }
+
+
 def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
         _refuse_admin()
@@ -4065,10 +4159,11 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     reveal = _reveal_context(conv, participation=None)
     biggest_shift = None
     if phase6_results:
-        biggest = next((
+        # Preliminary rows are in statement order, so the largest shift is looked up.
+        biggest = max((
             row for row in phase6_results.get('statements', [])
             if row.get('shift') is not None
-        ), None)
+        ), key=lambda row: abs(row['shift']), default=None)
         if biggest:
             biggest_shift = {
                 'text': biggest['text'], 'shift': biggest['shift'],
@@ -4508,7 +4603,21 @@ def _admin_featured_api_payload(conv_id: int) -> dict:
             'api_v1.get_admin_featured_statements', conversation_id=conv.id,
         ),
         lifecycle_link=_admin_client_link(conv.id),
+        agreement_floor=_featured_agreement_floor(),
+        agreement_mark_share=_featured_agreement_mark_share(),
     )
+
+
+def _featured_agreement_floor() -> int:
+    """REPORTING_MIN_TOTAL: fewest agree + disagree responses before a candidate's
+    agreement share or split is shown (default 10, the floor for opinion data)."""
+    return reporting_rules.min_total()
+
+
+def _featured_agreement_mark_share() -> float:
+    """REPORTING_LABEL_SHARE: agree share of agree + disagree at which a candidate is
+    marked (default 0.7, as polis_report's label share)."""
+    return reporting_rules.label_share()
 
 
 def _select_admin_featured_api_payload(
@@ -4876,6 +4985,63 @@ def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
         audit=record_audit,
     )
     return {'lifecycle': _admin_lifecycle_api_payload(conv.id)}
+
+
+def _admin_report_preview_api_payload(conv_id: int) -> dict:
+    """Site-admin preview of the results report, in any phase, before publication.
+
+    Read-only by design: it reads the live moderation filter
+    (``_current_phase6_results_filter``), never ``_snapshot_report_filter``, which writes
+    the snapshot, and it never calls ``_publish_final_report``. The only write is the
+    audit row. It has the published report's full shape, sorted as the report is, even
+    while informed voting is open (where the public endpoint shows nothing). Once the
+    report is published there is nothing to preview: ``ReportPublished`` carries the
+    published report's link, and the console page goes there.
+
+    The conversation access check is skipped on purpose: it has no site-admin exception,
+    so a gated process would refuse a site admin who does not pass its gate. The site-admin
+    check below replaces it. The preview is built as a non-participant sees the report:
+    no personal vote overlay and no identity-reveal callout.
+    """
+    if not _is_global_admin():
+        _refuse_admin()
+    conv = Conversation.query.get_or_404(conv_id)
+    if conv.closed_at:
+        raise ReportPublished(_path_conversation(conv.slug, page='report'))
+    results = _build_phase6_results(
+        conv, participation=None, results_filter=_current_phase6_results_filter(conv),
+    )
+    if results:
+        # The builder orders an open process's rows by id; the report orders them by shift.
+        _sort_by_shift(results['statements'])
+    output_context = next(
+        item for item in _output_items(conv) if item['key'] == 'report'
+    )
+    reveal = _reveal_context(conv, participation=None)
+    payload = build_results_report(
+        conversation=conv,
+        phase6_results=results,
+        output_context=output_context,
+        participation=None,
+        reveal_state=reveal['state'] if reveal else None,
+        self_link=url_for(
+            'api_v1.get_admin_conversation_report_preview', conversation_id=conv.id,
+        ),
+        # The preview's back link returns to the admin console, where it was opened.
+        conversation_link=_admin_client_link(conv.id),
+        about_link=_path_conversation(conv.slug, page='about'),
+        identity_reveal_link=None,
+        full_view=True,
+        preview=True,
+    )
+    # Ids and enums only (record_audit's privacy contract).
+    record_audit(
+        'report.preview', conv_id=conv.id,
+        target_type='conversation', target_id=conv.id,
+        phase=_phase_sequence_for(conv)[_current_stage_index(conv)]['key'],
+        results_available=results is not None,
+    )
+    return payload
 
 
 def _replace_admin_roles_api_payload(
@@ -5269,6 +5435,10 @@ def _delete_local_conversation(conv: Conversation) -> None:
             StatementProvenance.id.in_(provenance_ids)
         ).delete(synchronize_session=False)
 
+    reminder_ids = db.session.query(Reminder.id).filter_by(conversation_id=conv_id)
+    ReminderDelivery.query.filter(ReminderDelivery.reminder_id.in_(reminder_ids)).delete(
+        synchronize_session=False)
+    Reminder.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     ConversationBan.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     ConversationInvite.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     AdminRole.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
@@ -5914,6 +6084,22 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = (
         os.environ.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', '0')
     )
+    # Participant reminders (#577). The bot's logins (bot passwords: one for wiki-mail, one
+    # for talk-page posts, each with only its own grants), and two guards that are empty by
+    # default: the wikis where real sends are switched on, and the only accounts that may
+    # receive anything while the bot is being tested (#581, #582).
+    app.config.update(login_settings(_read_secret))
+    for _channel, _empty in missing_login_parts(app.config).items():
+        # Names only, never values: a half-set login counts as not set (a dry run).
+        app.logger.warning('reminder bot login for %s is half set: %s is empty',
+                           _channel, _empty[0])
+    app.config['REMINDERS_TEST_RECIPIENTS'] = _split_csv(
+        os.environ.get('REMINDERS_TEST_RECIPIENTS', ''))
+    # The daily batch (#577): an emergency stop read at every run, and the wiki-mail
+    # cap per day. Wikimedia allows an unflagged bot 20 a day, 5 until autoconfirmed.
+    app.config['REMINDERS_PAUSED'] = _truthy(os.environ.get('REMINDERS_PAUSED', ''))
+    app.config['REMINDERS_EMAIL_DAILY_CAP'] = email_cap_from(
+        os.environ.get('REMINDERS_EMAIL_DAILY_CAP', ''))
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -6135,6 +6321,121 @@ def create_app(test_config: dict | None = None) -> Flask:
         if result['failed']:
             raise SystemExit(1)                # the job's failure email names the run; logs name the conversation
 
+    @app.cli.command('process-reminders')
+    @click.option('--day', type=click.DateTime(formats=['%Y-%m-%d']), default=None,
+                  help='The UTC day to handle (default: today; never a later day).')
+    @click.option('--reminder', 'reminder_id', type=int, default=None,
+                  help="A super admin's trigger: handle this one reminder now, on any wiki. "
+                       'Needs --by.')
+    @click.option('--by', 'by_username', default=None,
+                  help='With --reminder: the super admin who triggers it (Wikimedia username).')
+    def process_reminders_cmd(day, reminder_id, by_username):
+        """Handle one day's reminders (#577). Dry run: nothing is sent yet.
+
+        Exit codes: 0 done; 1 done, but a wiki was unknown or the bot was blocked;
+        2 refused, nothing changed; 3 the run broke off (see the log).
+        """
+        def refuse(text):
+            click.echo(text, err=True)
+            raise SystemExit(2)
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if day is not None and day.date() > now.date():
+            refuse('--day cannot be a later day than today (UTC).')
+        triggered_by = None
+        if reminder_id is not None:
+            if by_username is None:
+                refuse('--reminder needs --by: the super admin who triggers it.')
+            triggered_by = Participant.query.filter_by(
+                mw_username=by_username, account_kind=ACCOUNT_KIND_WIKIMEDIA).one_or_none()
+            if not can_send_reminders(triggered_by, None, admin_usernames=ADMIN_USERS):
+                refuse('--by must name a super admin.')
+        elif by_username is not None:
+            refuse('--by needs --reminder.')
+
+        def paused():
+            # Read when the run starts. A running process never sees a changed
+            # setting, so stopping a running job means stopping the job itself.
+            return (_truthy(os.environ.get('REMINDERS_PAUSED', ''))
+                    or bool(current_app.config['REMINDERS_PAUSED']))
+
+        handled_day = (day or now).date()
+        try:
+            result = run_reminder_batch(
+                handled_day, now=now, active_phases=_active_phases, sender=DryRunSender(),
+                email_cap=current_app.config['REMINDERS_EMAIL_DAILY_CAP'], paused=paused,
+                reminder_id=reminder_id,
+                triggered_by_id=triggered_by.id if triggered_by else None,
+            )
+        except ReminderNotFound:
+            refuse(f'No reminder {reminder_id}.')
+        except UnknownReminderWiki as exc:
+            refuse(f'Reminder {reminder_id} is set to a wiki the bot does not know: {exc}.')
+        except BatchBusy:
+            refuse('Another reminder run is in progress; nothing was handled.')
+        except Exception:
+            current_app.logger.exception('process-reminders broke off (day %s, reminder %s)',
+                                         handled_day, reminder_id)
+            click.echo('The reminder run broke off; see the log.', err=True)
+            raise SystemExit(3)
+        if result.paused:
+            current_app.logger.warning('process-reminders: paused, nothing handled')
+            click.echo('Reminders are paused (REMINDERS_PAUSED); nothing was handled.')
+            return
+
+        def ids(values):
+            return ', '.join(map(str, values)) or '-'
+        click.echo(f'Day {handled_day}. Reminders handled: {ids(result.due)}; waiting for a '
+                   f'super admin: {ids(result.waiting_for_trigger)}; missed and dropped as '
+                   f'expired: {ids(result.missed)}; rows unlinked: {result.unlinked}.')
+        for label, counts in (('This run', result.this_run), ('All rows', result.totals)):
+            if counts:
+                click.echo(f'{label}: ' + ', '.join(
+                    f'{channel} {status}: {n}' for (channel, status), n in sorted(counts.items()))
+                    + '.')
+        if result.stale_claims:
+            click.echo(f'Unsettled claims from an earlier run, recorded as outcome_unknown: '
+                       f'{result.stale_claims}.')
+        if result.unknown_wiki:
+            current_app.logger.error('reminders on a wiki the bot does not know: %s',
+                                     result.unknown_wiki)
+            click.echo(f'Not handled, wiki unknown to the bot: reminder {ids(result.unknown_wiki)}.',
+                       err=True)
+        for channel, wiki in sorted(result.blocked_wikis):
+            current_app.logger.error('reminder bot is blocked on %s; %s batch stopped there',
+                                     wiki, channel)
+            click.echo(f'The bot is blocked on {wiki}: {channel} stopped there.', err=True)
+        if result.unknown_wiki or result.blocked_wikis:
+            raise SystemExit(1)            # the job's failure mail names the run; the log says why
+
+    @app.cli.command('send-test-reminder')
+    @click.option('--wiki', required=True, type=click.Choice(sorted(WIKI_HOSTS)))
+    @click.option('--channel', required=True, type=click.Choice(REMINDER_CHANNELS))
+    @click.option('--to', 'recipient', required=True,
+                  help='A username listed in REMINDERS_TEST_RECIPIENTS.')
+    def send_test_reminder_cmd(wiki, channel, recipient):
+        """Send one test message from the Proto bot to a test account (#577)."""
+        try:
+            result = _run_reminder_test(wiki=wiki, channel=channel, recipient=recipient)
+        except ReminderTestRefused as exc:
+            click.echo(f'Refused: {exc.code}.')
+            raise SystemExit(2)
+        line = f'Test {channel} on {wiki}: {result.outcome}'
+        if result.sent_via:
+            line += f' (sent from {result.sent_via})'
+        if result.reason:
+            line += f', reason {result.reason}'
+        if result.code:
+            line += f' ({result.code})'
+        if result.reason == 'no_credentials':
+            half = missing_login_parts(current_app.config).get(channel)
+            prefix = LOGIN_PREFIX[channel]
+            line += (f': {half[0]} is empty' if half
+                     else f': set {prefix}_USERNAME and {prefix}_PASSWORD')
+        click.echo(line + '.')
+        if result.outcome == 'failed':
+            raise SystemExit(1)
+
     # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
     # English and the in-repo translations, so the language switcher is visible as
     # soon as a locale ships its first catalogue.  Set ENABLED_LOCALES to override.
@@ -6309,6 +6610,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         create_admin_conversation=_create_admin_conversation_api_payload,
         grant_global_admin=_grant_global_admin_api_payload,
         set_global_admin=_set_global_admin_api_payload,
+        resolve_reminder_test=_reminder_test_api_payload,
+        send_reminder_test=_send_reminder_test_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,
@@ -6342,6 +6645,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_admin_schedule=_set_admin_schedule_api_payload,
         set_admin_phases=_set_admin_phases_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,
+        resolve_admin_report_preview=_admin_report_preview_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

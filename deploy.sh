@@ -78,6 +78,11 @@ if [ -n "$EXPECTED_REV" ] && [[ ! "$EXPECTED_REV" =~ ^[0-9a-f]{7,40}$ ]]; then
   exit 2
 fi
 
+# Check the Toolforge context before fetching, checking out, installing, or restarting.
+DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DEPLOY_SCRIPT_DIR/v2/ops/toolforge-account-guard.sh"
+wiki_polis_require_tool_account 'deploy.sh' || exit 1
+
 echo "==> Resolving deployment revision..."
 cd ~/wiki-polis
 if [ -n "$PULL_REQUEST" ]; then
@@ -152,6 +157,8 @@ elif command -v toolforge >/dev/null 2>&1; then
   # immediately available to the Python webservice after it restarts.
   # The default shell pod is too small for `tsc -b` + `vite build` (Node ran out of
   # heap at ~256 MB on 2026-10-10), so ask for more memory explicitly.
+  # node20 is end-of-life and below the patched Node releases; it only builds. See
+  # v2/guide_deployment.md, "Node 20 build shell (2026-10-23)".
   echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell (2Gi)..."
   toolforge webservice --backend=kubernetes --mem 2Gi node20 shell -- \
     "$HOME/wiki-polis/v2/bin/build-spa.sh"

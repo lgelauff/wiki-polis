@@ -285,6 +285,7 @@ test.each([
 
 test.each([
   ['pseudonym_unavailable', 409, 'accept-js-taken'],
+  ['join_closed', 409, 'accept-err-closed'],
   ['validation_failed', 400, 'accept-err-join'],
   ['conflict', 409, 'accept-err-join'],
   ['rate_limited', 429, 'accept-err-join'],

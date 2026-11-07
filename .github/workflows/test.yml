@@ -17,7 +17,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Exact patched release, never a floating major (24.22.1 = Node security
+          # release of 2026-10-20). Bump deliberately; v2/tests/test_ci_node_pin.py checks the form.
+          node-version: "24.22.1"
           cache: npm
           cache-dependency-path: v2/frontend/package-lock.json
 

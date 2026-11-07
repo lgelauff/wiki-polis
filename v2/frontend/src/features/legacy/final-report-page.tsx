@@ -6,6 +6,7 @@ import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {usePercentFormat} from '../../i18n/numbers';
 import {outputMethod, outputPhase} from '../../i18n/server-labels';
+import {rankOpinionStatements} from './statement-rankings';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
@@ -15,10 +16,14 @@ function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
 }
 
-function LegacyVoteBar({tally}: {tally: Tally}) {
+/** A tally as the server sends it: withheld below `floor` responses, and without counts in
+ *  the public view (#233). Percentages are whole numbers, rounded by the server. */
+function LegacyVoteBar({tally, floor}: {tally: Tally; floor: number}) {
   const {percentages, counts} = tally;
   const msg = useMessage();
-  const percentage = usePercentFormat();
+  const format = usePercentFormat();
+  if (!percentages) return <span className="p6-bar-label muted">{msg('results-tally-few', floor)}</span>;
+  const percentage = (value: number) => format(value, {digits: 0});
   const title = msg('report-bar-title', percentage(percentages.agree), percentage(percentages.disagree), percentage(percentages.pass));
   return <>
     <div className="p6-vote-bar" title={title}>
@@ -26,20 +31,10 @@ function LegacyVoteBar({tally}: {tally: Tally}) {
       <div className="p6-bar-disagree" style={{width: `${percentages.disagree}%`}} />
       <div className="p6-bar-pass" style={{width: `${percentages.pass}%`}} />
     </div>
-    <span className="p6-bar-label">{msg('report-bar-label', percentage(percentages.agree), percentage(percentages.pass), counts.voters)}</span>
+    <span className="p6-bar-label">{counts
+      ? msg('report-bar-label', percentage(percentages.agree), percentage(percentages.pass), counts.voters)
+      : msg('conv-bar-label', percentage(percentages.agree), percentage(percentages.pass))}</span>
   </>;
-}
-
-function initialOpinionRows(statements: Statement[]) {
-  const available = statements.filter((statement) => statement.initial && statement.initial.counts.voters > 0);
-  const consensus = [...available].sort((left, right) =>
-    (right.initial?.percentages.agree ?? 0) - (left.initial?.percentages.agree ?? 0)).slice(0, 3);
-  const divisive = [...available].sort((left, right) => {
-    const leftGap = Math.abs((left.initial?.percentages.agree ?? 0) - (left.initial?.percentages.disagree ?? 0));
-    const rightGap = Math.abs((right.initial?.percentages.agree ?? 0) - (right.initial?.percentages.disagree ?? 0));
-    return leftGap - rightGap;
-  }).slice(0, 3);
-  return {consensus, divisive};
 }
 
 function PlaceholderSections() {
@@ -102,9 +97,9 @@ function ParticipationSummary({report}: {report: Report}) {
   </div>;
 }
 
-function InitialOpinions({statements}: {statements: Statement[]}) {
+function InitialOpinions({statements, floor}: {statements: Statement[]; floor: number}) {
   const msg = useMessage();
-  const {consensus, divisive} = initialOpinionRows(statements);
+  const {consensus, divisive} = rankOpinionStatements(statements, 'initial');
   if (consensus.length === 0 && divisive.length === 0) return null;
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-initial-heading')} <span className="report-section-sub">{msg('report-initial-sub')}</span></h2>
@@ -113,7 +108,7 @@ function InitialOpinions({statements}: {statements: Statement[]}) {
       <h3 className="report-section-sub-heading">{msg('report-highest-agreement')}</h3>
       {consensus.map((statement) => <div className="report-stmt-row" key={`consensus-${statement.featuredStatementId}`}>
         <p className="report-stmt-text">{statement.statement}</p>
-        <LegacyVoteBar tally={statement.initial!} />
+        <LegacyVoteBar tally={statement.initial!} floor={floor} />
       </div>)}
     </>}
     {divisive.length > 0 && <>
@@ -121,13 +116,13 @@ function InitialOpinions({statements}: {statements: Statement[]}) {
       <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>{msg('report-divisive-intro')}</p>
       {divisive.map((statement) => <div className="report-stmt-row" key={`divisive-${statement.featuredStatementId}`}>
         <p className="report-stmt-text">{statement.statement}</p>
-        <LegacyVoteBar tally={statement.initial!} />
+        <LegacyVoteBar tally={statement.initial!} floor={floor} />
       </div>)}
     </>}
   </div>;
 }
 
-function OpinionShift({statements}: {statements: Statement[]}) {
+function OpinionShift({statements, floor}: {statements: Statement[]; floor: number}) {
   const msg = useMessage();
   const percentage = usePercentFormat();
   if (statements.length === 0) return null;
@@ -143,11 +138,11 @@ function OpinionShift({statements}: {statements: Statement[]}) {
       </tr></thead>
       <tbody>{statements.map((statement) => <tr className="p6-results-row" key={statement.featuredStatementId}>
         <td className="p6-col-stmt">{statement.statement}</td>
-        <td className="p6-col-phase">{statement.initial ? <LegacyVoteBar tally={statement.initial} /> : <span className="muted">—</span>}</td>
-        <td className="p6-col-phase">{statement.informed && <LegacyVoteBar tally={statement.informed} />}</td>
+        <td className="p6-col-phase">{statement.initial ? <LegacyVoteBar tally={statement.initial} floor={floor} /> : <span className="muted">—</span>}</td>
+        <td className="p6-col-phase">{statement.informed && <LegacyVoteBar tally={statement.informed} floor={floor} />}</td>
         <td className="p6-col-shift">{statement.agreementShift === null
           ? <span className="muted">—</span>
-          : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{percentage(statement.agreementShift, {signed: true})}</span>}
+          : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{percentage(statement.agreementShift, {signed: true, digits: 0})}</span>}
         </td>
       </tr>)}</tbody>
     </table>
@@ -198,12 +193,12 @@ function ResultsBody({report}: {report: Report}) {
       <p className="report-placeholder"><em>{msg('report-statements-placeholder')}</em></p>
       <p className="muted" style={{fontSize: 13}}>{msg('report-featured-count', report.statements.length)}</p>
     </div>
-    <InitialOpinions statements={report.statements} />
+    <InitialOpinions statements={report.statements} floor={report.dataAvailability.responseFloor} />
     <div className="report-section">
       <h2 className="report-section-heading">{msg('report-argmap-heading')}</h2>
       <p className="report-placeholder"><em>{msg('report-argmap-placeholder')}</em></p>
     </div>
-    {report.dataAvailability.detailedCounts && <OpinionShift statements={report.statements} />}
+    {report.dataAvailability.detailedCounts && <OpinionShift statements={report.statements} floor={report.dataAvailability.responseFloor} />}
     <div className="report-section">
       <h2 className="report-section-heading">{msg('report-matched-heading')}</h2>
       <p className="report-placeholder"><em>{msg('report-matched-placeholder')}</em></p>
@@ -221,21 +216,30 @@ function ResultsBody({report}: {report: Report}) {
 export function FinalReportLegacyPage({report}: {report: Report}) {
   const dates = useDateFormat();
   const msg: Message = useMessage();
-  const contextOutput = report.publication === 'final' ? 'report' : 'preliminary-results';
-  return <LegacyShell headerCrumb={<span className="header-crumb">
+  // A site admin's preview (never published) is marked on the page itself, so a
+  // screenshot of it cannot pass for the published report.
+  const preview = report.publication === 'preview';
+  // A preview has the report's full shape, so it is read as the report is.
+  const contextOutput = preview || report.publication === 'final' ? 'report' : 'preliminary-results';
+  // The preview's tab title says it is a preview; the published report keeps the shell's.
+  const shellTitle = preview ? {title: msg('output-doc-title', msg('report-subtitle-preview'), report.title)} : {};
+  return <LegacyShell {...shellTitle} headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
     <span className="header-crumb-sep">/</span>
     <span>{msg('report-crumb')}</span>
   </span>}>
     <div className="container" style={{maxWidth: 800}}>
+      {preview && <p className="report-preview-banner" role="note" dangerouslySetInnerHTML={richHtml(msg('report-preview-banner'))} />}
       <p style={{marginBottom: '1.25rem'}}><InternalLink href={report.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><span className="dir-glyph" aria-hidden="true">←</span> {report.title}</InternalLink></p>
       <div className="report-header">
         <div>
           <h1 className="report-title">{report.title}</h1>
-          <p className="report-subtitle">{`${msg('report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${dates.date(report.closedAt)}` : ''}`}</p>
+          <p className="report-subtitle">{`${msg(preview ? 'report-subtitle-preview' : 'report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${dates.date(report.closedAt)}` : ''}`}</p>
         </div>
-        <span className="report-badge">{msg('report-badge-final')}</span>
+        {preview
+          ? <span className="report-badge report-badge--preview">{msg('report-badge-preview')}</span>
+          : <span className="report-badge">{msg('report-badge-final')}</span>}
       </div>
       <div className="report-section output-context">
         <h2 className="report-section-heading">{msg('output-howto-heading')}</h2>
@@ -243,8 +247,8 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
           {/* The server takes this context from the output definition: "report" once the
               consultation is closed, "preliminary-results" before. */}
           <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>
-          <div><dt>{msg('output-status-label')}</dt><dd>{msg('report-status-final')}</dd></div>
-          <div><dt>{msg('output-method-label')}</dt><dd>{outputMethod(msg, contextOutput, report.context.method)}</dd></div>
+          <div><dt>{msg('output-status-label')}</dt><dd>{msg(preview ? 'report-status-preview' : 'report-status-final')}</dd></div>
+          <div><dt>{msg('output-method-label')}</dt><dd>{preview ? msg('report-method-preview') : outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>
       <PlaceholderSections />

@@ -171,6 +171,32 @@ TAGS:
     - admin-policy-span-years
     - admin-provenance-aria
     - admin-provenance-title
+    - admin-reminder-test-btn
+    - admin-reminder-test-channel-email
+    - admin-reminder-test-channel-talk
+    - admin-reminder-test-dry-no-login
+    - admin-reminder-test-empty
+    - admin-reminder-test-failed-blocked
+    - admin-reminder-test-failed-error
+    - admin-reminder-test-failed-lagged
+    - admin-reminder-test-failed-nobots
+    - admin-reminder-test-failed-not-bot-password
+    - admin-reminder-test-failed-not-emailable
+    - admin-reminder-test-failed-throttled
+    - admin-reminder-test-heading
+    - admin-reminder-test-intro
+    - admin-reminder-test-label-channel
+    - admin-reminder-test-label-recipient
+    - admin-reminder-test-label-wiki
+    - admin-reminder-test-mail-body
+    - admin-reminder-test-mail-subject
+    - admin-reminder-test-rate-limited
+    - admin-reminder-test-refused
+    - admin-reminder-test-sending
+    - admin-reminder-test-sent
+    - admin-reminder-test-sent-fallback
+    - admin-reminder-test-talk-summary
+    - admin-reminder-test-unknown
     - admin-roles-assigned
     - admin-roles-change
     - admin-roles-empty
@@ -310,6 +336,7 @@ TAGS:
     - adminconv-phase-personal
     - adminconv-phase-public
     - adminconv-phase-submission
+    - adminconv-preview-report
     - adminconv-publish-irrev
     - adminconv-publish-report
     - adminconv-publish-unavailable
@@ -364,6 +391,9 @@ TAGS:
     - adminconv-you-are-in-phase
     - base-admin-badge
     - featured-addnumber-heading
+    - featured-agreement-few
+    - featured-agreement-mark
+    - featured-agreement-note
     - featured-arg-delete
     - featured-arg-delete-confirm
     - featured-arg-hidden
@@ -381,6 +411,7 @@ TAGS:
     - featured-suggestions-empty
     - featured-suggestions-heading
     - featured-th-agree
+    - featured-th-agreement
     - featured-th-disagree
     - featured-th-number
     - featured-th-seed

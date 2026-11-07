@@ -116,22 +116,6 @@ test.each([
   expect(untranslatedCopy([document.querySelector('.p6-done')], CONTENT)).toEqual([]);
 });
 
-test('the pointer to preliminary results is one sentence, and its link still switches tab', async () => {
-  renderPanel(workspace({
-    tabs: [
-      {key: 'informed-voting', label: 'Informed vote', dataHref: ''},
-      {key: 'p6-results', label: 'Preliminary results', dataHref: ''},
-    ],
-  } as Partial<Workspace>), [answered]);
-
-  // conv-p6-done-see is one message with the link passed in as an element, so the link keeps
-  // its onClick handler.
-  const done = await screen.findByText(/to compare the first round with this one/);
-  expect(done).toHaveTextContent('See the Preliminary results tab to compare the first round with this one.');
-  fireEvent.click(within(done).getByRole('link', {name: 'Preliminary results'}));
-  expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
-});
-
 test('the identity note names the pseudonym in bold and links to the reveal page', async () => {
   renderPanel(workspace({reveal: reveal('open')} as Partial<Workspace>), [answered]);
 

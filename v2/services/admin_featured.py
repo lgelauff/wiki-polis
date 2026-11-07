@@ -5,6 +5,8 @@ from datetime import timezone
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from services import reporting_rules
+
 
 class FeaturedStatementNotFound(ValueError):
     pass
@@ -39,10 +41,21 @@ class FeaturedSelectionResult:
     changed: bool
 
 
+def agreement(agree: int, disagree: int, *, floor: int, mark_share: float) -> tuple[int | None, bool]:
+    """The agreement share of agree + disagree responses, as the API serves it.
+
+    Withheld (None) below `floor` agree + disagree responses: it is opinion data, which
+    follows the floor in admin views too (owner, 2026-10-15). See
+    services.reporting_rules.agreement.
+    """
+    return reporting_rules.agreement(agree, disagree, floor=floor, mark_share=mark_share)
+
+
 def build_featured_workspace(
     *, conversation, confirmed, candidates, provenance_by_tid,
     statement_text_by_tid,
     recommendation: int, self_link: str, lifecycle_link: str,
+    agreement_floor: int = 10, agreement_mark_share: float = 0.7,
 ) -> dict:
     def provenance(tid: int):
         row = provenance_by_tid.get(tid)
@@ -81,20 +94,23 @@ def build_featured_workspace(
     for row in candidates or []:
         agree = int(row.get('n_agree') or 0)
         disagree = int(row.get('n_disagree') or 0)
-        position_votes = agree + disagree
+        percent, marked = agreement(
+            agree, disagree, floor=agreement_floor, mark_share=agreement_mark_share,
+        )
+        # Below the floor the split is withheld too, not only the share: the counts would
+        # give the share straight back (owner, 2026-10-30, D6). Total responses stay.
+        split = percent is not None
         projected_candidates.append({
             'statementId': int(row['tid']),
             'text': str(row.get('text') or ''),
             'seed': bool(row.get('is_seed')),
             'votes': {
-                'agree': agree,
-                'pass': int(row.get('n_pass') or 0),
-                'disagree': disagree,
+                'agree': agree if split else None,
+                'pass': int(row.get('n_pass') or 0) if split else None,
+                'disagree': disagree if split else None,
                 'total': int(row.get('n_votes') or 0),
-                'agreementPercent': (
-                    round(agree * 100 / position_votes, 1)
-                    if position_votes else None
-                ),
+                'agreementPercent': percent,
+                'agreementMarked': marked,
             },
             'provenance': provenance(int(row['tid'])),
         })
@@ -116,6 +132,8 @@ def build_featured_workspace(
         'guidance': {
             'recommendedCount': recommendation,
             'note': 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.',
+            'agreementFloor': agreement_floor,
+            'agreementMarkShare': agreement_mark_share,
         },
         'capabilities': {'manage': True},
         'links': {'self': self_link, 'lifecycle': lifecycle_link},

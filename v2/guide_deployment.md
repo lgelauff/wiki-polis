@@ -528,7 +528,9 @@ guessed.
 > protects the start of the run, not the middle.
 
 ```bash
-# On Toolforge bastion as wiki-polis user:
+# On Toolforge bastion, guard the account before any manual deployment commands:
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual wiki-polis deployment' || exit 1
 cd ~/wiki-polis && git pull
 pip install -r ~/wiki-polis/v2/requirements-deploy.txt
 pip install --no-deps -e ~/wiki-polis/v2
@@ -537,6 +539,9 @@ pip install --no-deps -e ~/wiki-polis/v2
 If the deploy includes database migrations, run them **before** restarting (see [Database migrations](#database-migrations) below).
 
 ```bash
+# Keep this in the same guarded shell, or source/check again if starting a new one.
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual webservice restart' || exit 1
 cd ~   # webservice commands must run from home directory
 toolforge webservice restart
 ```
@@ -546,6 +551,20 @@ Or use the deploy script (which handles all steps):
 ```bash
 bash ~/wiki-polis/deploy.sh
 ```
+
+Before fetching or changing the checkout, `deploy.sh` checks `whoami` and allows only
+`tools.wiki-polis`, `tools.wiki-polis-dev` and `tools.proto` (the tool the app moves to,
+#440). Any other account aborts with its name and
+a warning about the active `become` context. For a deliberately new Toolforge account,
+set the one-command override `ALLOW_UNKNOWN_TOOL=1`; it prints a prominent warning and
+leaves the revision-pinning checks intact. Do not export this override globally.
+
+```bash
+ALLOW_UNKNOWN_TOOL=1 bash ~/wiki-polis/deploy.sh <branch> --expect <sha>
+```
+
+The same account guard is sourceable for manual operations; use it immediately before
+the first command that changes Toolforge state (examples above).
 
 Deploy a named branch only while it remains a live `origin` ref, and pin the
 reviewed commit when staging a moving development branch:
@@ -579,6 +598,24 @@ directly; on a Toolforge bastion, where application runtimes are intentionally a
 automatically opens an ephemeral `node20` runtime shell and builds there. Toolforge mounts the
 tool's shared home directory into that shell, so the resulting `v2/static/spa` assets are ready
 for the Python webservice restart. No manual npm or partial-deployment recovery step is needed.
+
+### Node 20 build shell (2026-10-23)
+
+A Node security release on 2026-10-20 (relayed via a WMCS notice) fixed Node 22.23.4, 24.22.1
+and 26.12.1. Node 20 reached end of life in April 2026 and gets no fix, so the `node20` shell
+that `deploy.sh` opens stays below the patched versions. Toolforge only offers the runtimes WMCS
+ships: on 2026-10-23 its registry had `toolforge-node20-*` images and no node22 or node24 ones.
+
+The exposure is limited because the shell is **build-only**: it runs `v2/bin/build-spa.sh`
+(`npm ci`, then `npm run build`) with the tool's home mounted, and exits. It starts no server
+process, listens on no port and handles no user input. Its only outside input is the npm
+registry download, pinned by the integrity hashes in `v2/frontend/package-lock.json`. The app
+itself is served by the Python webservice. CI (`.github/workflows/test.yml`) builds and tests
+with the exact patched Node 24.22.1.
+
+Switch `deploy.sh` (and `v2/tests/test_deploy_script.py`) to a node22 or node24 runtime as soon as
+WMCS ships one for Toolforge with a patched Node. The build needs Node `^20.19.0 || >=22.12.0`
+(vite's `engines` range).
 
 ### Buildservice status
 
@@ -667,6 +704,10 @@ If there are new files since the last deploy, run the migration steps below befo
 ### Run migrations
 
 ```bash
+# On the Toolforge bastion, verify the active account before opening the migration shell.
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual database migration' || exit 1
+
 # Step 1 — enter the webservice shell (envvars are available here)
 toolforge webservice python3.13 shell
 
@@ -696,6 +737,8 @@ No output after "Will assume non-transactional DDL." means the database is alrea
 Run this from the **bastion** (not inside the webservice shell):
 
 ```bash
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual post-migration restart' || exit 1
 cd ~
 toolforge webservice restart
 ```
@@ -713,6 +756,10 @@ tail -50 /data/project/wiki-polis/uwsgi.log | grep -v lseek
 To undo the last migration:
 
 ```bash
+# On the Toolforge bastion, verify the active account before opening the rollback shell.
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual database rollback' || exit 1
+
 toolforge webservice python3.13 shell
 source /data/project/wiki-polis/www/python/venv/bin/activate
 cd ~/wiki-polis/v2
@@ -720,7 +767,7 @@ flask --app app db downgrade   # rolls back one step
 exit
 ```
 
-Then revert the code change and restart.
+Then revert the code change and follow the guarded restart steps above.
 
 ### Toolforge gotchas specific to migrations
 
@@ -814,3 +861,12 @@ export DATABASE_URL
 | `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |
 | `STAGING_DEV_TOKEN` | staging only | HMAC secret for `/dev/login/<username>?token=...` on `wiki-polis-dev`; never set on production |
 | `FLASK_DEBUG` | dev only | Enables debug mode; never set in production |
+| `REMINDERS_BOT_EMAIL_USERNAME` | no | Wiki-mail login of the Proto bot account for participant reminders (#577), as a bot password name (the full login name the BotPasswords page shows, e.g. `Protowikibot@protowikibot-wikimail`; a bot password works on every wiki, wherever it was made). Set as a Toolforge secret. Unset → every wiki-mail is a dry run |
+| `REMINDERS_BOT_EMAIL_PASSWORD` | no | The bot password for `REMINDERS_BOT_EMAIL_USERNAME` (Special:BotPasswords) with only the grant *Send email to other users*. The bot account itself needs a confirmed email address, or the wiki refuses every wiki-mail. Set as a Toolforge secret |
+| `REMINDERS_BOT_TALK_USERNAME` | no | Talk-page login of the same bot account: a second bot password name (e.g. `Protowikibot@protowikibot-talkpages`). Set as a Toolforge secret. Unset → every talk-page post is a dry run |
+| `REMINDERS_BOT_TALK_PASSWORD` | no | The bot password for `REMINDERS_BOT_TALK_USERNAME` with only the grants *Edit existing pages* and *Create, edit, and move pages* (a talk page may not exist yet). Set as a Toolforge secret |
+| `REMINDERS_TEST_RECIPIENTS` | no | Comma-separated Wikimedia usernames that may receive test messages (`flask send-test-reminder`, the Reminder test section on `/site-admin`). Nobody else can receive anything while the bot is tested. Test sends work on every wiki the bot knows (`nlwiki`, `metawiki`), approved or not; this list is the guard. `REMINDERS_LIVE_WIKIS` is no longer read. Running `flask send-test-reminder` outside Toolforge (on a workstation, for a trial) also needs `MIGRATION_MODE=1`, or the app refuses to start without its Toolforge-only settings |
+| `REMINDERS_PAUSED` | no | Emergency stop for `flask process-reminders`: any true value (`1`, `true`) makes the next run handle nothing, on every wiki. It is read when a run starts, so no deploy is needed, but a run that is already going doesn't see the change: to stop one, stop its job (`toolforge jobs delete <job>`, or end the shell command). What it already sent stays recorded; the rest stays `pending`. Reminders on approved wikis whose day passed while paused are recorded as `skipped_expired` by the next run; on other wikis they keep waiting for a super admin |
+| `REMINDERS_EMAIL_DAILY_CAP` | no | Wiki-mails the batch may send per UTC day (default `5`; at most `20`; a value that is not a whole number counts as `5`). Wikimedia allows an unflagged bot 20 a day, 5 until the account is autoconfirmed. Over the cap, the least recently mailed go first; the rest are recorded as `not_sent_limit` and not retried. `flask process-reminders` exits 0 when done, 1 when a wiki was unknown or the bot was blocked, 2 when it refused (another run in progress, a trigger without `--by`), 3 when it broke off, for instance when it lost its run lock (it stops before the next message; what it sent stays recorded) |
+
+The earlier single bot login, `REMINDERS_BOT_USERNAME`/`_PASSWORD`, is no longer read. If it was set anywhere, remove it, and revoke its bot password on Special:BotPasswords so only the two narrower ones remain.

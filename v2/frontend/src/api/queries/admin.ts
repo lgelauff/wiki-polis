@@ -1,7 +1,7 @@
 import {queryOptions} from '@tanstack/react-query';
 
 import type {components} from '../schema';
-import {api, requireApiData} from '../client';
+import {ApiContractError, api, requireApiData} from '../client';
 
 export const adminParticipantRosterQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-participant-roster', conversationId],
@@ -156,6 +156,20 @@ export async function putGlobalAdmin(
   }))).data;
 }
 
+export const reminderTestQuery = () => queryOptions({
+  queryKey: ['admin-reminder-test'],
+  queryFn: async () => (await requireApiData(api.GET('/admin/reminder-test'))).data,
+  staleTime: 30_000,
+});
+
+export async function postReminderTestSend(
+  body: components['schemas']['ReminderTestSendRequest'], csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/reminder-test-sends', {
+    body, headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const adminLifecycleQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-lifecycle', conversationId],
   queryFn: async () => (
@@ -274,6 +288,38 @@ export async function putAdminRecommendationTier(
     {params: {path: {conversationId}}, body, headers: {'X-CSRFToken': csrfToken}},
   ))).data;
 }
+
+/** A site admin's preview of the results report, or, once the report is published, the
+ *  published report's path to go to instead. */
+export type AdminReportPreview =
+  | {state: 'preview'; report: components['schemas']['ResultsReport']}
+  | {state: 'published'; reportPath: string};
+
+/** Every open of the page fetches once: nothing is kept after it closes (`gcTime: 0`), so
+ *  the numbers are live and each open writes one audit event. Focus and reconnect do not
+ *  refetch, so leaving the tab and coming back adds no rows. Read it with `useQuery`, not
+ *  `useSuspenseQuery`: suspense raises gcTime to at least a second, so a quick reopen
+ *  would be served from the cache. */
+export const adminReportPreviewQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-report-preview', conversationId],
+  queryFn: async (): Promise<AdminReportPreview> => {
+    try {
+      const {data} = await requireApiData(api.GET(
+        '/admin/conversations/{conversationId}/report-preview',
+        {params: {path: {conversationId}}},
+      ));
+      return {state: 'preview', report: data};
+    } catch (error) {
+      const report = error instanceof ApiContractError && error.code === 'conversation_closed'
+        ? (error.details as {report?: unknown} | undefined)?.report : undefined;
+      if (typeof report === 'string') return {state: 'published', reportPath: report};
+      throw error;
+    }
+  },
+  gcTime: 0,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+});
 
 export const adminTerminationQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-termination', conversationId],
@@ -430,9 +476,10 @@ export async function deleteAdminFeaturedArgument(
 }
 
 /** canivote's eligibility policies an organizer may choose from (#530). The server caches
- *  canivote's answer for ten minutes, so this one is kept as long. */
+ *  canivote's answer for ten minutes, so a list that loaded is kept as long; "cannot be
+ *  loaded" is not kept, so the next page that needs the list asks again. */
 export const adminEligibilityPoliciesQuery = () => queryOptions({
   queryKey: ['admin-eligibility-policies'],
   queryFn: async () => (await requireApiData(api.GET('/admin/eligibility-policies'))).data,
-  staleTime: 600_000,
+  staleTime: (query) => (query.state.data?.available ? 600_000 : 0),
 });

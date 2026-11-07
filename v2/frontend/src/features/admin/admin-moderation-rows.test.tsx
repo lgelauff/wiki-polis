@@ -284,11 +284,11 @@ test('Featured\'s row buttons are named for their row', async () => {
       {featuredId: 62, statementId: 13, text: 'Second featured.', systemSuggested: true, provenance: null, arguments: []},
     ],
     candidates: [
-      {statementId: 14, text: 'First candidate.', seed: false, votes: {agree: 1, pass: 0, disagree: 0, total: 1, agreementPercent: 100}, provenance: null},
-      {statementId: 15, text: 'Second candidate.', seed: false, votes: {agree: 1, pass: 0, disagree: 0, total: 1, agreementPercent: 100}, provenance: null},
+      {statementId: 14, text: 'First candidate.', seed: false, votes: {agree: 1, pass: 0, disagree: 0, total: 1, agreementPercent: null, agreementMarked: false}, provenance: null},
+      {statementId: 15, text: 'Second candidate.', seed: false, votes: {agree: 1, pass: 0, disagree: 0, total: 1, agreementPercent: null, agreementMarked: false}, provenance: null},
     ],
     dataAvailability: {candidates: true}, phase: {argumentMappingActive: false, informedVotingLive: false},
-    guidance: {recommendedCount: 15, note: ''}, capabilities: {manage: true},
+    guidance: {recommendedCount: 15, note: '', agreementFloor: 10, agreementMarkShare: 0.7}, capabilities: {manage: true},
     links: {self: url('/api/v1/admin/conversations/7/featured-statements'), lifecycle: '/admin/conversations/7'},
   }})));
   renderPage(<AdminFeaturedPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/moderation/featured');

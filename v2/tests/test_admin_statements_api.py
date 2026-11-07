@@ -54,7 +54,7 @@ def test_statement_workspace_is_typed_and_privacy_safe(admin_client, conversatio
         'moderation': 'pending',
         'seed': False,
         'featured': False,
-        'votes': {'agree': 2, 'pass': 1, 'disagree': 3},
+        'votes': {'agree': 2, 'pass': 1, 'disagree': 3},  # exact below the floor: the named moderation exception (D6)
         'provenance': None,
     }
     assert 'must-not-leak' not in response.text
