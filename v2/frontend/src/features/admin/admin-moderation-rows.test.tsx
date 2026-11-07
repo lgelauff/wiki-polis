@@ -31,7 +31,7 @@ const m = (key: string) => testMessages[key]!;
 
 function statement(id: number, overrides: Partial<Statement> = {}): Statement {
   return {
-    id, text: `Statement text ${id}.`, moderation: 'pending', seed: false, featured: false,
+    id, text: `Statement text ${id}.`, moderation: 'pending', seed: false, meta: false, hasResponses: false, featured: false,
     votes: {agree: 1, pass: 0, disagree: 0}, provenance: null, ...overrides,
   };
 }

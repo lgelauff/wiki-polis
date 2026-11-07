@@ -24,6 +24,7 @@ from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
                                   validate_idempotency_key)
 from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
+                                 MetaStatementNotRewordable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
 from services.argument_commands import (
@@ -119,6 +120,7 @@ def create_api_v1_blueprint(
     set_admin_statement_policy: Callable[[int, dict], dict],
     moderate_admin_statement: Callable[[int, int, dict], dict],
     add_admin_seed_statement: Callable[[int, dict], dict],
+    set_admin_statement_meta: Callable[[int, int, dict], dict],
     import_admin_seed_statements: Callable[[int, dict], dict],
     resolve_admin_featured: Callable[[int], dict],
     select_admin_featured: Callable[[int, int, dict], dict],
@@ -268,6 +270,7 @@ def create_api_v1_blueprint(
         set_admin_statement_policy=set_admin_statement_policy,
         moderate_admin_statement=moderate_admin_statement,
         add_admin_seed_statement=add_admin_seed_statement,
+        set_admin_statement_meta=set_admin_statement_meta,
         import_admin_seed_statements=import_admin_seed_statements,
         resolve_admin_featured=resolve_admin_featured,
         select_admin_featured=select_admin_featured,
@@ -698,6 +701,12 @@ def create_api_v1_blueprint(
                 'unknown_parent_statement',
                 'The original statement is not available in this conversation.',
                 400,
+            )
+        except MetaStatementNotRewordable:
+            return error_response(
+                'meta_not_rewordable',
+                'A meta statement cannot be reworded.',
+                409,
             )
         except DerivativeSimilarityTooLow as exc:
             return error_response(

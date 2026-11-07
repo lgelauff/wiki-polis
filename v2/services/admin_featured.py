@@ -8,6 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from services import reporting_rules
 
 
+class FeaturedStatementIsMeta(ValueError):
+    """A meta statement asks about the participant, so it is never featured (#415)."""
+
+
 class FeaturedStatementNotFound(ValueError):
     pass
 
@@ -143,8 +147,10 @@ def build_featured_workspace(
 def select_featured_statement(
     *, conversation, statement_id: int, text: str,
     system_suggested: bool, find_existing, create_selection,
-    session, sync_live_round, audit,
+    session, sync_live_round, audit, is_meta: bool = False,
 ) -> FeaturedSelectionResult:
+    if is_meta:
+        raise FeaturedStatementIsMeta()
     existing = find_existing(statement_id)
     if existing is not None:
         return FeaturedSelectionResult(

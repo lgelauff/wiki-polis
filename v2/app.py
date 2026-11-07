@@ -120,8 +120,10 @@ from services.admin_statements import (
     ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
     ModerationPolicyVerificationUnavailable,
     SeedImportValidationFailed, SeedStatementValidationFailed,
+    StatementMetaUpstreamFailed,
     add_seed_statement, build_statement_workspace, import_seed_statements,
-    moderate_statement, resolved_moderation_policy, set_statement_moderation_policy,
+    moderate_statement, resolved_moderation_policy, set_statement_meta,
+    set_statement_moderation_policy,
 )
 from services.admin_featured import (
     ArgumentNotInFeaturedWorkspace,
@@ -145,6 +147,7 @@ from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
+                                 MetaStatementNotRewordable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
 from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
@@ -3108,7 +3111,11 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
         **projection,
         'capabilities': {
             'vote': True,
-            'suggestWording': projection['currentStatement'] is not None,
+            # A meta statement is the organizer's wording: no improvements (#415).
+            'suggestWording': (
+                projection['currentStatement'] is not None
+                and not projection['currentStatement'].get('isMeta')
+            ),
             'submitNewStatement': projection['newStatement']['unlocked'],
         },
         'links': links,
@@ -3585,11 +3592,14 @@ def _statement_api_payload(
     scores = None
     if derived_from is not None:
         try:
-            parent_text = _statement_text_map(conv.polis_id).get(derived_from)
+            text_by_id, meta_ids = _statement_text_and_meta(conv.polis_id)
         except PolisParticipantError as exc:
             raise StatementPreparationUnavailable() from exc
+        parent_text = text_by_id.get(derived_from)
         if parent_text is None:
             raise UnknownParentStatement(derived_from)
+        if derived_from in meta_ids:
+            raise MetaStatementNotRewordable()
         scores = _statement_similarity_scores(text_value, parent_text)
         model, score = _preferred_similarity_score(scores)
         threshold = _derivative_similarity_threshold()
@@ -4483,6 +4493,50 @@ def _moderate_admin_statement_api_payload(
     }
 
 
+def _set_admin_statement_meta_api_payload(
+    conv_id: int, statement_id: int, body: dict,
+) -> dict:
+    # Tagging is part of seeding, so it is open to whoever may add seeds (owner, 2026-11-07).
+    conv = _require_mod_for_conv(conv_id)
+    result, _strict = _load_admin_statement_sources(conv)
+    if result is None:
+        raise StatementMetaUpstreamFailed()
+    row = next(
+        (row for bucket in result for row in bucket if int(row['tid']) == statement_id),
+        None,
+    )
+    if row is None:
+        abort(404, description='Statement not found in this conversation.')
+    is_featured = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id, polis_statement_id=statement_id,
+    ).first() is not None
+    outcome = set_statement_meta(
+        conversation=conv,
+        statement_id=statement_id,
+        row=row,
+        is_meta=body['meta'],
+        is_featured=is_featured,
+        acknowledge_responses=body.get('acknowledgeResponses', False),
+        set_meta_upstream=_polis_server_client().set_meta,
+        audit=lambda tid, meta, had_responses: record_audit(
+            'statement.meta', conv_id=conv.id, target_type='statement',
+            target_id=tid, meta=meta, had_responses=had_responses,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    return {
+        'statementId': outcome.statement_id,
+        'meta': outcome.meta,
+        'changed': outcome.changed,
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
 def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
     conv = _require_mod_for_conv(conv_id)
     lock_reason = _seed_statement_lock_reason(conv)
@@ -4541,11 +4595,18 @@ def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
         ),
         max_characters=MAX_TEXT_CHARS,
         upstream_errors=(PolisServerError, PolisParticipantError),
+        is_meta=body.get('isMeta', False),
+        set_meta=_polis_server_client().set_meta,
+        audit_meta=lambda statement_id: record_audit(
+            'statement.meta', conv_id=conv.id,
+            target_type='statement', target_id=statement_id, meta=True,
+        ),
     )
     return {
         'statementId': result.statement_id,
         'derivedFromId': result.derived_from_id,
         'provenanceRecorded': result.provenance_recorded,
+        'metaRecorded': result.meta_recorded,
         'links': {
             'statements': url_for(
                 'api_v1.get_admin_conversation_statements',
@@ -4625,13 +4686,14 @@ def _select_admin_featured_api_payload(
 ) -> dict:
     conv = _require_mod_for_conv(conv_id)
     try:
-        text = _statement_text_map(conv.polis_id).get(statement_id, '')
+        text_by_id, meta_ids = _statement_text_and_meta(conv.polis_id)
     except PolisParticipantError as exc:
         raise FeaturedSourceUnavailable() from exc
     result = select_featured_statement(
         conversation=conv,
         statement_id=statement_id,
-        text=text,
+        text=text_by_id.get(statement_id, ''),
+        is_meta=statement_id in meta_ids,
         system_suggested=body['source'] == 'system',
         find_existing=lambda tid: FeaturedStatement.query.filter_by(
             conversation_id=conv.id, polis_statement_id=tid,
@@ -5271,9 +5333,17 @@ def _statement_text_map(conv_polis_id: str) -> dict[int, str]:
     fallback is load-bearing only for admin-client-shaped payloads (PolisAdminClient
     emits 'txt' without 'text') — keep it if this helper is ever pointed at that path.
     """
+    return _statement_text_and_meta(conv_polis_id)[0]
+
+
+def _statement_text_and_meta(conv_polis_id: str) -> tuple[dict[int, str], set[int]]:
+    """`_statement_text_map`, plus the ids of the meta statements among them (#415)."""
     client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
     _, approved, _ = client.get_statements(conv_polis_id)
-    return {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
+    return (
+        {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved},
+        {s['tid'] for s in approved if s.get('is_meta')},
+    )
 
 def _build_featured_data(conv, participation, can_mod=False):
     """Return list of dicts for the argument tab, one per confirmed FS.
@@ -6632,6 +6702,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_admin_statement_policy=_set_admin_statement_policy_api_payload,
         moderate_admin_statement=_moderate_admin_statement_api_payload,
         add_admin_seed_statement=_add_admin_seed_statement_api_payload,
+        set_admin_statement_meta=_set_admin_statement_meta_api_payload,
         import_admin_seed_statements=_import_admin_seed_statements_api_payload,
         resolve_admin_featured=_admin_featured_api_payload,
         select_admin_featured=_select_admin_featured_api_payload,

@@ -53,6 +53,8 @@ def test_statement_workspace_is_typed_and_privacy_safe(admin_client, conversatio
         'text': 'Needs review',
         'moderation': 'pending',
         'seed': False,
+        'meta': False,
+        'hasResponses': False,
         'featured': False,
         'votes': {'agree': 2, 'pass': 1, 'disagree': 3},  # exact below the floor: the named moderation exception (D6)
         'provenance': None,
@@ -367,6 +369,7 @@ def test_single_seed_supports_plain_and_correction_provenance(
         'statementId': 42,
         'derivedFromId': 12,
         'provenanceRecorded': True,
+        'metaRecorded': None,
         'links': {'statements': f'/api/v1/admin/conversations/{conversation.id}/statements'},
     }
     server.add_seed_return_id.assert_called_once_with(
