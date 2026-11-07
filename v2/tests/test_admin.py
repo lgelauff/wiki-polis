@@ -662,7 +662,7 @@ def test_featured_system_select_resyncs_a_live_informed_vote_round(admin_client,
     with patch('app.PolisServerClient.get_statements', return_value=round6), \
          patch('app.PolisServerClient.moderate'), \
          patch('app.PolisServerClient.add_seed_return_id', return_value=99) as add, \
-         patch('app._statement_text_map', return_value={5: 'New one'}):
+         patch('app._statement_text_and_meta', return_value=({5: 'New one'}, set())):
         resp = admin_client.put(
             f'/api/v1/admin/conversations/{conv.id}/featured-statements/5',
             json={'source': 'system'})
@@ -678,7 +678,7 @@ def test_featured_manual_select_resyncs_a_live_informed_vote_round(admin_client,
     with patch('app.PolisServerClient.get_statements', return_value=round6), \
          patch('app.PolisServerClient.moderate'), \
          patch('app.PolisServerClient.add_seed_return_id', return_value=98) as add, \
-         patch('app._statement_text_map', return_value={50: 'Admin-typed one'}):
+         patch('app._statement_text_and_meta', return_value=({50: 'Admin-typed one'}, set())):
         resp = admin_client.put(
             f'/api/v1/admin/conversations/{conv.id}/featured-statements/50',
             json={'source': 'manual'})
@@ -707,7 +707,7 @@ def test_featured_remove_resyncs_a_live_informed_vote_round(admin_client, conv):
 def test_featured_select_skips_resync_before_phase6_init(admin_client, conv):
     """Selecting a featured statement before round 6 exists must not touch Polis —
     _sync_phase6_featured assumes an already-initialised round."""
-    with patch('app._statement_text_map', return_value={1: 'Pre-init statement'}), \
+    with patch('app._statement_text_and_meta', return_value=({1: 'Pre-init statement'}, set())), \
          patch('app.PolisServerClient.get_statements') as get_stmts, \
          patch('app.PolisServerClient.add_seed_return_id') as add:
         resp = admin_client.put(
@@ -732,7 +732,7 @@ def test_featured_select_resync_failure_rolls_back_the_selection(admin_client, c
     admin_client.application.config['POLIS_DATABASE_URL'] = 'postgresql://x/y'
     with patch('app.PolisServerClient.get_statements', return_value=None), \
          patch('app.PolisServerClient.add_seed_return_id') as add, \
-         patch('app._statement_text_map', return_value={51: 'Will fail'}):
+         patch('app._statement_text_and_meta', return_value=({51: 'Will fail'}, set())):
         resp = admin_client.put(
             f'/api/v1/admin/conversations/{conv.id}/featured-statements/51',
             json={'source': 'manual'})
@@ -1513,7 +1513,7 @@ def test_admin_flag_queue_exposes_a_legacy_other_flag_without_detail(
     db.session.add(flag)
     db.session.commit()
 
-    with patch('app._statement_text_map', return_value={8: 'Legacy statement'}):
+    with patch('app._statement_text_and_meta', return_value=({8: 'Legacy statement'}, set())):
         resp = admin_client.get(f'/api/v1/admin/conversations/{conv.id}/flags')
 
     assert resp.status_code == 200

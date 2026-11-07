@@ -337,3 +337,28 @@ test('a revoked voucher reads as access withdrawn', async () => {
   expect(await screen.findByRole('heading', {name: testMessages['forbidden-lost-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
   expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
 });
+
+test('a meta statement is labelled, asks about the participant, and offers no rewording', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: {id: 1, text: 'I would stand as a candidate.', isMeta: true, isSeed: true},
+    capabilities: {...explore.capabilities, suggestWording: false},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
+  expect(document.querySelector('.stmt-meta-label')?.textContent).toBe(testMessages['meta-statement-label']);
+  expect(screen.getByText(testMessages['conv-vote-meta-prompt']!)).toBeVisible();
+  expect(document.querySelector('#triad-suggest')).toBeNull();
+  expect(document.querySelector('#triad-next')).not.toBeNull();
+});
+
+test('an ordinary statement keeps its label and the rewording option', async () => {
+  serve(workspace);
+  renderWorkspace();
+
+  expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
+  expect(document.querySelector('.stmt-meta-label')?.textContent).toBe(testMessages['conv-vote-statement-label']);
+  expect(screen.queryByText(testMessages['conv-vote-meta-prompt']!)).toBeNull();
+  expect(document.querySelector('#triad-suggest')).not.toBeNull();
+});

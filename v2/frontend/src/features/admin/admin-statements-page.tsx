@@ -10,6 +10,7 @@ import {
   adminStatementWorkspaceQuery,
   postAdminSeedStatement,
   postAdminStatementImport,
+  putAdminStatementMeta,
 } from '../../api/queries';
 import {useMessage, type Message} from '../../i18n/messages';
 import {sortByBasedOn} from './admin-based-on';
@@ -103,15 +104,52 @@ function sortStatements(rows: Statement[], sort: Sort): Statement[] {
  *  suffix (what "↳ #N", Featured's add by number and "Corrects statement #" refer to),
  *  where it came from, its votes and what can be done to it. The row's id is the target of
  *  "↳ #N" on the rows derived from it. */
-function StatementRow({conversationId, statement, sourceShown, csrfToken, move, onError}: {
+function StatementRow({conversationId, statement, sourceShown, csrfToken, move, onMeta, onError}: {
   conversationId: number;
   statement: Statement;
   sourceShown: boolean;
   csrfToken: string;
   move: (statement: Statement, status: Status) => void;
+  onMeta: (statement: Statement, meta: boolean) => void;
   onError: (message: string) => void;
 }) {
   const msg = useMessage();
+  // Once someone else has responded, a meta change is said first and confirmed (2026-11-07).
+  const [confirming, setConfirming] = useState(false);
+  const meta = useMutation({
+    mutationFn: (acknowledgeResponses: boolean) => putAdminStatementMeta(
+      conversationId, statement.id, {meta: !statement.meta, acknowledgeResponses}, csrfToken,
+    ),
+    onSuccess: (receipt) => {
+      setConfirming(false);
+      onMeta(statement, receipt.meta);
+    },
+    onError: (error: Error) => {
+      if (error instanceof ApiContractError && error.code === 'meta_has_responses') {
+        setConfirming(true);
+      } else {
+        setConfirming(false);
+        onError(msg('adminconv-command-failed'));
+      }
+    },
+  });
+  // Seeds only (owner, 2026-09-24); a featured statement is an opinion, so it is never marked.
+  const canToggle = statement.seed && (statement.meta || !statement.featured);
+  const toggleLabel = statement.meta ? msg('stmts-meta-unmark') : msg('stmts-meta-mark');
+  const toggle = canToggle ? (
+    <button
+      type="button"
+      className="admin-row__text-button"
+      aria-expanded={statement.hasResponses ? confirming : undefined}
+      disabled={meta.isPending}
+      onClick={() => {
+        if (statement.hasResponses) setConfirming(true);
+        else meta.mutate(false);
+      }}
+    >
+      {toggleLabel}
+    </button>
+  ) : null;
   return (
     <li className="admin-row" id={`statement-${statement.id}`} data-row-id={statement.id}>
       <div className="admin-row__text">
@@ -123,6 +161,9 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         )}
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
+        {statement.meta && (
+          <span className="admin-row__suffix">{` · ${msg('meta-statement-label')}`}</span>
+        )}
         {statement.provenance && (
           <StatementProvenance provenance={statement.provenance} linked={sourceShown} />
         )}
@@ -139,9 +180,21 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         conversationId={conversationId}
         csrfToken={csrfToken}
         withUnmoderate
+        leading={toggle}
         onMoved={move}
         onError={(error) => onError(moderationError(msg, error))}
       />
+      {confirming && (
+        <div className="admin-row__note" role="alert">
+          <p>{msg('stmts-meta-warn-responses', statement.id)}</p>
+          <div className="admin-form__actions">
+            <button type="button" className="admin-button admin-button--primary"
+              disabled={meta.isPending} onClick={() => meta.mutate(true)}>{toggleLabel}</button>
+            <button type="button" className="admin-button"
+              onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -178,6 +231,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const [seedText, setSeedText] = useState('');
   const [derivedFrom, setDerivedFrom] = useState('');
+  const [seedMeta, setSeedMeta] = useState(false);
   const [importText, setImportText] = useState('');
   const dismissToast = useCallback(() => setToast(null), []);
   const announcer = useAnnouncer();
@@ -194,7 +248,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const seedMutation = useMutation({
     mutationFn: () => postAdminSeedStatement(
       conversationId,
-      {text: seedText, derivedFromId: derivedFrom === '' ? null : Number(derivedFrom)},
+      {text: seedText, derivedFromId: derivedFrom === '' ? null : Number(derivedFrom), isMeta: seedMeta},
       csrfToken,
     ),
     onSuccess: (receipt) => {
@@ -203,11 +257,15 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       if (receipt.provenanceRecorded === false) {
         error = true;
         message = msg('flash-seed-added-no-link');
+      } else if (receipt.metaRecorded === false) {
+        error = true;
+        message = msg('flash-seed-added-meta-failed', receipt.statementId ?? '');
       } else if (receipt.derivedFromId !== null) {
         message = msg('flash-seed-added-corrected', receipt.derivedFromId);
       }
       setSeedText('');
       setDerivedFrom('');
+      setSeedMeta(false);
       setSeedFeedback(lines([{error, message}]));
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
@@ -270,6 +328,21 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     announcer.announce(msg(MOVED[status], statement.id));
   }
 
+  function markMeta(statement: Statement, meta: boolean) {
+    queryClient.setQueryData<Workspace>(options.queryKey, (workspace) => {
+      if (!workspace) return workspace;
+      const mark = (rows: Statement[]) => rows.map((row) => (
+        row.id === statement.id ? {...row, meta} : row));
+      return {...workspace, statements: {
+        pending: mark(workspace.statements.pending),
+        approved: mark(workspace.statements.approved),
+        hidden: mark(workspace.statements.hidden),
+      }};
+    });
+    setToast(null);
+    announcer.announce(meta ? msg('flash-meta-marked', statement.id) : msg('flash-meta-unmarked', statement.id));
+  }
+
   function submitImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const rows = importText.split(/\r?\n/)
@@ -324,6 +397,9 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   );
 
   const shown = new Set(rows.map((row) => row.id));
+  // Each meta statement asks every participant for one more response: said from the 4th on.
+  const metaCount = [...data.statements.approved, ...data.statements.pending]
+    .filter((row) => row.meta).length;
   const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
 
   return (
@@ -376,6 +452,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </label>
         </div>
 
+        {metaCount >= 4 && <p className="admin-status">{msg('stmts-meta-warn-count', metaCount)}</p>}
+
         {rows.length ? (
           <ul className="admin-rows" ref={listRef}>
             {rows.map((statement) => (
@@ -387,6 +465,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   && shown.has(statement.provenance.derivedFromId)}
                 csrfToken={csrfToken}
                 move={moveStatement}
+                onMeta={markMeta}
                 onError={showRowError}
               />
             ))}
@@ -429,6 +508,15 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                     value={derivedFrom}
                     onChange={(event) => setDerivedFrom(event.target.value)}
                   />
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    name="is_meta"
+                    checked={seedMeta}
+                    onChange={(event) => setSeedMeta(event.target.checked)}
+                  />
+                  {msg('stmts-seed-meta-label')}
                 </label>
                 <div className="admin-form__actions">
                   <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending}>{msg('stmts-seed-submit')}</button>

@@ -29,7 +29,7 @@ const PEOPLE_URL = new URL(
 function statement(id: number, overrides: Partial<Statement> = {}): Statement {
   return {
     id, text: `A statement waiting for a decision, number ${id}.`, moderation: 'pending',
-    seed: false, featured: false, votes: {agree: 1, pass: 0, disagree: 0}, provenance: null,
+    seed: false, meta: false, hasResponses: false, featured: false, votes: {agree: 1, pass: 0, disagree: 0}, provenance: null,
     ...overrides,
   };
 }

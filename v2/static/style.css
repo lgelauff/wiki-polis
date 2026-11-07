@@ -1193,6 +1193,14 @@ h3.conv-card-title-wrap {
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
+/* A meta statement has no "Suggest different wording" card (#415). */
+.v2-triad-grid--two { grid-template-columns: repeat(2, 1fr); }
+
+.statement-meta-prompt {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
 
 .v2-option-card {
   text-align: left;

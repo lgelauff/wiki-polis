@@ -29,7 +29,7 @@ const m = (key: string, ...params: (string | number)[]) => params.reduce<string>
 
 function statement(id: number, moderation: Statement['moderation']): Statement {
   return {
-    id, text: `Statement text ${id}.`, moderation, seed: false, featured: false,
+    id, text: `Statement text ${id}.`, moderation, seed: false, meta: false, hasResponses: false, featured: false,
     votes: {agree: 1, pass: 0, disagree: 0}, provenance: null,
   };
 }
@@ -158,4 +158,108 @@ test('moving a statement back to unmoderated is said too', async () => {
   await screen.findByText('Statement text 21.', {}, {timeout: 10_000});
   fireEvent.click(within(rowOf(21)).getByRole('button', {name: /unmoderated|pending/i}));
   await waitFor(() => expect(polite()).toHaveTextContent(m('admin-moderation-statement-unmoderated', 21)));
+});
+
+/** Meta statements (#415): seeds only, a warning before changing one people answered. */
+function seedRow(id: number, extra: Partial<Statement> = {}): Statement {
+  return {...statement(id, 'approved'), seed: true, ...extra};
+}
+
+function serveMeta(onPut: (body: {meta: boolean; acknowledgeResponses?: boolean}) => Response) {
+  server.use(http.put(url('/api/v1/admin/conversations/7/statements/:statementId/meta'),
+    async ({request}) => onPut(await request.json() as {meta: boolean; acknowledgeResponses?: boolean})));
+}
+
+test('only a seed statement offers the meta toggle, and a meta row says so', async () => {
+  serveWorkspace({approved: [seedRow(12), statement(13, 'approved'), seedRow(14, {meta: true})]});
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+
+  await screen.findByText('Statement text 12.', {}, {timeout: 10_000});
+  expect(within(rowOf(12)).getByRole('button', {name: m('stmts-meta-mark')})).toBeVisible();
+  expect(within(rowOf(13)).queryByRole('button', {name: m('stmts-meta-mark')})).toBeNull();
+  expect(within(rowOf(14)).getByRole('button', {name: m('stmts-meta-unmark')})).toBeVisible();
+  expect(within(rowOf(14)).getByText(m('meta-statement-label'), {exact: false})).toBeVisible();
+  expect(within(rowOf(12)).queryByText(m('meta-statement-label'), {exact: false})).toBeNull();
+});
+
+test('a featured seed cannot be marked meta', async () => {
+  serveWorkspace({approved: [seedRow(12, {featured: true})]});
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+
+  await screen.findByText('Statement text 12.', {}, {timeout: 10_000});
+  expect(within(rowOf(12)).queryByRole('button', {name: m('stmts-meta-mark')})).toBeNull();
+});
+
+test('marking a seed nobody answered yet goes through at once and is said', async () => {
+  const bodies: unknown[] = [];
+  serveWorkspace({approved: [seedRow(12)]});
+  serveMeta((body) => {
+    bodies.push(body);
+    return HttpResponse.json({data: {statementId: 12, meta: true, changed: true, links: {statements: STATEMENTS_URL}}});
+  });
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+
+  fireEvent.click(await screen.findByRole('button', {name: m('stmts-meta-mark')}, {timeout: 10_000}));
+  await waitFor(() => expect(polite()).toHaveTextContent(m('flash-meta-marked', 12)));
+  expect(bodies).toEqual([{meta: true, acknowledgeResponses: false}]);
+  expect(within(rowOf(12)).getByRole('button', {name: m('stmts-meta-unmark')})).toBeVisible();
+});
+
+test('a seed with responses warns first, and changes only when confirmed', async () => {
+  const bodies: unknown[] = [];
+  serveWorkspace({approved: [seedRow(12, {hasResponses: true})]});
+  serveMeta((body) => {
+    bodies.push(body);
+    return HttpResponse.json({data: {statementId: 12, meta: true, changed: true, links: {statements: STATEMENTS_URL}}});
+  });
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+
+  fireEvent.click(await screen.findByRole('button', {name: m('stmts-meta-mark')}, {timeout: 10_000}));
+  const warning = within(rowOf(12)).getByRole('alert');
+  expect(warning).toHaveTextContent(m('stmts-meta-warn-responses', 12));
+  expect(bodies).toEqual([]);
+
+  fireEvent.click(within(warning).getByRole('button', {name: m('common-cancel')}));
+  expect(within(rowOf(12)).queryByRole('alert')).toBeNull();
+  expect(bodies).toEqual([]);
+
+  fireEvent.click(within(rowOf(12)).getByRole('button', {name: m('stmts-meta-mark')}));
+  fireEvent.click(within(within(rowOf(12)).getByRole('alert')).getByRole('button', {name: m('stmts-meta-mark')}));
+  await waitFor(() => expect(bodies).toEqual([{meta: true, acknowledgeResponses: true}]));
+});
+
+test('the seed form can add a meta statement, and says when the mark failed', async () => {
+  const bodies: unknown[] = [];
+  serveWorkspace({});
+  server.use(http.post(STATEMENTS_URL, async ({request}) => {
+    bodies.push(await request.json());
+    return HttpResponse.json({data: {
+      statementId: 42, derivedFromId: null, provenanceRecorded: null, metaRecorded: false,
+      links: {statements: STATEMENTS_URL},
+    }}, {status: 201});
+  }));
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+
+  const text = await screen.findByLabelText(m('stmts-seed-label'), {}, {timeout: 10_000});
+  fireEvent.change(text, {target: {value: 'I would stand as a candidate'}});
+  fireEvent.click(screen.getByRole('checkbox', {name: m('stmts-seed-meta-label')}));
+  fireEvent.submit(text.closest('form')!);
+
+  await waitFor(() => expect(bodies).toEqual([
+    {text: 'I would stand as a candidate', derivedFromId: null, isMeta: true},
+  ]));
+  expect(await screen.findByText(m('flash-seed-added-meta-failed', 42))).toBeVisible();
+});
+
+test('from the 4th meta statement on, the list warns once', async () => {
+  serveWorkspace({approved: [11, 12, 13].map((id) => seedRow(id, {meta: true}))});
+  const {unmount} = renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+  await screen.findByText('Statement text 12.', {}, {timeout: 10_000});
+  expect(screen.queryByText(/meta statements: each one/)).toBeNull();
+  unmount();
+
+  serveWorkspace({approved: [11, 12, 13, 14].map((id) => seedRow(id, {meta: true}))});
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+  expect(await screen.findByText('4 meta statements: each one asks every participant for one more response.',
+    {}, {timeout: 10_000})).toBeVisible();
 });
