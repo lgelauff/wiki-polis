@@ -558,3 +558,21 @@ def test_preliminary_results_order_does_not_depend_on_cross_round_shift(
     ]
     assert all(row['initial'] is None and row['agreementShift'] is None
                for row in data['statements'])
+
+
+def test_an_archived_consultation_keeps_its_results(admin_client, conversation):
+    """Archiving leaves the results settings alone (owner, 2026-10-17 and 2026-11-07, #258)."""
+    conversation.phase_public_results = True
+    conversation.phase_informed_voting = False  # report phase: the informed round has ended
+    conversation.phase6_polis_conversation_id = 'private-phase6-id'
+    db.session.commit()
+
+    archived = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/archive', json={'archived': True},
+    )
+    with patch('app._build_phase6_results', return_value=_results()):
+        response = admin_client.get('/api/v1/conversations/test-conv/results')
+
+    assert archived.status_code == 200
+    assert response.status_code == 200
+    assert response.get_json()['data']['resultsAvailable'] is True

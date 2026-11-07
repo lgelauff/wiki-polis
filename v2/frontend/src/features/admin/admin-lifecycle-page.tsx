@@ -310,8 +310,8 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
     onSuccess: (result, archived) => {
       setLifecycle(result.lifecycle);
       setScheduleAt(utcInput(result.lifecycle.schedule.scheduledAt));
-      // Archiving turns phases off on the server (public results among them): the
-      // checkboxes follow, or the next "Save phases" would turn them back on.
+      // The checkboxes follow the server's answer, or the next "Save phases" would
+      // overwrite what the server holds.
       setAdvancedKeys(result.lifecycle.phase.advancedControls.filter((row) => row.active).map((row) => row.key));
       setPhaseChecks([]);
       announcer.announce(msg(archived ? 'admin-status-archived' : 'adminconv-status-active'));

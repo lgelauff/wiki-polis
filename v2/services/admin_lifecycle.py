@@ -467,7 +467,11 @@ def set_conversation_paused(
 def set_conversation_archived(
     *, conversation, archived: bool, clear_schedule, session, audit,
 ) -> bool:
-    """Archive reversibly without report publication or identity-reveal effects."""
+    """Archive reversibly without report publication or identity-reveal effects.
+
+    The results settings stay as they were, so participants keep the results they had
+    (owner, 2026-10-17 and 2026-11-07, #258).
+    """
     if conversation.closed_at is not None:
         raise ConversationClosed()
     currently_archived = not bool(conversation.active)
@@ -476,7 +480,6 @@ def set_conversation_archived(
         conversation.active = not archived
         if archived:
             conversation.paused = False
-            conversation.phase_public_results = False
             clear_schedule(conversation)
         session.commit()
         audit(

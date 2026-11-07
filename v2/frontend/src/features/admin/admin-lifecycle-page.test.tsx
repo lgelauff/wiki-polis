@@ -176,7 +176,7 @@ test.each([
   expect(within(sidebar).getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
 });
 
-/** The lifecycle with a public-results toggle that is on, so archiving visibly turns it off. */
+/** The lifecycle with a public-results toggle that is on: archiving leaves it on (#258). */
 const withPublicResults: Lifecycle = {...lifecycle, phase: {...lifecycle.phase, advancedControls: [
   ...lifecycle.phase.advancedControls,
   {key: 'public_results', label: 'Report', effect: 'x', active: true, requiresInitialization: false, initialized: true},
@@ -209,12 +209,10 @@ test('offers archive for a voted consultation and lets the admin reopen it', asy
       const body = await request.json() as {archived: boolean};
       requestedStates.push(body.archived);
       csrfHeader = request.headers.get('X-CSRFToken');
-      // Archiving turns public results off on the server; the page must follow.
+      // Archiving changes the status only; public results stay on.
       const updatedLifecycle = {
         ...withPublicResults,
         conversation: {...lifecycle.conversation, status: body.archived ? 'archived' as const : 'active' as const},
-        phase: {...withPublicResults.phase, advancedControls: withPublicResults.phase.advancedControls.map(
-          (row) => row.key === 'public_results' ? {...row, active: false} : row)},
       };
       return HttpResponse.json({data: {archived: body.archived, changed: true, lifecycle: updatedLifecycle}});
     }),
@@ -238,8 +236,8 @@ test('offers archive for a voted consultation and lets the admin reopen it', asy
     expect(container.querySelector('.status-pill--closed')).not.toBeNull();
     expect(requestedStates).toEqual([true]);
     expect(csrfHeader).toBe('test-csrf-token');
-    // The checkboxes follow the server: a later "Save phases" cannot turn public results back on.
-    expect(publicResults().checked).toBe(false);
+    // The checkboxes follow the server: public results are still on.
+    expect(publicResults().checked).toBe(true);
     // An archived consultation offers no Publish row: it goes back by Reopen.
     expect(screen.queryByRole('button', {name: /publish/i})).toBeNull();
 
