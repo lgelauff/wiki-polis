@@ -31,11 +31,13 @@ from services.admin_statements import (
     SeedImportUpstreamFailed, SeedImportValidationFailed,
     SeedImportVerificationUnavailable, SeedStatementParentNotFound,
     SeedStatementUpstreamFailed, SeedStatementValidationFailed,
+    StatementMetaFeatured, StatementMetaNeedsAcknowledgement, StatementMetaNotSeed,
+    StatementMetaUpstreamFailed,
 )
 from services.admin_featured import (
     ArgumentNotInFeaturedWorkspace,
     FeaturedCommandOutcomeUnknown, FeaturedRoundSyncFailed,
-    FeaturedSourceUnavailable, FeaturedStatementNotFound,
+    FeaturedSourceUnavailable, FeaturedStatementIsMeta, FeaturedStatementNotFound,
     LastFeaturedSelectionProtected,
 )
 from services.admin_catalog import (
@@ -84,6 +86,7 @@ def register_admin_routes(
     set_admin_statement_policy: Callable[[int, dict], dict],
     moderate_admin_statement: Callable[[int, int, dict], dict],
     add_admin_seed_statement: Callable[[int, dict], dict],
+    set_admin_statement_meta: Callable[[int, int, dict], dict],
     import_admin_seed_statements: Callable[[int, dict], dict],
     resolve_admin_featured: Callable[[int], dict],
     select_admin_featured: Callable[[int, int, dict], dict],
@@ -575,8 +578,10 @@ def register_admin_routes(
     @bp.post('/admin/conversations/<int:conversation_id>/statements')
     def post_admin_seed_statement(conversation_id: int):
         body = request.get_json(silent=True)
+        # isMeta is optional, so a page loaded before this release can still add seeds.
         if (not isinstance(body, dict)
-                or set(body) != {'text', 'derivedFromId'}
+                or not {'text', 'derivedFromId'} <= set(body) <= {'text', 'derivedFromId', 'isMeta'}
+                or not isinstance(body.get('isMeta', False), bool)
                 or not isinstance(body['text'], str)
                 or (body['derivedFromId'] is not None
                     and (not isinstance(body['derivedFromId'], int)
@@ -600,6 +605,39 @@ def register_admin_routes(
         except SeedStatementUpstreamFailed as exc:
             return error_response('upstream_unavailable', exc.message, 502)
         return _no_store(jsonify({'data': data})), 201
+
+    @bp.put('/admin/conversations/<int:conversation_id>/statements/<int:statement_id>/meta')
+    def put_admin_statement_meta(conversation_id: int, statement_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict)
+                or not {'meta'} <= set(body) <= {'meta', 'acknowledgeResponses'}
+                or not isinstance(body['meta'], bool)
+                or not isinstance(body.get('acknowledgeResponses', False), bool)):
+            return error_response(
+                'validation_failed',
+                'Provide meta (true or false) and, optionally, acknowledgeResponses.', 400,
+            )
+        try:
+            data = set_admin_statement_meta(conversation_id, statement_id, body)
+        except StatementMetaNotSeed:
+            return error_response(
+                'meta_not_seed', 'Only seed statements can be meta statements.', 409,
+            )
+        except StatementMetaFeatured:
+            return error_response(
+                'meta_featured', 'A featured statement cannot be a meta statement.', 409,
+            )
+        except StatementMetaNeedsAcknowledgement:
+            return error_response(
+                'meta_has_responses',
+                'This statement already has responses; confirm the change.', 409,
+            )
+        except StatementMetaUpstreamFailed:
+            return error_response(
+                'upstream_unavailable',
+                'The meta mark could not be changed; nothing was changed.', 502,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.get('/admin/conversations/<int:conversation_id>/featured-statements')
     def get_admin_featured_statements(conversation_id: int):
@@ -626,6 +664,10 @@ def register_admin_routes(
             return error_response(
                 'statement_not_found',
                 'That statement does not belong to this conversation.', 404,
+            )
+        except FeaturedStatementIsMeta:
+            return error_response(
+                'meta_not_featurable', 'A meta statement cannot be featured.', 409,
             )
         except FeaturedRoundSyncFailed as exc:
             return error_response('round_sync_failed', exc.message, 502)

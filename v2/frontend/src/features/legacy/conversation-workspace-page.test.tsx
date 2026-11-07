@@ -406,3 +406,28 @@ test('a participant who has answered every statement still reads as all done', a
   expect(await screen.findByText(testMessages['conv-alldone-label']!, {}, {timeout: 10_000})).toBeVisible();
   expect(screen.queryByText(testMessages['conv-nostatements-label']!)).toBeNull();
 });
+
+test('a meta statement is labelled, asks about the participant, and offers no rewording', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: {id: 1, text: 'I would stand as a candidate.', isMeta: true, isSeed: true},
+    capabilities: {...explore.capabilities, suggestWording: false},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
+  expect(document.querySelector('.stmt-meta-label')?.textContent).toBe(testMessages['meta-statement-label']);
+  expect(screen.getByText(testMessages['conv-vote-meta-prompt']!)).toBeVisible();
+  expect(document.querySelector('#triad-suggest')).toBeNull();
+  expect(document.querySelector('#triad-next')).not.toBeNull();
+});
+
+test('an ordinary statement keeps its label and the rewording option', async () => {
+  serve(workspace);
+  renderWorkspace();
+
+  expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
+  expect(document.querySelector('.stmt-meta-label')?.textContent).toBe(testMessages['conv-vote-statement-label']);
+  expect(screen.queryByText(testMessages['conv-vote-meta-prompt']!)).toBeNull();
+  expect(document.querySelector('#triad-suggest')).not.toBeNull();
+});

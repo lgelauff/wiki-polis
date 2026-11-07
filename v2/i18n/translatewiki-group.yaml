@@ -431,6 +431,8 @@ TAGS:
     - flash-last-featured-hide
     - flash-last-featured-remove
     - flash-load-statements-failed
+    - flash-meta-marked
+    - flash-meta-unmarked
     - flash-moderation-failed
     - flash-modsettings-failed
     - flash-move-sync-failed
@@ -438,6 +440,7 @@ TAGS:
     - flash-phases-saved-sync-failed
     - flash-seed-added
     - flash-seed-added-corrected
+    - flash-seed-added-meta-failed
     - flash-seed-added-no-link
     - flash-unbanned
     - guidance-argument-check-claim
@@ -533,12 +536,17 @@ TAGS:
     - stmts-import-skipped
     - stmts-import-submit
     - stmts-import-too-long
+    - stmts-meta-mark
+    - stmts-meta-unmark
+    - stmts-meta-warn-count
+    - stmts-meta-warn-responses
     - stmts-modsettings-heading
     - stmts-pending-empty
     - stmts-seed-corrects-label
     - stmts-seed-corrects-not-found
     - stmts-seed-heading
     - stmts-seed-label
+    - stmts-seed-meta-label
     - stmts-seed-submit
     - stmts-strict-label
     - stmts-vlabel-a
