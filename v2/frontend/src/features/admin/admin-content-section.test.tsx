@@ -22,7 +22,7 @@ const STATEMENTS_URL = new URL(
 
 function statement(id: number, overrides: Partial<Statement> = {}): Statement {
   return {
-    id, text: `Statement number ${id}.`, moderation: 'approved', seed: false, featured: false,
+    id, text: `Statement number ${id}.`, moderation: 'approved', seed: false, meta: false, hasResponses: false, featured: false,
     votes: {agree: 1, pass: 0, disagree: 0}, provenance: null, ...overrides,
   };
 }

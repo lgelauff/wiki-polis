@@ -125,7 +125,7 @@ def test_seed_derivative_route_records_provenance_and_audit(client, app):
     _login_admin(client, app)
     conv_id = _conv(app, 'provseed')
     with patch('app.PolisServerClient.add_seed_return_id', return_value=99) as add_id, \
-         patch('app._statement_text_map', return_value={11: 'parent text'}):
+         patch('app._statement_text_and_meta', return_value=({11: 'parent text'}, set())):
         r = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
                         json={'text': 'a corrected statement', 'derivedFromId': 11})
     assert r.status_code == 201
@@ -143,7 +143,7 @@ def test_seed_derivative_unknown_tid_is_rejected(client, app):
     from unittest.mock import patch
     _login_admin(client, app)
     conv_id = _conv(app, 'provbad')
-    with patch('app._statement_text_map', return_value={5: 'a real one'}), \
+    with patch('app._statement_text_and_meta', return_value=({5: 'a real one'}, set())), \
          patch('app.PolisServerClient.add_seed_return_id') as add_id:
         resp = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
                            json={'text': 'x', 'derivedFromId': 999})
@@ -206,7 +206,7 @@ def test_participant_derivative_submission_records_provenance(client, app):
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":777}')
     stmt_resp.json = lambda: {'id': 777}
 
-    with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
+    with patch('app._statement_text_and_meta', return_value=({12: 'parent statement'}, set())), \
          patch('app.polis_http.post', return_value=stmt_resp):
         resp = client.post('/api/v1/conversations/subderiv/statements',
                            headers={'Idempotency-Key': 'prov-key-777'},
@@ -224,7 +224,7 @@ def test_participant_derivative_submission_rejects_below_similarity_bound(client
     _login_participant_for_submission(client, app)
     app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = 0.8
 
-    with patch('app._statement_text_map', return_value={12: 'cats are good'}), \
+    with patch('app._statement_text_and_meta', return_value=({12: 'cats are good'}, set())), \
          patch('app.polis_http.post') as post:
         resp = client.post('/api/v1/conversations/subderiv/statements',
                            headers={'Idempotency-Key': 'prov-key-low'},
@@ -247,7 +247,7 @@ def test_derivative_submission_scores_similarity_once(client, app):
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":778}')
     stmt_resp.json = lambda: {'id': 778}
 
-    with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
+    with patch('app._statement_text_and_meta', return_value=({12: 'parent statement'}, set())), \
          patch('app._statement_similarity_scores', return_value={'char': 0.9}) as sim, \
          patch('app.polis_http.post', return_value=stmt_resp):
         resp = client.post('/api/v1/conversations/subderiv/statements',

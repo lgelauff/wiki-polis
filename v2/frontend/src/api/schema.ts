@@ -868,6 +868,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/statements/{statementId}/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark or unmark a seed statement as a meta statement */
+        put: operations["putAdminStatementMeta"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
         parameters: {
             query?: never;
@@ -1336,15 +1356,34 @@ export interface components {
                 };
             };
         };
+        AdminStatementMetaRequest: {
+            meta: boolean;
+            /** @default false */
+            acknowledgeResponses: boolean;
+        };
+        AdminStatementMetaResponse: {
+            data: {
+                statementId: number;
+                meta: boolean;
+                changed: boolean;
+                links: {
+                    statements: string;
+                };
+            };
+        };
         AdminSeedStatementRequest: {
             text: string;
             derivedFromId: number | null;
+            /** @default false */
+            isMeta: boolean;
         };
         AdminSeedStatementResponse: {
             data: {
                 statementId: number | null;
                 derivedFromId: number | null;
                 provenanceRecorded: boolean | null;
+                /** @description null: not asked to be meta; false: added, but not marked meta. */
+                metaRecorded: boolean | null;
                 links: {
                     statements: string;
                 };
@@ -1530,6 +1569,10 @@ export interface components {
             /** @enum {string} */
             moderation: "approved" | "pending" | "hidden";
             seed: boolean;
+            /** @description A meta statement asks about the participant, not the topic (#415). */
+            meta: boolean;
+            /** @description Someone other than its author has responded; a meta change then needs acknowledgeResponses. */
+            hasResponses: boolean;
             featured: boolean;
             votes: {
                 agree: number;
@@ -4704,7 +4747,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Quota, derivative similarity, identical statement already in the conversation, idempotency conflict, or unknown outcome */
+            /** @description Quota, derivative similarity, identical statement already in the conversation, a meta statement as parent (meta_not_rewordable), idempotency conflict, or unknown outcome */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5761,6 +5804,87 @@ export interface operations {
             };
         };
     };
+    putAdminStatementMeta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStatementMetaRequest"];
+            };
+        };
+        responses: {
+            /** @description Meta receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStatementMetaResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not a seed statement, a featured statement, or responses not acknowledged */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement service unavailable; nothing was changed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     putAdminStatementModeration: {
         parameters: {
             query?: never;
@@ -5996,7 +6120,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Command outcome unknown */
+            /** @description Command outcome unknown, or the statement is a meta statement (meta_not_featurable) */
             409: {
                 headers: {
                     [name: string]: unknown;

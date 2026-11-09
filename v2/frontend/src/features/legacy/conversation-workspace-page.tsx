@@ -249,13 +249,15 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   );
 }
 
-function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining, votesUntilUnlock, onSuggest, onNext, onNew}: {
+function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining, votesUntilUnlock, canSuggest, onSuggest, onNext, onNew}: {
   active: boolean;
   allDone: boolean;
   thresholdUnlocked: boolean;
   quota: number;
   quotaRemaining: number;
   votesUntilUnlock: number;
+  /** False for a meta statement: it is the organizer's wording and cannot be reworded (#415). */
+  canSuggest: boolean;
   onSuggest: () => void;
   onNext: () => void;
   onNew: () => void;
@@ -271,11 +273,11 @@ function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining,
   return (
     <div className={`v2-triad${active && !allDone ? ' v2-triad--active' : ''}${allDone ? ' v2-triad--alldone' : ''}`} id="v2-triad">
       <div className="v2-triad-label" id="v2-triad-label" aria-live="polite">{allDone ? msg('conv-triad-alldone-label') : active ? msg('conv-triad-active-label') : msg('conv-triad-idle-label')}</div>
-      <div className="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
-        <button type="button" className="v2-option-card" id="triad-suggest" aria-disabled={disabled} tabIndex={0} onClick={() => !disabled && onSuggest()}>
+      <div className={`v2-triad-grid${canSuggest ? '' : ' v2-triad-grid--two'}`} role="group" aria-labelledby="v2-triad-label">
+        {canSuggest && <button type="button" className="v2-option-card" id="triad-suggest" aria-disabled={disabled} tabIndex={0} onClick={() => !disabled && onSuggest()}>
           <div className="v2-option-top"><span className="v2-option-glyph"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg></span></div>
           <div className="v2-option-bottom"><div className="v2-option-title">{msg('conv-triad-suggest-title')}</div><div className="v2-option-sub">{msg('conv-triad-suggest-sub')}</div><div className="v2-option-action">{msg('conv-triad-suggest-action')}</div></div>
-        </button>
+        </button>}
         <button type="button" className={`v2-option-card${active ? ' v2-option-card--primary' : ''}`} id="triad-next" aria-disabled={disabled} tabIndex={0} onClick={() => !disabled && onNext()}>
           <div className="v2-option-top"><span className="v2-option-glyph"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="M13 5l7 7-7 7" /></svg></span></div>
           <div className="v2-option-bottom"><div className="v2-option-title">{msg('conv-triad-next-title')}</div><div className="v2-option-sub">{msg('conv-triad-next-sub')}</div><div className="v2-option-action">{msg('conv-triad-next-action')}</div></div>
@@ -382,7 +384,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   );
   useEffect(() => {
     if (!receipt || composer || submitted) return;
-    document.getElementById('triad-suggest')?.focus();
+    (document.getElementById('triad-suggest') ?? document.getElementById('triad-next'))?.focus();
   }, [composer, receipt, submitted]);
   return (
     <div className="voting-col">
@@ -393,7 +395,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
           <div className={`statement-card${receipt ? ' statement-card--voted' : ''}`} id="statement-card">
             <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} csrfToken={csrfToken} corner />
             <div className="statement-card-header">
-              <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">{msg('conv-vote-statement-label')}</span></span>
+              <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">{data.currentStatement.isMeta ? msg('meta-statement-label') : msg('conv-vote-statement-label')}</span></span>
               <span className="stmt-meta-right" id="stmt-right-label">{msg('conv-vote-private')}</span>
               {receipt && (
                 <span className="voted-badge" data-type={receipt.choice === 'pass' ? 'neutral' : receipt.choice}>
@@ -402,13 +404,14 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
                 </span>
               )}
             </div>
+            {!receipt && data.currentStatement.isMeta && <p id="statement-meta-prompt" className="statement-meta-prompt">{msg('conv-vote-meta-prompt')}</p>}
             {!receipt ? <p id="statement-text" className="statement-text">{data.currentStatement.text}</p> : <p id="voted-stmt-text" className="voted-stmt-text">{data.currentStatement.text}</p>}
             {!receipt && <VoteChoices disabled={vote.isPending} onVote={castVote} />}
           </div>
         )}
 
         {!composer && !submitted && (
-          <OptionTriad active={receipt !== null || allDone} allDone={allDone} thresholdUnlocked={thresholdUnlocked} quota={data.newStatement.quota} quotaRemaining={data.newStatement.remaining} votesUntilUnlock={votesUntilUnlock} onSuggest={() => setComposer('suggest')} onNext={next} onNew={() => setComposer('new')} />
+          <OptionTriad active={receipt !== null || allDone} allDone={allDone} thresholdUnlocked={thresholdUnlocked} quota={data.newStatement.quota} quotaRemaining={data.newStatement.remaining} votesUntilUnlock={votesUntilUnlock} canSuggest={data.capabilities.suggestWording || allDone} onSuggest={() => setComposer('suggest')} onNext={next} onNew={() => setComposer('new')} />
         )}
         {composer && <Composer mode={composer} data={data} slug={slug} csrfToken={csrfToken} onCancel={() => setComposer(null)} onSubmitted={() => { setComposer(null); setSubmitted(true); }} />}
         {submitted && (

@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react';
 import {useMutation} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -15,11 +16,13 @@ type Status = Statement['moderation'];
  *  `withUnmoderate` adds the third position, back to unmoderated, which Statements has
  *  always offered for an approved or hidden statement; the Queue does not. */
 export function StatementActions({conversationId, statement, csrfToken, withUnmoderate = false,
-  onMoved, onError}: {
+  leading, onMoved, onError}: {
   conversationId: number;
   statement: Statement;
   csrfToken: string;
   withUnmoderate?: boolean;
+  /** A control shown before the moderation buttons, in the same column (the meta toggle). */
+  leading?: ReactNode;
   onMoved: (statement: Statement, status: Status) => void;
   onError: (error: Error) => void;
 }) {
@@ -40,6 +43,7 @@ export function StatementActions({conversationId, statement, csrfToken, withUnmo
   ];
   return (
     <div className="admin-row__actions">
+      {leading}
       {actions.map((action) => (
         <button
           key={action.status}

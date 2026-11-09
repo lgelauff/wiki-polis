@@ -416,6 +416,11 @@ side by side; staging and production never share a database:
 | **production** | 8000 | 8001 | 5432 | `particiapp-docker` (dir default) |
 | **staging** | 8010 | 8011 | 5442 | `wiki-polis-staging` |
 
+Each stack runs our patched Polis server image (`wiki-polis/polis-server:fd440c3e-594`,
+#594) once it has been switched; the image is set per stack in its `docker-compose.yaml`,
+so check there which one a stack runs. To build it, switch a stack or undo, see
+`guide_deployment.md` → *Polis server: our patched image (#594)*.
+
 `wiki-polis-dev`'s `PARTICIAPI_BASE_URL` points at `…:8010` (the staging particiapi), so
 staging conversation/vote data lives in the **staging** Polis Postgres. Mutating staging —
 e.g. synthetic traffic on the `test` conversation — never touches production.
