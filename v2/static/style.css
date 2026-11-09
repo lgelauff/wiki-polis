@@ -365,12 +365,20 @@ header {
   z-index: 20;
   right: 0;
   top: 1.6rem;
-  width: 220px;
+  width: var(--content-flag-width, 220px);
   padding: .65rem;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 6px;
   box-shadow: 0 12px 28px -18px rgba(0, 0, 0, .35);
+}
+
+/* Set by the component when the leftward panel would be cut off (#254); it also sets
+   --content-flag-width when neither side has room for the full width. */
+.content-flag--opens-right form,
+.content-flag--opens-right .content-flag-thanks {
+  right: auto;
+  left: 0;
 }
 
 .content-flag select,
@@ -387,7 +395,7 @@ header {
   z-index: 20;
   right: 0;
   top: 1.6rem;
-  width: 220px;
+  width: var(--content-flag-width, 220px);
   padding: .65rem;
   background: var(--surface);
   border: 1px solid var(--hairline);
