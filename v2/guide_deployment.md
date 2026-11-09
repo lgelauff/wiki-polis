@@ -240,24 +240,27 @@ otherwise a meta mark made in between does not reach math until step 4.
    docker-compose -p wiki-polis-staging -f ~/particiapp-docker-staging/docker-compose.yaml up -d polis-server
    ```
 
-4. Stamp what was moderated before the fix, once. It stamps every statement in open
-   conversations, so math rereads their moderation on its next run. Closed and archived
-   consultations are inactive in Polis and stay as they are.
+4. Stamp what was moderated before the fix, once. It stamps every statement in every
+   conversation that has not been deleted, closed and archived consultations included
+   (the app sets a Polis conversation inactive only on delete). Math rereads their
+   moderation within a minute or so, so hides and meta marks made before the fix reach
+   the results, closed ones included. That is intended.
 
    ```bash
    docker exec wiki-polis-staging_postgres_1 psql -U polis -d polis -c "UPDATE comments c SET modified = now_as_millis() FROM conversations v WHERE v.zid = c.zid AND v.is_active"
    ```
 
-5. Check: hide a statement on a consultation with votes, cast one vote, and after the
-   next math run the statement no longer shows in the results.
+5. Check: on a consultation with votes, hide one statement and mark another meta. Within
+   a minute or so, with no new votes needed, both are out of the opinion groups.
 
 For production, the same steps with `particiapp-docker_polis-server_1`,
 `~/particiapp-docker/docker-compose.yaml`, project `particiapp-docker` and
 `particiapp-docker_postgres_1`. Then record it with `ops/capture_stack_overview.sh`.
 
-To undo: put the `image:` line back to
-`registry.gitlab.com/particiapp/polis/server:latest` and run step 3's `up -d` again. The
-stamps already made are harmless.
+To undo: put the `image:` line back to the image the patch started from,
+`registry.gitlab.com/particiapp/polis/server@sha256:adf9b8b45e134ad4da3596cbdf1748cb3f9f0cbf88b6d77bef0fbee43c16c8e2`
+(not `:latest`, which could move), and run step 3's `up -d` again. The stamps already made
+are harmless.
 
 ### Security hardening (one-time, after stack is running)
 
