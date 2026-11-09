@@ -152,6 +152,18 @@ _ERRORS = {
         'hint': 'If you expected access, you may need to log in as a different '
                 'account, or ask an organizer for the role that grants it.',
     },
+    400: {
+        'title': 'Session failure',
+        'message': 'The form could not be accepted, because your session expired '
+                   'or the page was open too long.',
+        'hint': 'Go back, reload the page and try again, or go to '
+                '<a href="/">the front page</a>.',
+    },
+    405: {
+        'title': "This address can't be opened directly",
+        'message': 'This address only works from a button on the site, not as a link.',
+        'hint': 'Go to <a href="/">the front page</a> to continue.',
+    },
     500: {
         'title': 'Something went wrong',
         'message': 'The server could not complete this request.',

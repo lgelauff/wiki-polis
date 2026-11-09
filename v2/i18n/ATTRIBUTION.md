@@ -84,6 +84,7 @@ for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegesta
 | `adminconv-mode-advanced` | `Advanced` | MediaWiki core | [`searchprofile-advanced`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `base-language-label` | `Language` | MediaWiki core | [`pagelang-language`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `errorpage-403-title` | `Not allowed` | MediaWiki core | [`specialpage-securitylevel-not-allowed-title`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
+| `errorpage-400-title` | `Session failure` | MediaWiki core | [`sessionfailure-title`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-of` | `$1 of $2` | MediaWiki core | [`watchlistlabels-onboarding-progress`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `about-stat-unknown` | `unknown` | MediaWiki core | [`mediastatistics-header-unknown`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `accept-not-now` | `Not now` | VisualEditor | [`visualeditor-sourceswitch-popup-dismiss`](https://github.com/wikimedia/mediawiki-extensions-VisualEditor/blob/master/i18n/ve-mw/en.json) | MIT | en |
