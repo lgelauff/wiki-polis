@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -230,5 +230,52 @@ test('the argument box names the character limit it enforces', async () => {
     const box = document.querySelector<HTMLTextAreaElement>(`#fs-9 .contribute-wrapper[data-side="${side}"] textarea`)!;
     expect(box).toHaveAttribute('placeholder', `(${key}: ${ARGUMENT_MAX_CHARACTERS})`);
     expect(box.maxLength).toBe(ARGUMENT_MAX_CHARACTERS);
+  }
+});
+
+test("an argument's flag panel opens toward the room it has, and narrows when it has none (#254)", async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  // jsdom has no layout: give the clipping panel and the flag trigger rectangles.
+  const statementPanel = document.getElementById('fs-8')!;
+  statementPanel.style.overflowX = 'hidden';
+  const flag = document.querySelector<HTMLDetailsElement>('[data-arg-id="92"] details.content-flag')!;
+  const layout = (panelLeft: number, panelRight: number, triggerLeft: number) => {
+    statementPanel.getBoundingClientRect = () => DOMRect.fromRect({x: panelLeft, y: 0, width: panelRight - panelLeft, height: 600});
+    flag.getBoundingClientRect = () => DOMRect.fromRect({x: triggerLeft, y: 0, width: 22, height: 22});
+  };
+  const toggle = async (open: boolean) => {
+    flag.open = open;
+    fireEvent(flag, new Event('toggle'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  // The trigger explains itself on hover, not only to screen readers.
+  const trigger = flag.querySelector('summary')!;
+  expect(trigger.getAttribute('title')).toBeTruthy();
+  expect(trigger.getAttribute('title')).toBe(trigger.getAttribute('aria-label'));
+
+  // Staging, desktop: the trigger 159px into the panel, so the leftward panel was cut off.
+  layout(349, 1201, 508);
+  await toggle(true);
+  await waitFor(() => expect(flag).toHaveClass('content-flag--opens-right'));
+  expect(flag.style.getPropertyValue('--content-flag-width')).toBe('');
+  await toggle(false);
+  expect(flag).not.toHaveClass('content-flag--opens-right');
+
+  // A 320px phone where the card is wider than the screen: the card alone has room to the
+  // right, the screen does not, so the panel narrows to what is visible.
+  Object.defineProperty(document.documentElement, 'clientWidth', {configurable: true, get: () => 320});
+  try {
+    layout(10, 375, 150);
+    await toggle(true);
+    await waitFor(() => expect(flag).toHaveClass('content-flag--opens-right'));
+    expect(flag.style.getPropertyValue('--content-flag-width')).toBe('162px');
+    await toggle(false);
+    expect(flag.style.getPropertyValue('--content-flag-width')).toBe('');
+  } finally {
+    Reflect.deleteProperty(document.documentElement, 'clientWidth');
   }
 });
