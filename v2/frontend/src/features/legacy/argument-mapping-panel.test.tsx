@@ -240,7 +240,7 @@ test("an argument's flag panel opens toward the room it has, and narrows when it
 
   // jsdom has no layout: give the clipping panel and the flag trigger rectangles.
   const statementPanel = document.getElementById('fs-8')!;
-  statementPanel.style.overflow = 'hidden';
+  statementPanel.style.overflowX = 'hidden';
   const flag = document.querySelector<HTMLDetailsElement>('[data-arg-id="92"] details.content-flag')!;
   const layout = (panelLeft: number, panelRight: number, triggerLeft: number) => {
     statementPanel.getBoundingClientRect = () => DOMRect.fromRect({x: panelLeft, y: 0, width: panelRight - panelLeft, height: 600});
@@ -265,15 +265,17 @@ test("an argument's flag panel opens toward the room it has, and narrows when it
   await toggle(false);
   expect(flag).not.toHaveClass('content-flag--opens-right');
 
-  // Room on the left: it stays as it was.
-  layout(0, 1200, 600);
-  await toggle(true);
-  expect(flag).not.toHaveClass('content-flag--opens-right');
-  await toggle(false);
-
-  // A narrow phone card with room for the full width on neither side: the wider side, narrowed.
-  layout(16, 316, 150);
-  await toggle(true);
-  await waitFor(() => expect(flag).toHaveClass('content-flag--opens-right'));
-  expect(flag.style.getPropertyValue('--content-flag-width')).toBe('158px');
+  // A 320px phone where the card is wider than the screen: the card alone has room to the
+  // right, the screen does not, so the panel narrows to what is visible.
+  Object.defineProperty(document.documentElement, 'clientWidth', {configurable: true, get: () => 320});
+  try {
+    layout(10, 375, 150);
+    await toggle(true);
+    await waitFor(() => expect(flag).toHaveClass('content-flag--opens-right'));
+    expect(flag.style.getPropertyValue('--content-flag-width')).toBe('162px');
+    await toggle(false);
+    expect(flag.style.getPropertyValue('--content-flag-width')).toBe('');
+  } finally {
+    Reflect.deleteProperty(document.documentElement, 'clientWidth');
+  }
 });

@@ -10,36 +10,41 @@ type ContentType = components['schemas']['CreateContentFlagRequest']['contentTyp
 // Matches the panel's width in static/style.css (.content-flag form, .content-flag-thanks).
 const PANEL_WIDTH = 220;
 const EDGE_GAP = 8;
+// Narrower than this, the reason picker and the Send button no longer fit.
+const MIN_PANEL_WIDTH = 160;
 
-// The edges the panel must stay inside: the nearest ancestor that clips its overflow
-// (the arguments tab's panel does), or else the viewport.
-function clipBounds(from: HTMLElement): {left: number; right: number} {
+type Bounds = {left: number; right: number};
+
+// The edges the panel must stay inside: the screen, and the inner box of every ancestor
+// that clips its overflow (the arguments tab's panel does). At phone width that panel can be
+// wider than the screen, so neither alone is enough (#254).
+function clipBounds(from: HTMLElement): Bounds {
+  const bounds = {left: 0, right: document.documentElement.clientWidth || window.innerWidth};
   for (let el = from.parentElement; el; el = el.parentElement) {
-    const {overflow, overflowX} = getComputedStyle(el);
-    // The shorthand's first value is the x axis; read both, as jsdom fills in only one.
-    if ([overflowX, overflow.split(' ')[0]].some((value) => value && value !== 'visible')) {
-      const rect = el.getBoundingClientRect();
-      return {left: rect.left, right: rect.right};
-    }
+    if (getComputedStyle(el).overflowX === 'visible') continue;
+    const rect = el.getBoundingClientRect();
+    // Leave out the borders and a scrollbar: the panel cannot use them.
+    bounds.left = Math.max(bounds.left, rect.left + el.clientLeft);
+    bounds.right = Math.min(bounds.right, rect.right - (el.offsetWidth - el.clientWidth - el.clientLeft));
   }
-  return {left: 0, right: document.documentElement.clientWidth};
+  return bounds;
 }
 
-type Placement = {opensRight: boolean; width?: number};
+export type FlagPanelPlacement = {opensRight: boolean; width?: number};
 
 // The panel opens leftward from the trigger. A trigger near the left of its card (an
 // argument's flag) would push it past the card's edge, where it is cut off (#254): open
 // toward the side with more room, and narrow the panel when neither side has its width.
 // Measured on the trigger, so it works in either text direction.
-function placement(details: HTMLElement): Placement {
-  const trigger = details.getBoundingClientRect();
-  const bounds = clipBounds(details);
+export function placeFlagPanel(trigger: Bounds, bounds: Bounds): FlagPanelPlacement {
   const roomLeftward = trigger.right - bounds.left;
   const roomRightward = bounds.right - trigger.left;
   if (roomLeftward >= PANEL_WIDTH) return {opensRight: false};
   const opensRight = roomRightward > roomLeftward;
   const room = opensRight ? roomRightward : roomLeftward;
-  return room >= PANEL_WIDTH ? {opensRight} : {opensRight, width: Math.max(room - EDGE_GAP, 0)};
+  return room >= PANEL_WIDTH
+    ? {opensRight}
+    : {opensRight, width: Math.max(room - EDGE_GAP, MIN_PANEL_WIDTH)};
 }
 
 export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
@@ -54,10 +59,12 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
   const [category, setCategory] = useState<'personal_attack' | 'privacy' | 'off_topic' | 'other'>('personal_attack');
   const [detail, setDetail] = useState('');
   const [open, setOpen] = useState(false);
-  const [place, setPlace] = useState<Placement>({opensRight: false});
+  const [place, setPlace] = useState<FlagPanelPlacement>({opensRight: false});
   useLayoutEffect(() => {
     const details = detailsRef.current;
-    setPlace(open && details ? placement(details) : {opensRight: false});
+    setPlace(open && details
+      ? placeFlagPanel(details.getBoundingClientRect(), clipBounds(details))
+      : {opensRight: false});
   }, [open]);
   // Keyed by every content type, so a new one fails to compile until it has its own label.
   const triggerLabel: Record<ContentType, string> = {

@@ -365,7 +365,7 @@ header {
   z-index: 20;
   right: 0;
   top: 1.6rem;
-  width: var(--content-flag-width, 220px);
+  width: var(--content-flag-width, 220px); /* keep in sync with PANEL_WIDTH in legacy-content-flag.tsx */
   padding: .65rem;
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -395,7 +395,7 @@ header {
   z-index: 20;
   right: 0;
   top: 1.6rem;
-  width: var(--content-flag-width, 220px);
+  width: var(--content-flag-width, 220px); /* keep in sync with PANEL_WIDTH in legacy-content-flag.tsx */
   padding: .65rem;
   background: var(--surface);
   border: 1px solid var(--hairline);
