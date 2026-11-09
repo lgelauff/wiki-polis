@@ -154,7 +154,7 @@ _ERRORS = {
     },
     400: {
         'title': 'Session failure',
-        'message': 'The form could not be accepted, because your session expired '
+        'message': 'The form could not be accepted. Your session may have expired, '
                    'or the page was open too long.',
         'hint': 'Go back, reload the page and try again, or go to '
                 '<a href="/">the front page</a>.',
