@@ -197,6 +197,68 @@ curl -s -o /dev/null -w "%{http_code}" http://<private-ip>:8000/
 
 > **Postgres data directory permissions:** Docker runs postgres as an internal user, so `~/particiapp-data/postgresql-data/` will be owned by that user, not by you. If you ever need to delete it (e.g. to re-initialise the database), use `sudo rm -rf ~/particiapp-data/postgresql-data/`.
 
+### Polis server: our patched image (#594)
+
+The Polis server image from particiapp does not stamp `comments.modified` when a
+statement is hidden, approved or marked meta, so Polis math never sees those changes
+(#594). `v2/ops/polis-server/Dockerfile` builds the same image with that one line fixed
+(upstream `f79f992be`). It starts from the image by digest, not `:latest`, and the build
+fails if the line does not match.
+
+Do staging first, check it, then production. Each stack keeps its own image line, so
+changing one never moves the other. On each environment, switch the image and run the
+one-time stamp (steps 1–4) **before** deploying the app with meta statements (#593):
+otherwise a meta mark made in between does not reach math until step 4.
+
+1. Check that the stack runs the image the Dockerfile starts from. This must print
+   `registry.gitlab.com/particiapp/polis/server@sha256:adf9b8b4…`; if it prints anything
+   else, stop: the switch would change more than one line.
+
+   ```bash
+   docker image inspect -f '{{json .RepoDigests}}' "$(docker inspect -f '{{.Image}}' wiki-polis-staging_polis-server_1)"
+   ```
+
+2. Build the image. Use the branch name until it is merged, `main` after:
+
+   ```bash
+   docker build -t wiki-polis/polis-server:fd440c3e-594 https://github.com/lgelauff/wiki-polis.git#main:v2/ops/polis-server
+   ```
+
+3. Point the stack at it and restart only the Polis server:
+
+   ```bash
+   sed -i 's#image: registry.gitlab.com/particiapp/polis/server:latest#image: wiki-polis/polis-server:fd440c3e-594#' ~/particiapp-docker-staging/docker-compose.yaml
+   ```
+
+   This must show the new image; if it still shows the old one, stop:
+
+   ```bash
+   grep -n 'polis/server\|polis-server:' ~/particiapp-docker-staging/docker-compose.yaml
+   ```
+
+   ```bash
+   docker-compose -p wiki-polis-staging -f ~/particiapp-docker-staging/docker-compose.yaml up -d polis-server
+   ```
+
+4. Stamp what was moderated before the fix, once. It stamps every statement in open
+   conversations, so math rereads their moderation on its next run. Closed and archived
+   consultations are inactive in Polis and stay as they are.
+
+   ```bash
+   docker exec wiki-polis-staging_postgres_1 psql -U polis -d polis -c "UPDATE comments c SET modified = now_as_millis() FROM conversations v WHERE v.zid = c.zid AND v.is_active"
+   ```
+
+5. Check: hide a statement on a consultation with votes, cast one vote, and after the
+   next math run the statement no longer shows in the results.
+
+For production, the same steps with `particiapp-docker_polis-server_1`,
+`~/particiapp-docker/docker-compose.yaml`, project `particiapp-docker` and
+`particiapp-docker_postgres_1`. Then record it with `ops/capture_stack_overview.sh`.
+
+To undo: put the `image:` line back to
+`registry.gitlab.com/particiapp/polis/server:latest` and run step 3's `up -d` again. The
+stamps already made are harmless.
+
 ### Security hardening (one-time, after stack is running)
 
 **Tighten `.env` permissions:**
