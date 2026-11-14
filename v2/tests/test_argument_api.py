@@ -163,6 +163,53 @@ def test_argument_mapping_api_exposes_hidden_arguments_to_moderators(
     }
 
 
+def test_moderators_can_flag_visible_arguments_but_not_their_own(
+    auth_client, participant,
+):
+    """#347: moderation rights must not remove the per-argument flag."""
+    _conversation, _participation, _featured, arguments = _argument_fixture(participant)
+    participant.is_global_admin = True
+    arguments[1].hidden = True
+    arguments[2].proposer_pseudonym = 'careful-heron'
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={}):
+        data = auth_client.get(
+            '/api/v1/conversations/argument-api/arguments',
+        ).get_json()['data']
+
+    by_id = {
+        argument['id']: argument
+        for argument in data['featuredStatements'][0]['sides']['pro']['arguments']
+    }
+    assert by_id[arguments[0].id]['capabilities']['flag'] is True
+    assert by_id[arguments[1].id]['capabilities']['flag'] is False
+    assert by_id[arguments[2].id]['own'] is True
+    assert by_id[arguments[2].id]['capabilities']['flag'] is False
+
+
+def test_participants_can_flag_others_arguments_but_not_their_own(
+    auth_client, participant,
+):
+    _conversation, _participation, _featured, arguments = _argument_fixture(participant)
+    arguments[2].proposer_pseudonym = 'careful-heron'
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={}):
+        data = auth_client.get(
+            '/api/v1/conversations/argument-api/arguments',
+        ).get_json()['data']
+
+    by_id = {
+        argument['id']: argument
+        for argument in data['featuredStatements'][0]['sides']['pro']['arguments']
+    }
+    assert data['capabilities']['moderate'] is False
+    assert by_id[arguments[0].id]['capabilities']['flag'] is True
+    assert by_id[arguments[2].id]['own'] is True
+    assert by_id[arguments[2].id]['capabilities']['flag'] is False
+
+
 def test_argument_mapping_api_rejects_closed_phase_before_building_state(
     auth_client, participant,
 ):
