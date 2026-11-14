@@ -470,6 +470,7 @@
     "conv-circle-aria-not-started": "Statement $1: arguments still to add",
     "conv-circle-aria-in-progress": "Statement $1: in progress",
     "conv-circle-aria-complete": "Statement $1: complete",
+    "conv-circle-legend": "Empty: arguments to add. Half filled: still to mark what matters. Filled: done.",
     "conv-p6-none": "No statements are available for the informed opinion round yet.",
     "conv-p6-label": "Informed opinion",
     "conv-p6-vote-failed": "Response not saved — try again",

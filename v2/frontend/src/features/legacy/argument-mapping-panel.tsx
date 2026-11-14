@@ -97,7 +97,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
 
   return (
     <div className="contribute-wrapper" data-state={state} data-side={side} data-fs={featuredId}>
-      <button className={`at-contribute at-contribute--idle contribute-affordance contribute-affordance--${side}`} type="button" onClick={compose}>
+      <button className="at-contribute at-contribute--idle contribute-affordance" type="button" onClick={compose}>
         <span className="at-contribute-glyph" style={{background: side === 'pro' ? 'rgba(21,115,74,.15)' : 'rgba(178,58,58,.15)', color: side === 'pro' ? 'var(--agree)' : 'var(--disagree)', fontWeight: 700}} aria-hidden="true">{copy.sign}</span>
         {text.add}
       </button>
@@ -234,11 +234,14 @@ function Circle({state, number, current, onClick}: {state: 'none' | 'half' | 'co
     : state === 'half' ? msg('conv-circle-aria-in-progress', number)
       : msg('conv-circle-aria-not-started', number);
   return (
-    <svg className="at-circle" viewBox="0 0 36 36" role="img" aria-label={label} onClick={onClick}>
-      <circle cx="18" cy="18" r="15" fill={state === 'complete' ? 'var(--spot, #fef3c7)' : 'var(--surface, #fff)'} stroke={current ? 'var(--ink, #2c3e6b)' : state === 'none' ? 'var(--muted, #9ca3af)' : 'var(--pass, #3b5bdb)'} strokeWidth={current ? 3 : 2} />
-      {state === 'half' && <path d="M18 3 A15 15 0 0 0 18 33 Z" fill="var(--spot, #fef3c7)" opacity=".75" />}
-      <text x="18" y="22" textAnchor="middle" className="at-circle-label" fill={state === 'complete' ? 'var(--blue-dark, #1e3a8a)' : 'var(--pass, #3b5bdb)'} aria-hidden="true">{number}</text>
-    </svg>
+    <button className="at-circle" type="button" aria-label={label} aria-current={current ? 'step' : undefined} onClick={onClick}>
+      <svg viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+        <circle cx="18" cy="18" r="15" fill={state === 'complete' ? 'var(--spot)' : 'var(--surface)'} stroke={current ? 'var(--ink)' : state === 'none' ? 'var(--muted)' : 'var(--pass)'} strokeWidth={current ? 3 : 2} />
+        {state === 'half' && <path d="M18 3 A15 15 0 0 0 18 33 Z" fill="var(--spot)" />}
+        {/* White on the amber fill; on the half fill the number straddles amber and white, so it is dark with a white halo. */}
+        <text x="18" y="22" textAnchor="middle" className="at-circle-label" fill={state === 'complete' ? 'var(--surface)' : state === 'half' ? 'var(--ink)' : 'var(--pass)'} stroke={state === 'half' ? 'var(--surface)' : undefined} strokeWidth={state === 'half' ? 3 : undefined} paintOrder="stroke">{number}</text>
+      </svg>
+    </button>
   );
 }
 
@@ -285,6 +288,7 @@ function FeaturedPanel({mapping, slug, csrfToken, card, index, currentIndex, set
         <div className="at-circles" role="group" aria-label={msg('conv-arg-progress-aria')}>{mapping.featuredStatements.map((item, circleIndex) => <Circle key={item.id} state={panelState(item)} number={circleIndex + 1} current={circleIndex === index} onClick={() => setIndex(circleIndex)} />)}</div>
         <button className="at-navbtn at-navbtn--next" type="button" disabled={index === mapping.featuredStatements.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => setIndex(index + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
       </div>
+      <p className="at-circles-legend">{msg('conv-circle-legend')}</p>
     </div>
   );
 }

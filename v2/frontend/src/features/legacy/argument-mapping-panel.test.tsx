@@ -211,7 +211,7 @@ test('progress circles and flag icons have readable names', async () => {
   // Catches a circle naming the wrong state (qqx cannot see this: the state is the choice of
   // message, not a parameter), and an internal id leaking into a flag's name.
   const circles = within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'});
-  expect(within(circles).getAllByRole('img').map((circle) => circle.getAttribute('aria-label')))
+  expect(within(circles).getAllByRole('button').map((circle) => circle.getAttribute('aria-label')))
     .toEqual(['Statement 1: in progress', 'Statement 2: arguments still to add', 'Statement 3: complete']);
   const first = document.getElementById('fs-8')!;
   expect(first.querySelector('.content-flag--corner summary')).toHaveAttribute('aria-label', 'Flag this statement for moderator review');
@@ -375,4 +375,77 @@ test('an argument over the limit is kept in full and waits at Submit until it fi
   fireEvent.change(box, {target: {value: over.slice(3)}});
   expect(submit).toBeEnabled();
   expect(box).not.toHaveAttribute('aria-invalid');
+});
+
+test('each progress circle is a button that names its state and marks the shown statement', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches a circle that is an image with a click handler (no keyboard, announced as a
+  // picture), the drawing read out on top of the name, and the shown statement not marked.
+  const circles = within(within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'})).getAllByRole('button');
+  expect(circles).toHaveLength(3);
+  for (const circle of circles) {
+    expect(circle.tagName).toBe('BUTTON');
+    expect(circle).toHaveAttribute('type', 'button');
+    expect(circle).not.toHaveAttribute('tabindex');
+    expect(circle.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  }
+  expect(circles.map((circle) => circle.getAttribute('aria-current'))).toEqual(['step', null, null]);
+
+  fireEvent.click(circles[1]!);
+  expect(document.getElementById('fs-9')).not.toHaveClass('arg-block--hidden');
+  expect(document.getElementById('fs-8')).toHaveClass('arg-block--hidden');
+  const shown = within(within(document.getElementById('fs-9')!).getByRole('group', {name: 'Statement progress'})).getAllByRole('button');
+  expect(shown.map((circle) => circle.getAttribute('aria-current'))).toEqual([null, 'step', null]);
+});
+
+/** The colour tokens the circles paint with, as style.css's :root defines them. jsdom applies
+ *  no stylesheet and vite will not serve style.css as text to the tests, so they are copied;
+ *  v2/tests/test_argument_controls_css.py checks the copy still matches style.css. */
+const TOKENS: Record<string, string> = {
+  '--ink': '#0c0c0e', '--surface': '#ffffff', '--pass': '#3d6dba', '--spot': '#b45309', '--blue-dark': '#2a4f8a',
+};
+
+function resolve(paint: string | null): string {
+  if (!paint) throw new Error('no paint');
+  const variable = /^var\((--[\w-]+)/.exec(paint)?.[1];
+  const value = variable ? TOKENS[variable] : paint;
+  if (!value) throw new Error(`no token for ${paint}`);
+  return value;
+}
+
+function contrast(first: string, second: string): number {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => {
+      const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
+      return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
+test('the number in each progress circle meets text contrast against what is behind it', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the number on a filled circle drawn in a colour close to the fill (it was
+  // --blue-dark on --spot, 1.6:1). Statement 1 is half filled, 2 empty, 3 filled. On the
+  // half fill the number straddles both colours, so it needs a halo it can stand on.
+  const circles = document.querySelectorAll('#fs-8 .at-circles .at-circle');
+  for (const circle of circles) {
+    const text = circle.querySelector('text')!;
+    const half = circle.querySelector('path') !== null;
+    const backing = half ? text.getAttribute('stroke') : circle.querySelector('circle')!.getAttribute('fill');
+    expect(contrast(resolve(text.getAttribute('fill')), resolve(backing))).toBeGreaterThanOrEqual(4.5);
+    if (half) {
+      // The halo is drawn under the number and wide enough to stand on.
+      expect(text).toHaveAttribute('paint-order', 'stroke');
+      expect(Number(text.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(2);
+    }
+  }
 });
