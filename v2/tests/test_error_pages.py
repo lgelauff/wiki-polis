@@ -131,6 +131,90 @@ def test_api_v1_keeps_json_for_every_status_the_html_pages_now_claim(
     assert 'Proto' not in boom.get_data(as_text=True)
 
 
+def test_logout_opened_as_a_link_serves_a_branded_405(client, no_spa_build):
+    """#356: /logout is POST-only, and a bookmarked or typed /logout reached
+    Werkzeug's bare 405 page."""
+    response = client.get('/logout')
+
+    body = _assert_branded(response, 405, "This address can&#x27;t be opened directly")
+    assert '<a href="/">' in body
+    assert set(response.headers['Allow'].split(', ')) == {'POST', 'OPTIONS'}
+
+
+def test_html_form_without_a_csrf_token_serves_a_branded_400(
+    app, client, conversation, no_spa_build,
+):
+    """#356: a form sent after the session expired reached Werkzeug's bare 400 page.
+    /logout is the exception (it redirects home, #514)."""
+    from db import db
+    app.config['WTF_CSRF_ENABLED'] = True
+    conversation.gated = True
+    conversation.gating_type = 'voucher'
+    db.session.commit()
+
+    response = client.post(f'/c/{conversation.slug}/v', data={'code': 'X7F3K9M2ABCD'})
+
+    _assert_branded(response, 400, 'Session failure')
+
+
+def test_a_plain_bad_request_keeps_the_framework_page(app, no_spa_build):
+    """Only the CSRF 400 is branded: its copy is about an expired session, which a
+    malformed request or a bad Host header is not."""
+    from werkzeug.exceptions import BadRequest
+
+    @app.get('/_test/bad')
+    def _bad():
+        raise BadRequest()
+
+    response = app.test_client().get('/_test/bad')
+
+    assert response.status_code == 400
+    assert 'Proto' not in response.get_data(as_text=True)
+
+
+def test_a_csrf_refusal_logs_its_reason_but_not_the_query_or_a_forged_line(
+    app, client, conversation, no_spa_build, caplog,
+):
+    """The branded page hides the reason, so the log keeps it. The log line comes from
+    the CSRF handler, not the generic one, which is also what keeps #514's log-out
+    redirect working. A voucher code can ride in the query string; it stays out."""
+    import logging
+    caplog.set_level(logging.INFO)
+    app.config['WTF_CSRF_ENABLED'] = True
+
+    response = client.post(f'/c/{conversation.slug}%0Aforged/v?v=SECRETCODE')
+
+    assert response.status_code == 400
+    refused = [r.getMessage() for r in caplog.records if r.getMessage().startswith('csrf refused')]
+    assert len(refused) == 1
+    assert 'The CSRF token is missing.' in refused[0]
+    assert '\n' not in refused[0]
+    assert 'SECRETCODE' not in caplog.text
+
+
+def test_api_v1_keeps_json_for_400_and_405(app, client, no_spa_build):
+    """The new per-status handlers must hand /api/v1/* back to the JSON envelope."""
+    from werkzeug.exceptions import BadRequest
+
+    @app.get('/api/v1/_test/bad')
+    def _api_bad():
+        raise BadRequest()
+
+    not_allowed = client.delete('/api/v1/session')
+    bad = app.test_client().get('/api/v1/_test/bad')
+
+    assert not_allowed.status_code == 405
+    assert not_allowed.get_json()['error']['code'] == 'method_not_allowed'
+    assert bad.status_code == 400
+    assert bad.is_json
+    assert 'Proto' not in bad.get_data(as_text=True)
+
+    app.config['WTF_CSRF_ENABLED'] = True
+    csrf = client.post('/api/v1/conversations/test-conv/participation', json={})
+    assert csrf.status_code == 400
+    assert csrf.get_json()['error']['code'] == 'csrf_failed'
+
+
 def test_unhandled_status_falls_back_to_the_server_error_page():
     from error_pages import render_error_page
 

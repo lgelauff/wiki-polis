@@ -347,7 +347,7 @@ def _https_form(app, conv):
     return client, token
 
 
-def test_https_form_post_needs_the_referer_the_page_policy_allows(app, voucher_conv):
+def test_https_form_post_needs_the_referer_the_page_policy_allows(app, voucher_conv, caplog):
     """Over HTTPS Flask-WTF refuses a POST without a Referer, so the page's referrer
     policy must let the browser send one (staging: "The referrer header is
     missing" under no-referrer). Each POST uses its own fresh session, so the
@@ -360,7 +360,8 @@ def test_https_form_post_needs_the_referer_the_page_policy_allows(app, voucher_c
     refused = client.post(url, base_url='https://localhost',
                           data={'code': CODE, 'csrf_token': token})
     assert refused.status_code == 400
-    assert b'referrer header is missing' in refused.data
+    # The page is the branded 400 (#356); the reason is in the log.
+    assert 'referrer header is missing' in caplog.text
 
     # Under strict-origin the browser sends just the origin, which is enough.
     client, token = _https_form(app, voucher_conv)

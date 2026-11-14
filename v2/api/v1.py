@@ -14,6 +14,7 @@ from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
 import i18n
+from error_pages import render_error_page
 from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
 from services.participations import (EligibilityDenied, InvalidPseudonym,
@@ -775,7 +776,12 @@ def register_api_error_handlers(app: Flask) -> None:
             return redirect('/')
         if is_api_request():
             return error_response('csrf_failed', exc.description, 400)
-        return exc
+        # The branded page does not show the reason (#356), so keep it in the log: it
+        # tells an expired session apart from a missing Referer.
+        # %r: the path is percent-decoded, so a %0A in it must not start a new log line.
+        current_app.logger.info('csrf refused %s %r: %s',
+                                request.method, request.path, exc.description)
+        return render_error_page(400), 400
 
     @app.errorhandler(AccessRequired)
     def handle_access_required(exc):
