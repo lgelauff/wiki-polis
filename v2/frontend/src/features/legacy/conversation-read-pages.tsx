@@ -36,7 +36,7 @@ function truncated(value: string, length: number) {
 
 /** A short list in the reader's language, e.g. "Explore, Arguments". The `unit` type joins
  *  without a trailing "and", which suits a list of concurrent phases. */
-function listOf(locale: string, items: string[]): string {
+export function listOf(locale: string, items: string[]): string {
   try {
     return new Intl.ListFormat(intlLocale(locale), {type: 'unit', style: 'short'}).format(items);
   } catch {

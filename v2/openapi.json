@@ -2609,7 +2609,8 @@
             "properties": {
               "phase": {"type": "string"},
               "status": {"type": "string", "enum": ["provisional", "final"]},
-              "method": {"type": "string"}
+              "method": {"type": "string"},
+              "sources": {"type": "array", "items": {"type": "string", "enum": ["submission", "argument_mapping", "informed_voting"]}, "description": "Site-admin preview only: the rounds whose results the preview shows, as phase identifiers, in phase order. Empty without results."}
             }
           },
           "participation": {
@@ -2630,7 +2631,8 @@
               "detailedCounts": {"type": "boolean"},
               "opinionGroups": {"type": "boolean"},
               "personalLens": {"type": "boolean"},
-              "responseFloor": {"type": "integer", "minimum": 1, "description": "Fewest responses a tally needs to be shown, for the \"fewer than\" text of a tally with belowFloor."}
+              "responseFloor": {"type": "integer", "minimum": 1, "description": "Fewest responses a tally needs to be shown, for the \"fewer than\" text of a tally with belowFloor."},
+              "informedRound": {"type": "string", "enum": ["included", "pending", "skipped"], "description": "Site-admin preview only. Whether the results include the informed opinion round: included; pending (not held yet; the results are the Explore round's so far); skipped (the process does not hold it, or closed without it)."}
             }
           },
           "moderation": {
@@ -2681,7 +2683,17 @@
           "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
           "viewerGroupChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
           "viewerMatchesGroup": {"type": ["boolean", "null"]},
-          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]}
+          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]},
+          "arguments": {
+            "type": "object",
+            "required": ["for", "against"],
+            "additionalProperties": false,
+            "description": "Site-admin preview only, once the Arguments phase is over: the visible arguments with the most support on each side (at most 3), most supported first. Text only: no author and no counts.",
+            "properties": {
+              "for": {"type": "array", "items": {"type": "string"}},
+              "against": {"type": "array", "items": {"type": "string"}}
+            }
+          }
         }
       },
       "PersonalDelta": {

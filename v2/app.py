@@ -1144,20 +1144,140 @@ def _build_phase6_results(
     }
 
 
-def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
-    """Build the current moderation filter for Phase 6 report surfaces.
+def _build_explore_results(conv, results_filter: 'Phase6ResultsFilter | None' = None) -> dict | None:
+    """The report's results before the informed opinion round (#598).
 
-    Hidden Phase 6 statements are sourced from the Polis stats DB when available.
+    Same shape as ``_build_phase6_results``, from the Explore round alone: the confirmed
+    featured statements with their Explore counts ('p2', exact and unfloored, like the
+    Phase 6 builder's; services.results_report applies the reporting rules), no 'p6'.
+    ``results_filter`` holds the Explore round's exclusions. Returns None without
+    confirmed featured statements.
+    """
+    filt = results_filter or Phase6ResultsFilter.empty()
+    confirmed = [
+        fs for fs in FeaturedStatement.query.filter_by(
+            conversation_id=conv.id, confirmed_by_admin=True,
+        ).order_by(FeaturedStatement.id).all()
+        if fs.polis_statement_id is not None
+        and fs.polis_statement_id not in filt.excluded_tids
+        and fs.statement_text
+    ]
+    if not confirmed:
+        return None
+    zinvite = conv.polis_id
+    tids = [fs.polis_statement_id for fs in confirmed]
+    excluded_pids = list(filt.excluded_pids)
+    client = _polis_server_client()
+
+    def _fetch_explore_aggregate():
+        counts = client.get_phase6_vote_counts(zinvite, tids, excluded_pids)
+        total = (client.get_phase6_participant_count(zinvite, excluded_pids)
+                 if counts is not None else None)
+        return {'counts': counts, 'total': total}
+
+    agg = _phase6_agg_cached(
+        ('explore', zinvite, tuple(sorted(tids)), tuple(sorted(excluded_pids))),
+        _fetch_explore_aggregate,
+        cacheable=lambda v: v['counts'] is not None,
+    )
+    counts = agg['counts']
+    empty = {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0}
+    return {
+        'statements': [{
+            'text': fs.statement_text,
+            'fs_id': fs.id,
+            'p2': dict(counts.get(fs.polis_statement_id, empty)) if counts is not None else None,
+            'p6': None,
+            'shift': None,
+            'my_p2_vote': None,
+            'my_p6_vote': None,
+            'my_group_votes': None,
+        } for fs in confirmed],
+        'p6_participants': None,
+        'p2_participants': agg['total'],
+        'matched_participants': None,
+        'personal_lens_available': False,
+        'filter': filt,
+        'source_divergence': None,
+        'is_preliminary': bool(conv.active),
+        'clusters': None,
+        'pg_available': counts is not None,
+        'informed_round': False,
+    }
+
+
+_REPORT_ARGUMENTS_PER_SIDE = 3
+
+
+def _attach_report_arguments(results: dict | None) -> None:
+    """Add each report row's arguments: the visible ones with the most support per side.
+
+    Ranked as the informed opinion cards rank them (support, then age). Only the text
+    leaves here: no author, and no support counts.
+    """
+    if not results or not results.get('statements'):
+        return
+    fs_ids = [row['fs_id'] for row in results['statements']]
+    arguments = (
+        Argument.query
+        .filter(Argument.featured_statement_id.in_(fs_ids), Argument.hidden.is_(False))
+        .options(joinedload(Argument.votes))
+        .all()
+    )
+    ranked = sorted(arguments, key=lambda argument: (-len(argument.votes), argument.id))
+    for row in results['statements']:
+        sides = {'pro': [], 'con': []}
+        for argument in ranked:
+            side = sides.get(argument.side)
+            if (argument.featured_statement_id == row['fs_id'] and side is not None
+                    and len(side) < _REPORT_ARGUMENTS_PER_SIDE):
+                side.append(argument.body)
+        row['arguments'] = sides
+
+
+def _phase_ended(conv, key: str) -> bool:
+    """True once phase ``key`` of the process's route is over: the process has moved to a
+    later phase with that phase's own flag off, or it has closed."""
+    keys = [stage['key'] for stage in _phase_sequence_for(conv)]
+    if key not in keys:
+        return False
+    if conv.closed_at:
+        return True
+    flag = _PHASE_BY_KEY[key]['flag']
+    return not getattr(conv, flag) and _current_stage_index(conv) > keys.index(key)
+
+
+def _build_preview_results(conv, results_filter: 'Phase6ResultsFilter') -> dict | None:
+    """The site-admin preview's results so far (#598). Preview only: the public results
+    route has no audience gate for this yet (#568), so it never calls this.
+
+    The informed opinion round once it has results; before that, the Explore round's
+    tallies, but only once Explore is over. Arguments only once the Arguments phase is
+    over. ``results_filter`` is the live Phase 6 filter; the Explore round's own hidden
+    statements are read for the fallback.
+    """
+    results = _build_phase6_results(conv, participation=None, results_filter=results_filter)
+    if results is None and _phase_ended(conv, 'submission'):
+        results = _build_explore_results(conv, _hidden_statements_filter(conv, conv.polis_id))
+    if _phase_ended(conv, 'argument_mapping'):
+        _attach_report_arguments(results)
+    return results
+
+
+def _hidden_statements_filter(conv, zinvite: str | None) -> Phase6ResultsFilter:
+    """The moderation filter for one Polis round: its hidden statements (mod=-1).
+
+    Hidden statements are sourced from the Polis stats DB when available.
     Participant exclusions are reserved for #60; the field is intentionally present
     in snapshots now so final reports do not need another schema change later.
     """
     excluded_tids: set[int] = set()
-    if conv.phase6_polis_conversation_id:
+    if zinvite:
         try:
-            rows = _polis_server_client().get_statements(conv.phase6_polis_conversation_id)
+            rows = _polis_server_client().get_statements(zinvite)
         except Exception:
             current_app.logger.exception(
-                'Could not build Phase 6 report filter for %s', conv.slug)
+                'Could not build the report filter for %s', conv.slug)
             rows = None
         if rows:
             _, _, hidden = rows
@@ -1167,6 +1287,11 @@ def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
             }
     return Phase6ResultsFilter(excluded_tids=frozenset(excluded_tids),
                                excluded_pids=frozenset())
+
+
+def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
+    """Build the current moderation filter for Phase 6 report surfaces."""
+    return _hidden_statements_filter(conv, conv.phase6_polis_conversation_id)
 
 
 def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
@@ -5036,9 +5161,7 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if conv.closed_at:
         raise ReportPublished(_path_conversation(conv.slug, page='report'))
-    results = _build_phase6_results(
-        conv, participation=None, results_filter=_current_phase6_results_filter(conv),
-    )
+    results = _build_preview_results(conv, _current_phase6_results_filter(conv))
     if results:
         # The builder orders an open process's rows by id; the report orders them by shift.
         _sort_by_shift(results['statements'])
@@ -5062,6 +5185,7 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
         full_view=True,
         phases=_report_phase_timeline(conv),
         preview=True,
+        informed_in_route=_route_has_phase(conv, 'informed_voting'),
     )
     # Ids and enums only (record_audit's privacy contract).
     record_audit(

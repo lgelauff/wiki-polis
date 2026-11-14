@@ -257,3 +257,49 @@ test('the process timeline has one row per phase the server sends, with its date
 function stripTags(html: string) {
   return html.replace(/<[^>]+>/g, '');
 }
+
+/** A preview before the informed opinion round (#598): Explore tallies and arguments only. */
+const exploreOnlyFixture: components['schemas']['ResultsReport'] = {
+  ...previewFixture,
+  context: {...previewFixture.context, sources: ['submission', 'argument_mapping']},
+  participation: {initialRound: 25, informedRound: null, matchedRounds: null},
+  dataAvailability: {...previewFixture.dataAvailability, opinionGroups: false, informedRound: 'pending'},
+  statements: [{
+    ...reportFixture.statements[0]!,
+    informed: null,
+    agreementShift: null,
+    arguments: {for: ['Shared costs are lower.'], against: []},
+  }],
+  opinionGroups: [],
+};
+
+test('a preview before the informed round shows the Explore round and the arguments', async () => {
+  renderReport(exploreOnlyFixture);
+
+  expect(await screen.findByRole('heading', {name: testMessages['report-argmap-heading']!}, {timeout: 5000})).toBeVisible();
+  // The Explore tallies and the participant-written argument reach the page.
+  expect(document.querySelector('.report-stmt-row .p6-vote-bar')).not.toBeNull();
+  expect(screen.getByText('Shared costs are lower.')).toBeVisible();
+  expect(document.querySelector('.p6-args-side--pro')).not.toBeNull();
+  expect(document.querySelector('.p6-args-side--con')).toBeNull();
+  expect(screen.queryByText(testMessages['report-argmap-placeholder']!)).toBeNull();
+  // No informed-round table; its sections say the round has not happened.
+  expect(screen.queryByRole('table')).toBeNull();
+  expect(screen.getAllByText(testMessages['report-informed-pending']!)).toHaveLength(2);
+  // The reading guide names the rounds used, not Publish, and the Explore-round method.
+  const guide = screen.getByRole('heading', {name: testMessages['output-howto-heading']!}).closest('.output-context')!;
+  expect(guide).toHaveTextContent(testMessages['phase-label-submission']!);
+  expect(guide).toHaveTextContent(testMessages['phase-label-argument_mapping']!);
+  expect(guide).not.toHaveTextContent(testMessages['output-report-phase']!);
+  expect(guide).toHaveTextContent(testMessages['report-method-preview-explore']!);
+  expect(guide).not.toHaveTextContent(testMessages['report-method-preview']!);
+});
+
+test('a report whose process has no informed round leaves its sections out', async () => {
+  renderReport({...exploreOnlyFixture, dataAvailability: {...exploreOnlyFixture.dataAvailability, informedRound: 'skipped'}});
+
+  expect(await screen.findByRole('heading', {name: testMessages['report-argmap-heading']!}, {timeout: 5000})).toBeVisible();
+  expect(screen.queryByText(testMessages['report-informed-pending']!)).toBeNull();
+  expect(screen.queryByRole('heading', {name: testMessages['report-matched-heading']!})).toBeNull();
+  expect(screen.queryByText(testMessages['report-participation-both']!)).toBeNull();
+});

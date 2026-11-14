@@ -109,8 +109,15 @@ def build_results_report(
     full_view: bool,
     phases: list[dict],
     preview: bool = False,
+    informed_in_route: bool = True,
 ) -> dict:
     """Build the results report. ``preview`` marks a site-admin preview, never published.
+
+    Only for a preview: before the informed opinion round has results, ``phase6_results``
+    may hold the Explore round's (``'informed_round': False``, #598), and the payload says
+    which rounds it uses (``context.sources``, ``dataAvailability.informedRound``) and
+    carries each statement's arguments. ``informed_in_route`` says whether the process
+    has that round at all. Without ``preview`` the payload is as before #598.
 
     ``full_view`` is for participants of the process, its organizers and site admins: exact
     counts and opinion groups. Everyone else gets the public view (decision 4, D8):
@@ -119,6 +126,13 @@ def build_results_report(
     """
     results = phase6_results or {}
     detailed = bool(results.get('pg_available'))
+    informed_held = phase6_results is not None and results.get('informed_round', True)
+    # 'pending' while the informed opinion round can still come; 'skipped' when it will not.
+    informed_round = (
+        'included' if informed_held
+        else 'pending' if informed_in_route and not conversation.closed_at
+        else 'skipped'
+    )
     # The published report's full shape (cross-round comparison, opinion groups). A site
     # admin's preview shows that shape too, so it looks as the report would if published now.
     report_shape = bool(conversation.closed_at) or preview
@@ -150,6 +164,20 @@ def build_results_report(
             ),
             'personalDelta': _personal_delta(row) if personal_lens else None,
         })
+        if preview:
+            # Preview only (#598): the public route has no audience gate for these (#568).
+            statements[-1]['arguments'] = {
+                'for': list((row.get('arguments') or {}).get('pro', [])),
+                'against': list((row.get('arguments') or {}).get('con', [])),
+            }
+    # The rounds the preview's numbers and texts come from, as phase identifiers.
+    sources = []
+    if preview and phase6_results is not None:
+        sources.append('submission')
+        if any(item['arguments']['for'] or item['arguments']['against'] for item in statements):
+            sources.append('argument_mapping')
+        if informed_held:
+            sources.append('informed_voting')
     result_filter = results.get('filter')
     links = {
         'self': self_link,
@@ -158,7 +186,7 @@ def build_results_report(
     }
     if identity_reveal_link:
         links['identityReveal'] = identity_reveal_link
-    return {
+    payload = {
         'slug': conversation.slug,
         'title': conversation.title,
         'publication': (
@@ -202,3 +230,7 @@ def build_results_report(
         },
         'links': links,
     }
+    if preview:
+        payload['context']['sources'] = sources
+        payload['dataAvailability']['informedRound'] = informed_round
+    return payload

@@ -2619,6 +2619,8 @@ export interface components {
                 /** @enum {string} */
                 status: "provisional" | "final";
                 method: string;
+                /** @description Site-admin preview only: the rounds whose results the preview shows, as phase identifiers, in phase order. Empty without results. */
+                sources?: ("submission" | "argument_mapping" | "informed_voting")[];
             };
             participation: {
                 initialRound: number | null;
@@ -2631,6 +2633,11 @@ export interface components {
                 personalLens: boolean;
                 /** @description Fewest responses a tally needs to be shown, for the "fewer than" text of a tally with belowFloor. */
                 responseFloor: number;
+                /**
+                 * @description Site-admin preview only. Whether the results include the informed opinion round: included; pending (not held yet; the results are the Explore round's so far); skipped (the process does not hold it, or closed without it).
+                 * @enum {string}
+                 */
+                informedRound?: "included" | "pending" | "skipped";
             };
             moderation: {
                 excludedStatements: number;
@@ -2675,6 +2682,11 @@ export interface components {
             viewerGroupChoice: "agree" | "pass" | "disagree" | null;
             viewerMatchesGroup: boolean | null;
             personalDelta: components["schemas"]["PersonalDelta"] | null;
+            /** @description Site-admin preview only, once the Arguments phase is over: the visible arguments with the most support on each side (at most 3), most supported first. Text only: no author and no counts. */
+            arguments?: {
+                for: string[];
+                against: string[];
+            };
         };
         PersonalDelta: {
             /** @enum {string} */
