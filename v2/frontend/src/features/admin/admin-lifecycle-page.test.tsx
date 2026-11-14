@@ -404,7 +404,8 @@ test.each([
   within(container.querySelector<HTMLElement>('.schedule-card')!).getByRole('button', {name: testMessages['common-cancel']!}).click();
   await screen.findByText(testMessages['adminconv-no-schedule']!);
   expect(cancelled).toBe(true);
-  expect(screen.queryByText(testMessages['adminconv-schedule-nothing-to-cancel']!) !== null).toBe(noted);
+  // Shown on the page, and also read out through the console's announcer.
+  expect(screen.queryAllByText(testMessages['adminconv-schedule-nothing-to-cancel']!).length > 0).toBe(noted);
 });
 
 test('a site admin can preview the report from the Publish report row while it is unpublished', async () => {

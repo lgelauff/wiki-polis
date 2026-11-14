@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from db import AdminRole, AuditEvent, FeaturedStatement, db
+from db import AdminRole, AuditEvent, Conversation, FeaturedStatement, db
 from polis_admin import PolisServerError
 from tests.conftest import login
 from services.admin_lifecycle import (
@@ -489,6 +489,41 @@ def test_schedule_api_is_an_organizer_control(client, conversation, participant)
     assert as_organizer.get_json()['data']['changed'] is True
     db.session.refresh(conversation)
     assert conversation.scheduled_transition_target == 'featured_selection'
+
+
+def test_schedule_api_refuses_a_moderator_cancel_and_another_conversations_organizer(
+    client, conversation, participant,
+):
+    """Cancelling is the write that never raises, so it is gated too; and organizing one
+    consultation gives no hold on another one's schedule."""
+    future = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    conversation.phase_submission = True
+    conversation.scheduled_transition_at = future
+    conversation.scheduled_transition_target = 'featured_selection'
+    other = Conversation(
+        slug='other-conv', polis_id='zzz9876543', title='Other', active=True,
+        access_policy='public',
+    )
+    db.session.add(other)
+    db.session.commit()
+    db.session.add_all([
+        AdminRole(participant_id=participant.id, conversation_id=conversation.id,
+                  role='moderator'),
+        AdminRole(participant_id=participant.id, conversation_id=other.id,
+                  role='organizer'),
+    ])
+    db.session.commit()
+    login(client, 'testuser')
+
+    cancel = client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/schedule',
+        json={'scheduledAt': None, 'frozen': False},
+    )
+
+    assert cancel.status_code == 403
+    db.session.refresh(conversation)
+    assert conversation.scheduled_transition_target == 'featured_selection'
+    assert conversation.scheduled_transition_at is not None
 
 
 def test_schedule_api_reports_no_schedule_before_a_stale_past_time(

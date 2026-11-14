@@ -320,7 +320,7 @@ A conversation moves through a linear sequence of phases, each backed by a boole
 
 **Cleanup vs. the preliminary-results window — two distinct things.** The **Cleanup phase** above (step 5, flag `phase_cleanup`) is a *pause before* the informed vote, while the organizer moderates arguments. Separately, there is a flag-less **preliminary-results window**: the inferred state where public results are on but the conversation is not yet closed (`active AND phase_public_results AND NOT phase_informed_voting AND closed_at is None`). During it participants see a "Preliminary results" banner, and the final report at `/c/<slug>/report` is only published once `closed_at` is set. At close, the `Phase6ResultsFilter` (excluded statements and participants) is snapshotted so the published figures are semi-immutable.
 
-**Scheduled transitions.** An admin can schedule a future phase advance (`scheduled_transition_at` / `scheduled_transition_target`); a Toolforge cron job (`phase-scheduler`, running `flask process-phase-schedules`) applies it. A pending schedule can be frozen or cancelled.
+**Scheduled transitions.** An organizer or site admin can schedule a future phase advance (`scheduled_transition_at` / `scheduled_transition_target`); a Toolforge cron job (`phase-scheduler`, running `flask process-phase-schedules`) applies it. A pending schedule can be frozen or cancelled.
 
 **Closing is irreversible** and starts the identity-reveal clock. It does not happen automatically — the organizer explicitly publishes the final report as a deliberate action.
 
