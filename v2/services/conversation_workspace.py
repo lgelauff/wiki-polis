@@ -117,6 +117,10 @@ def build_conversation_workspace(
         },
         'spaceWarning': space_warning,
         'scheduledTransition': scheduled_transition(conversation),
+        # The phase_cleanup stage: a quiet pause with no participant tab, which the page would
+        # otherwise word as a consultation that has not started (#343). Not
+        # _in_cleanup_window() in app.py, which means "report pending".
+        'cleanup': status == 'open' and bool(conversation.phase_cleanup),
         'tabs': tabs,
         'defaultTab': tab_keys[0] if tab_keys else None,
         'reveal': _reveal_projection(

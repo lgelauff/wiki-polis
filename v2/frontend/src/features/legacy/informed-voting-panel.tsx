@@ -64,13 +64,9 @@ function Completion({workspace}: {workspace: Workspace}) {
   return (
     <div className="p6-done">
       <h2 className="p6-done-heading">{msg('conv-p6-done-heading')}</h2>
-      {deliberationOpen ? (
-        <p className="p6-done-text">{msg('conv-p6-done-open')}</p>
-      ) : workspace.status === 'open' ? (
-        <p className="p6-done-text">{msg('conv-p6-done-willpublish')}</p>
-      ) : (
-        <p className="p6-done-text">{msg('conv-p6-done-closed')} <InternalLink href={workspace.links.results}>{msg('conv-read-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
-      )}
+      {/* The tabs, and so this panel, exist only while the consultation is open; a closed
+          one renders ClosedWorkspace instead (#402). */}
+      <p className="p6-done-text">{deliberationOpen ? msg('conv-p6-done-open') : msg('conv-p6-done-willpublish')}</p>
       {workspace.reveal?.state === 'open' ? (
         <p className="p6-done-reveal p6-done-reveal--open">{withNodes(msg('conv-p6-reveal-recorded', nodeSlot(0)), <strong>{workspace.viewer.pseudonym}</strong>)} {withNodes(msg('conv-p6-reveal-open', nodeSlot(0)), <InternalLink href={`/c/${workspace.slug}/reveal`}>{msg('conv-p6-reveal-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink>)}</p>
       ) : workspace.reveal?.state !== 'revealed' && workspace.reveal?.state !== 'expired' ? (

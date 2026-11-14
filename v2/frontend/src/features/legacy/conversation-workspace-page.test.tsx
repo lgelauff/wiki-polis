@@ -34,6 +34,7 @@ const workspace: Workspace = {
   viewer: {state: 'participant', pseudonym: 'quiet-otter'},
   spaceWarning: 'real',
   scheduledTransition: {at: '2026-08-02T09:30:00Z', target: 'argument_mapping', targetLabel: 'Arguments'},
+  cleanup: false,
   tabs: [{key: 'vote', label: 'Vote', dataHref: '/api/v1/conversations/community-strategy/explore'}],
   defaultTab: 'vote',
   reveal: null,
@@ -364,4 +365,44 @@ test('a revoked voucher reads as access withdrawn', async () => {
 
   expect(await screen.findByRole('heading', {name: testMessages['forbidden-lost-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
   expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
+});
+
+test('the cleanup pause has its own line, not the not-started one (#343)', async () => {
+  serve({...workspace, scheduledTransition: null, tabs: [], defaultTab: null, cleanup: true});
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-cleanup']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-nothing-available']!)).toBeNull();
+});
+
+test('an open consultation with no tab and no cleanup keeps the not-started line', async () => {
+  serve({...workspace, scheduledTransition: null, tabs: [], defaultTab: null, cleanup: false});
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-nothing-available']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-cleanup']!)).toBeNull();
+});
+
+test('a conversation with no statements does not read as all done (#454)', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: null,
+    progress: {completed: 0, total: 0, remaining: 0, allDone: true},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-nostatements-label']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-alldone-label']!)).toBeNull();
+});
+
+test('a participant who has answered every statement still reads as all done', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: null,
+    progress: {completed: 12, total: 12, remaining: 0, allDone: true},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-alldone-label']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-nostatements-label']!)).toBeNull();
 });

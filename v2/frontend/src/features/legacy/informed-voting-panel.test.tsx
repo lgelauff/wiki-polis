@@ -24,7 +24,7 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
     slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
     descriptionHtml: '', outroHtml: null,
-    viewer: {state: 'participant', pseudonym: 'quiet-otter'}, spaceWarning: null, scheduledTransition: null,
+    viewer: {state: 'participant', pseudonym: 'quiet-otter'}, spaceWarning: null, scheduledTransition: null, cleanup: false,
     tabs: [{key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'}],
     defaultTab: 'informed-voting', reveal: null,
     statementContribution: {unlockAfter: 0, quota: 3, used: 0},
@@ -106,8 +106,7 @@ test.each([
     ],
   } as Partial<Workspace>)],
   ['waiting for the report', workspace()],
-  // No 'closed' case: a closed workspace renders ClosedWorkspace instead of the tabs, so the
-  // panel's closed branch (conv-p6-done-closed) is unreachable today.
+  // No 'closed' case: a closed workspace renders ClosedWorkspace instead of the tabs (#402).
 ])('under qqx, the completion panel carries no English: %s', async (_name, ws) => {
   renderAsQqx();
   renderPanel(ws, [answered]);
