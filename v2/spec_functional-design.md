@@ -18,9 +18,9 @@ A deliberation tool for the Wikimedia community. Participants vote on atomic sta
 
 **Moderator** — a participant with elevated trust for one *specific* consultation. Can approve or hide statements and arguments, feature statements, resolve (mark as handled) community flags, block and unblock participants, and add seed statements before the first phase and during Explore. Sees the admin Overview, including the phase control and statistics, read-only: cannot change phases, pause, schedule, initialise Phase 6 or publish. Sees Settings read-only (Basics including strict moderation, Access, the Roles list with usernames, the Invitations list with usernames), and the Moderation and Content sections. People and Participants show moderator-only viewers pseudonyms only, no usernames *(the owner may revisit Participants)*. Cannot change any setting (strict moderation is organizer-only), access or participation, roles, or phases. The way in is the **You moderate** list on the participant home, whose Admin link opens the consultation's admin pages; a console Admin home is planned ([#538](https://github.com/lgelauff/wiki-polis/issues/538)).
 
-**Organizer** — a consultation-scoped role above moderator. In addition to moderation, an organizer can change the consultation's settings (strict moderation included), advance the consultation through its phases via the guided "Move on" flow, and initialise Phase 6.
+**Organizer** — a consultation-scoped role above moderator. In addition to moderation, an organizer can change the consultation's settings (strict moderation included), advance the consultation through its phases via the guided "Move on" flow or schedule the next transition, and initialise Phase 6.
 
-**Site admin** (global) — site-wide control. Can create and manage any consultation, assign roles, curate featured statements, schedule phase transitions, and use the advanced (non-linear) phase toggles. The three consultation-facing tiers surface in the UI as *Site admin*, *Organizer*, and *Moderator*.
+**Site admin** (global) — site-wide control. Can create and manage any consultation, assign roles, curate featured statements, and use the advanced (non-linear) phase toggles. The three consultation-facing tiers surface in the UI as *Site admin*, *Organizer*, and *Moderator*.
 
 ---
 

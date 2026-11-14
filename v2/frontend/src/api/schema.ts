@@ -6509,7 +6509,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Global admin permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6518,7 +6518,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The current transition cannot be scheduled */
+            /** @description The current transition cannot be scheduled; reported before a past date-time */
             409: {
                 headers: {
                     [name: string]: unknown;
