@@ -307,8 +307,28 @@ def test_informed_voting_keeps_renderable_card_while_initialization_is_pending(
         'voted': False,
         'arguments': {'for': [], 'against': []},
     }]
+    # The card still renders, but it cannot be answered, so it is not counted.
     assert data['progress'] == {
-        'completed': 0, 'total': 1, 'remaining': 1, 'allDone': False,
+        'completed': 0, 'total': 0, 'remaining': 0, 'allDone': False,
+    }
+
+
+def test_a_card_that_cannot_be_voted_does_not_block_completion(participant):
+    """#319: a card with no phase-6 statement id can never be voted, so counting it
+    would keep allDone false for ever."""
+    conversation, participation, first, second = _fixture(participant)
+    second.phase6_polis_statement_id = None
+    db.session.commit()
+
+    data = build_informed_voting_state(
+        conversation_id=conversation.id,
+        participation=participation,
+        participant_payload={'votes': [51]},
+    )
+
+    assert [card['canVote'] for card in data['cards']] == [True, False]
+    assert data['progress'] == {
+        'completed': 1, 'total': 1, 'remaining': 0, 'allDone': True,
     }
 
 

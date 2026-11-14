@@ -60,13 +60,17 @@ def build_informed_voting_state(
             'arguments': {'for': arguments('pro'), 'against': arguments('con')},
         })
 
-    completed = sum(card['voted'] for card in cards)
+    # Progress counts only the cards a participant can answer. A card without a phase-6
+    # statement id can never be voted, so counting it would keep the round from ever
+    # completing (#319).
+    votable = [card for card in cards if card['canVote']]
+    completed = sum(card['voted'] for card in votable)
     return {
         'cards': cards,
         'progress': {
             'completed': completed,
-            'total': len(cards),
-            'remaining': max(0, len(cards) - completed),
-            'allDone': bool(cards) and completed == len(cards),
+            'total': len(votable),
+            'remaining': max(0, len(votable) - completed),
+            'allDone': bool(votable) and completed == len(votable),
         },
     }

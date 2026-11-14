@@ -35,6 +35,13 @@ function recordedLabel(msg: Message, choice: Choice): string {
       : msg('conv-p6-voted-pass');
 }
 
+/** A card the participant can still answer. A card without vote controls (`canVote` false:
+ *  its phase-6 statement does not exist yet) can never be answered, so no seek may stop on
+ *  it and it does not count towards completion (#319). */
+function stillToAnswer(card: Card, answered: Set<number>): boolean {
+  return card.canVote && !answered.has(card.featuredStatementId);
+}
+
 function ArgumentSide({side, items}: {
   side: 'pro' | 'con';
   items: Card['arguments']['for'];
@@ -91,7 +98,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   // not put back on a card they already answered (#317). With every card answered this
   // falls back to the first; the completion panel is what shows then.
   const [currentIndex, setCurrentIndex] = useState(
-    () => Math.max(0, data.cards.findIndex((card) => !card.voted)),
+    () => Math.max(0, data.cards.findIndex((card) => card.canVote && !card.voted)),
   );
   const [votes, setVotes] = useState<Record<number, Choice>>({});
   // Seed from the server, not from an empty set. The API already reports which cards
@@ -105,9 +112,13 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
   // Likewise: a deck the participant already finished should open on its completion
   // panel rather than on card 1 of 3 with no sign anything happened.
-  const [done, setDone] = useState(() => data.cards.length > 0 && data.cards.every((card) => card.voted));
+  const [done, setDone] = useState(() => (
+    data.cards.some((card) => card.canVote) && data.cards.every((card) => !card.canVote || card.voted)
+  ));
   const advanceTimer = useRef<number | null>(null);
-  const current = data.cards[currentIndex];
+  // Clamped on read: a refetch can return a shorter deck (a statement unfeatured
+  // mid-session), and an index past the end hides every card, navigation included (#319).
+  const index = Math.min(currentIndex, data.cards.length - 1);
 
   useEffect(() => () => {
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
@@ -141,21 +152,27 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
         const cards = deck.cards.map((card) => (
           card.featuredStatementId === receipt.featuredStatementId ? {...card, voted: true} : card
         ));
-        const completed = cards.filter((card) => card.voted).length;
+        // Counted as the server counts: only the cards that can be answered.
+        const votable = cards.filter((card) => card.canVote);
+        const completed = votable.filter((card) => card.voted).length;
         return {...deck, cards, progress: {
-          ...deck.progress, completed, remaining: cards.length - completed,
-          allDone: completed === cards.length,
+          ...deck.progress, completed, total: votable.length, remaining: votable.length - completed,
+          allDone: votable.length > 0 && completed === votable.length,
         }};
       });
       void queryClient.invalidateQueries({queryKey});
-      if (nextTerminal.size === data.cards.length) setDone(true);
-      const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
-      const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
+      const forward = data.cards.findIndex((card, position) => position > index && stillToAnswer(card, nextTerminal));
+      const wrapped = forward < 0 ? data.cards.findIndex((card) => stillToAnswer(card, nextTerminal)) : forward;
       if (wrapped >= 0) {
         advanceTimer.current = globalThis.setTimeout(() => showCard(wrapped), 400);
       } else {
+        // The last answer: the deck gives way to the completion panel, after the same pause
+        // as an advance so the confirmation badge is seen first.
         advanceTimer.current = globalThis.setTimeout(() => {
-          document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
+          setDone(true);
+          globalThis.requestAnimationFrame(() => {
+            document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
+          });
         }, 400);
       }
     },
@@ -167,18 +184,20 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
 
   if (data.cards.length === 0) return <div className="landing-section"><p className="muted">{msg('conv-p6-none')}</p></div>;
 
+  // A finished deck shows only its completion panel: card 1 with live vote buttons above
+  // "You've given your informed opinion" invited overwriting a recorded vote (#319).
   return <>
-    {data.cards.map((card, index) => {
+    {!done && data.cards.map((card, position) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
       // Answered in an earlier visit: the server says there is a vote, but the read
       // contract cannot say which (#327). Distinct from `selected`, which is this
       // session's own choice and does carry a value.
       const answeredEarlier = !selected && !error && terminalIds.has(card.featuredStatementId);
-      return <div className={`p6-card${index !== currentIndex ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
+      return <div className={`p6-card${position !== index ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
         <div tabIndex={-1} data-focus-anchor className="sr-only" />
         <div className="p6-card-header">
-          <span className="stmt-meta-left"><span className="stmt-dot" />{msg('conv-p6-label')} · {msg('conv-of', index + 1, data.cards.length)}</span>
+          <span className="stmt-meta-left"><span className="stmt-dot" />{msg('conv-p6-label')} · {msg('conv-of', position + 1, data.cards.length)}</span>
           {/* Error branch first. `selected` survives a failed re-vote, so testing it
               first makes the error unreachable once a card has been voted — and a
               rejected re-vote (a 409 on a paused round, which is the state the repair
@@ -213,9 +232,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={currentIndex === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(currentIndex - 1)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
-          <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', currentIndex + 1, data.cards.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={currentIndex === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(currentIndex + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(index - 1)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+          <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', index + 1, data.cards.length)}</span>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={index === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(index + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
         </div>
       </div>;
     })}

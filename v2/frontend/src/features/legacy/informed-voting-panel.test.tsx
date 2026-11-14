@@ -169,7 +169,9 @@ test('leaving the tab and coming back does not forget a vote just cast', async (
     http.get(url('/api/v1/conversations/community-strategy/workspace'), () => HttpResponse.json({data: workspace()})),
     http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => {
       reads += 1;
-      return deckResponse([{...unanswered, voted}, answered]);
+      // A third card still open, so the deck stays up after this vote (a finished one gives
+      // way to its completion panel).
+      return deckResponse([{...unanswered, voted}, answered, {...unanswered, featuredStatementId: 35, statement: 'Wikis should publish their budgets.', voted: false}]);
     }),
     http.put(url('/api/v1/conversations/community-strategy/featured-statements/31/informed-vote'), () => {
       voted = true;
@@ -231,3 +233,81 @@ test('the card navigation is named for the statements it moves between', async (
   expect(screen.getAllByRole('button', {name: 'Previous statement'})[0]).toHaveTextContent('← Previous');
 });
 
+
+// #319: a card whose phase-6 statement does not exist yet renders without vote controls and
+// can never be answered. No seek may stop on it, and it must not keep the deck from finishing.
+const unvotable: Card = {featuredStatementId: 33, statement: 'Awaiting its phase-6 statement.', canVote: false, voted: false, arguments: {for: [], against: []}};
+const later: Card = {featuredStatementId: 34, statement: 'Wikis should publish their budgets.', canVote: true, voted: false, arguments: {for: [], against: []}};
+const cardButton = (id: number, name: string) => within(panel()!.querySelector<HTMLElement>(`.p6-card[data-fs-id="${id}"]`)!).getByRole('button', {name});
+const shown = () => [...panel()!.querySelectorAll('.p6-card:not(.p6-card--hidden)')].map((card) => Number(card.getAttribute('data-fs-id')));
+
+function acceptVote(id: number) {
+  return http.put(url(`/api/v1/conversations/community-strategy/featured-statements/${id}/informed-vote`),
+    () => HttpResponse.json({data: {featuredStatementId: id, choice: 'agree', links: {informedVoting: '/api/v1/conversations/community-strategy/informed-voting'}}}));
+}
+
+test('a returning participant does not resume on a card that cannot be voted', async () => {
+  renderPanel(workspace(), [unvotable, unanswered]);
+  await screen.findByText(STATEMENT);
+
+  expect(shown()).toEqual([31]);
+});
+
+test('a deck whose only open card cannot be voted counts as finished', async () => {
+  renderPanel(workspace(), [answered, unvotable]);
+
+  expect(await screen.findByRole('heading', {name: "You've given your informed opinion."})).toBeVisible();
+  expect(panel()!.querySelector('.p6-card')).toBeNull();
+});
+
+test('after a vote the card stays in view for its confirmation, then the deck skips a card that cannot be voted', async () => {
+  server.use(acceptVote(31));
+  renderPanel(workspace(), [unanswered, unvotable, later]);
+  await screen.findByText(STATEMENT);
+
+  fireEvent.click(screen.getAllByRole('button', {name: 'Agree'})[0]!);
+  expect(await screen.findByText('Agreed')).toBeVisible();
+  // Inside the pause before the advance, the card just answered is still the one shown.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(shown()).toEqual([31]);
+  await waitFor(() => expect(shown()).toEqual([34]));
+});
+
+test('the last answer gives way to the completion panel, after the confirmation is seen', async () => {
+  server.use(acceptVote(31));
+  renderPanel(workspace(), [answered, unanswered, unvotable]);
+  await screen.findByText(STATEMENT);
+
+  fireEvent.click(cardButton(31, 'Agree'));
+  expect(await screen.findByText('Agreed')).toBeVisible();
+  expect(shown()).toEqual([31]);
+  expect(await screen.findByRole('heading', {name: "You've given your informed opinion."})).toBeVisible();
+  expect(panel()!.querySelector('.p6-card')).toBeNull();
+});
+
+test('a deck that shrinks under the current card still shows a card and its navigation', async () => {
+  // The advance after the vote heads for the third card; the refetch the vote triggers has
+  // lost it, as when a moderator unfeatures statements mid-session.
+  let reads = 0;
+  server.use(
+    http.get(url('/api/v1/conversations/community-strategy/workspace'), () => HttpResponse.json({data: workspace()})),
+    http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => {
+      reads += 1;
+      return deckResponse(reads === 1 ? [answered, unanswered, later] : [answered]);
+    }),
+    acceptVote(31),
+  );
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/informed-voting']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByText(STATEMENT);
+
+  fireEvent.click(cardButton(31, 'Agree'));
+  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+  // Past the advance, which targeted index 2 of a deck that now has one card.
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(shown()).toEqual([32]);
+  expect(screen.getByRole('button', {name: 'Previous statement'})).toBeInTheDocument();
+});

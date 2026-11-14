@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen} from '@testing-library/react';
+import {render, screen, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -8,8 +8,9 @@ import {App} from '../../app';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
 
-/** The informed-voting contract for a participant who already answered everything. */
-function answeredDeck() {
+/** The informed-voting contract for a participant who already answered everything, or,
+ *  with `pending`, everything but one further card. */
+function answeredDeck(pending = false) {
   return http.get(
     new URL('/api/v1/conversations/community-strategy/informed-voting', globalThis.location.origin).toString(),
     () => HttpResponse.json({
@@ -23,8 +24,16 @@ function answeredDeck() {
           canVote: true,
           voted: true,
           arguments: {for: [], against: []},
-        }],
-        progress: {completed: 1, total: 1, remaining: 0, allDone: true},
+        }, ...(pending ? [{
+          featuredStatementId: 34,
+          statement: 'Small wikis should get translation support first.',
+          canVote: true,
+          voted: false,
+          arguments: {for: [], against: []},
+        }] : [])],
+        progress: pending
+          ? {completed: 1, total: 2, remaining: 1, allDone: false}
+          : {completed: 1, total: 1, remaining: 0, allDone: true},
         capabilities: {vote: true},
         links: {
           self: '/api/v1/conversations/community-strategy/informed-voting',
@@ -74,7 +83,8 @@ function renderDeck() {
 test('a returning participant sees that their cards are already answered', async () => {
   // The regression: votes/terminalIds started empty and ignored card.voted, so an
   // answered deck rendered as untouched and participants voted a second time.
-  server.use(answeredDeck());
+  // One card still open, so the deck is shown at all (a finished one is not).
+  server.use(answeredDeck(true));
   renderDeck();
 
   const card = await screen.findByText('Regional communities should share infrastructure funding.');
@@ -82,8 +92,8 @@ test('a returning participant sees that their cards are already answered', async
   expect(shell).toHaveClass('p6-card--done');
   // Assert the DOM, not the stylesheet: vitest runs jsdom without CSS, so a CSS-only
   // gate would make toBeVisible() true on every card. The hidden attribute is the gate.
-  expect(screen.getByText(/Already answered/)).toBeVisible();
-  expect(screen.getByText(/Choosing again will replace it/)).toBeVisible();
+  expect(within(shell as HTMLElement).getByText(/Already answered/)).toBeVisible();
+  expect(within(shell as HTMLElement).getByText(/Choosing again will replace it/)).toBeVisible();
 });
 
 test('a finished deck shows its completion panel', async () => {
@@ -91,6 +101,9 @@ test('a finished deck shows its completion panel', async () => {
   renderDeck();
 
   expect(await screen.findByRole('heading', {name: "You've given your informed opinion."})).toBeVisible();
+  // ...and only that: no card with live vote buttons above it (#319).
+  expect(document.querySelector('.p6-card')).toBeNull();
+  expect(screen.queryAllByRole('button', {name: 'Agree'})).toEqual([]);
 });
 
 test('an unanswered card claims nothing', async () => {
