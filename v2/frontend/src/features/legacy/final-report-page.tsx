@@ -1,16 +1,26 @@
 import type {components} from '../../api/schema';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
-import {useMessage, type Message} from '../../i18n/messages';
+import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {usePercentFormat} from '../../i18n/numbers';
-import {outputMethod, outputPhase} from '../../i18n/server-labels';
+import {outputMethod, outputPhase, phaseLabel} from '../../i18n/server-labels';
+import {listOf} from './conversation-read-pages';
 import {rankOpinionStatements} from './statement-rankings';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
 type Tally = components['schemas']['VoteTally'];
+type InformedRound = NonNullable<Report['dataAvailability']['informedRound']>;
+
+/** Whether the results include the informed opinion round. Only a site admin's preview says
+ *  (#598); the published report and the preliminary results always include it. */
+function informedRound(report: Report): InformedRound {
+  return report.dataAvailability.informedRound ?? 'included';
+}
+
+const NO_ARGUMENTS = {for: [], against: []};
 
 function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
@@ -87,10 +97,10 @@ function ParticipationSummary({report}: {report: Report}) {
         <span className="report-stat-value">{report.participation.informedRound}</span>
         <span className="report-stat-label">{msg('report-participation-p6')}</span>
       </div>}
-      <div className="report-stat report-stat--placeholder">
+      {informedRound(report) !== 'skipped' && <div className="report-stat report-stat--placeholder">
         <span className="report-stat-value">—</span>
         <span className="report-stat-label">{msg('report-participation-both')}</span>
-      </div>
+      </div>}
     </div>
     {(statements > 0 || participants > 0) && <p className="report-moderation-note muted">{moderationSummary}</p>}
     {!report.dataAvailability.detailedCounts && <p className="muted" style={{fontSize: 13, marginTop: '.5rem'}}>{msg('report-participation-unavailable')}</p>}
@@ -119,6 +129,41 @@ function InitialOpinions({statements, floor}: {statements: Statement[]; floor: n
         <LegacyVoteBar tally={statement.initial!} floor={floor} />
       </div>)}
     </>}
+  </div>;
+}
+
+/** A section that needs the informed opinion round, before that round has taken place. */
+function InformedRoundPending({heading, sub}: {heading: string; sub?: string}) {
+  const msg = useMessage();
+  return <div className="report-section">
+    <h2 className="report-section-heading">{heading}{sub && <> <span className="report-section-sub">{sub}</span></>}</h2>
+    <p className="report-placeholder"><em>{msg('report-informed-pending')}</em></p>
+  </div>;
+}
+
+/** The arguments in favour and against each featured statement, most supported first.
+ *  Only a site admin's preview carries them so far (#598). */
+function ArgumentMap({statements}: {statements: Statement[]}) {
+  const msg = useMessage();
+  const argued = statements.flatMap((statement) => {
+    const args = statement.arguments ?? NO_ARGUMENTS;
+    return args.for.length > 0 || args.against.length > 0 ? [{statement, args}] : [];
+  });
+  return <div className="report-section">
+    <h2 className="report-section-heading">{msg('report-argmap-heading')}</h2>
+    {argued.length === 0
+      ? <p className="report-placeholder"><em>{msg('report-argmap-placeholder')}</em></p>
+      : argued.map(({statement, args}) => <div className="report-stmt-row" key={statement.featuredStatementId}>
+        <p className="report-stmt-text">{statement.statement}</p>
+        <div className="p6-args-panel">
+          {([['pro', args.for], ['con', args.against]] as const)
+            .filter(([, items]) => items.length > 0)
+            .map(([side, items]) => <div className={`p6-args-side p6-args-side--${side}`} key={side}>
+              <h3 className="p6-args-side-header">{side === 'pro' ? msg('conv-arg-col-for') : msg('conv-arg-col-against')}</h3>
+              {items.map((text, index) => <p className="p6-arg-item" key={index}>{text}</p>)}
+            </div>)}
+        </div>
+      </div>)}
   </div>;
 }
 
@@ -186,25 +231,27 @@ function Methodology() {
 function ResultsBody({report}: {report: Report}) {
   const msg = useMessage();
   if (!report.resultsAvailable) return <div className="landing-section"><p className="muted">{msg('report-no-results')}</p></div>;
+  // Before the informed opinion round, the results are the Explore round's and the
+  // arguments (#598); the sections built on the informed round say it has not happened.
+  const informed = informedRound(report);
   return <>
     <ParticipationSummary report={report} />
     <div className="report-section">
       <h2 className="report-section-heading">{msg('report-statements-heading')}</h2>
       <p className="report-placeholder"><em>{msg('report-statements-placeholder')}</em></p>
-      <p className="muted" style={{fontSize: 13}}>{msg('report-featured-count', report.statements.length)}</p>
+      {informed === 'included' && <p className="muted" style={{fontSize: 13}}>{msg('report-featured-count', report.statements.length)}</p>}
     </div>
     <InitialOpinions statements={report.statements} floor={report.dataAvailability.responseFloor} />
-    <div className="report-section">
-      <h2 className="report-section-heading">{msg('report-argmap-heading')}</h2>
-      <p className="report-placeholder"><em>{msg('report-argmap-placeholder')}</em></p>
-    </div>
-    {report.dataAvailability.detailedCounts && <OpinionShift statements={report.statements} floor={report.dataAvailability.responseFloor} />}
-    <div className="report-section">
+    <ArgumentMap statements={report.statements} />
+    {informed === 'included' && report.dataAvailability.detailedCounts && <OpinionShift statements={report.statements} floor={report.dataAvailability.responseFloor} />}
+    {informed === 'pending' && <InformedRoundPending heading={msg('report-shift-heading')} sub={msg('report-shift-sub')} />}
+    {informed !== 'skipped' && <div className="report-section">
       <h2 className="report-section-heading">{msg('report-matched-heading')}</h2>
       <p className="report-placeholder"><em>{msg('report-matched-placeholder')}</em></p>
       <p className="muted" style={{fontSize: 13}}>{msg('report-matched-note')}</p>
-    </div>
+    </div>}
     <OpinionGroups report={report} />
+    {informed === 'pending' && <InformedRoundPending heading={msg('report-groups-heading')} />}
     {report.viewer.participating && report.opinionGroups.length > 0 && <div className="report-section report-section--explore">
       <h2 className="report-section-heading">{msg('report-landed-heading')}</h2>
       <p className="muted" style={{fontSize: 13}}>{msg('report-landed-body')}</p>
@@ -223,6 +270,10 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
   const contextOutput = preview || report.publication === 'final' ? 'report' : 'preliminary-results';
   // The preview's tab title says it is a preview; the published report keeps the shell's.
   const shellTitle = preview ? {title: msg('output-doc-title', msg('report-subtitle-preview'), report.title)} : {};
+  const locale = useLocale();
+  // A preview is made from the rounds held so far, not in the Publish step (#598).
+  const sources = (report.context.sources ?? []).map((phase) => phaseLabel(msg, phase));
+  const informedIncluded = informedRound(report) === 'included';
   return <LegacyShell {...shellTitle} headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
@@ -246,9 +297,13 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
         <dl className="output-context-grid">
           {/* The server takes this context from the output definition: "report" once the
               consultation is closed, "preliminary-results" before. */}
-          <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>
+          {preview
+            ? sources.length > 0 && <div><dt>{msg('output-produced-from')}</dt><dd>{listOf(locale, sources)}</dd></div>
+            : <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>}
           <div><dt>{msg('output-status-label')}</dt><dd>{msg(preview ? 'report-status-preview' : 'report-status-final')}</dd></div>
-          <div><dt>{msg('output-method-label')}</dt><dd>{preview ? msg('report-method-preview') : outputMethod(msg, contextOutput, report.context.method)}</dd></div>
+          <div><dt>{msg('output-method-label')}</dt><dd>{preview
+            ? (informedIncluded ? msg('report-method-preview') : msg('report-method-preview-explore'))
+            : outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>
       <PlaceholderSections />
