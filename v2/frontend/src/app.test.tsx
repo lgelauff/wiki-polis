@@ -884,7 +884,7 @@ test('routes preliminary results through the legacy workspace tab', async () => 
         slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
         descriptionHtml: null, outroHtml: null,
         viewer: {state: 'participant', pseudonym: 'quiet-otter'},
-        spaceWarning: null, scheduledTransition: null,
+        spaceWarning: null, scheduledTransition: null, cleanup: false,
         tabs: [
           {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
           {key: 'p6-results', label: 'Preliminary results', dataHref: '/api/v1/conversations/community-strategy/results'},
@@ -978,7 +978,7 @@ test('renders preliminary results from the message catalogue, not from source li
         slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
         descriptionHtml: null, outroHtml: null,
         viewer: {state: 'participant', pseudonym: 'quiet-otter'},
-        spaceWarning: null, scheduledTransition: null,
+        spaceWarning: null, scheduledTransition: null, cleanup: false,
         tabs: [
           {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
           {key: 'p6-results', label: 'Preliminary results', dataHref: '/api/v1/conversations/community-strategy/results'},

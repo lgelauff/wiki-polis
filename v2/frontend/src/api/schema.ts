@@ -2271,6 +2271,8 @@ export interface components {
             /** @enum {string|null} */
             spaceWarning: "real" | "demo" | null;
             scheduledTransition: components["schemas"]["ScheduledTransition"] | null;
+            /** @description True while an open consultation is in the Cleanup phase, a quiet pause in which participants have nothing to do. */
+            cleanup: boolean;
             tabs: components["schemas"]["ConversationWorkspaceTab"][];
             /** @enum {string|null} */
             defaultTab: "vote" | "results" | "arguments" | "informed-voting" | "p6-results" | null;

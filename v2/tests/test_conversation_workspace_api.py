@@ -149,6 +149,27 @@ def test_workspace_closed_state_projects_reveal_timeline(
     assert data['capabilities']['participate'] is False
 
 
+def test_workspace_marks_the_cleanup_pause(auth_client, participant, conversation):
+    """#343: Cleanup has no participant tab, so the page needs to know why it is empty."""
+    _join(participant, conversation)
+    db.session.commit()
+    before = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
+    assert before['tabs'] == [] and before['cleanup'] is False
+
+    conversation.phase_cleanup = True
+    db.session.commit()
+    data = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
+    assert data['status'] == 'open'
+    assert data['tabs'] == []
+    assert data['cleanup'] is True
+
+    # A paused or closed consultation says so instead; the marker is for an open one only.
+    conversation.paused = True
+    db.session.commit()
+    paused = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
+    assert paused['cleanup'] is False
+
+
 def test_workspace_requires_real_authentication(client, conversation):
     response = client.get('/api/v1/conversations/test-conv/workspace')
 

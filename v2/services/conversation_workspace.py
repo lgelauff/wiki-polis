@@ -117,6 +117,9 @@ def build_conversation_workspace(
         },
         'spaceWarning': space_warning,
         'scheduledTransition': scheduled_transition(conversation),
+        # Cleanup is a quiet pause with no participant tab (#343); the page words it as such
+        # rather than as a consultation that has not started.
+        'cleanup': status == 'open' and bool(conversation.phase_cleanup),
         'tabs': tabs,
         'defaultTab': tab_keys[0] if tab_keys else None,
         'reveal': _reveal_projection(
