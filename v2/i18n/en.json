@@ -399,6 +399,7 @@
     "conv-suggest-hint": "This goes into the pool with the original statement. Any changes you make, you release into the public domain (CC0).",
     "conv-composer-submit": "Submit & next",
     "conv-composer-charcount": "$1 / 280",
+    "conv-composer-over-limit": "$1 {{PLURAL:$1|character|characters}} too many",
     "conv-newstmt-helper": "Bring a different angle, in one claim and one sentence. It goes to moderation, then into the same pool as the other statements.",
     "conv-newstmt-placeholder": "A new angle on the topic…",
     "conv-newstmt-hint": "This is a separate statement, and other people can respond to it too. You release your statement into the public domain (CC0).",

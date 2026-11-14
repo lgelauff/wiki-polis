@@ -177,6 +177,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   // Toasts are for the row actions only.
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const [seedText, setSeedText] = useState('');
+  // A seed over the limit is kept as typed, never cut (#558); Add waits until it fits.
+  const seedOverLimit = Math.max(0, seedText.length - 280);
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
   const dismissToast = useCallback(() => setToast(null), []);
@@ -405,16 +407,16 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           <>
             <h2>{msg('stmts-seed-heading')}</h2>
             <div className="admin-form">
-              <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
+              <form onSubmit={(event) => { event.preventDefault(); if (!seedOverLimit) seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
                 <label className="admin-field">{msg('stmts-seed-label')}
                   <textarea
                     name="txt"
                     rows={3}
-                    maxLength={280}
                     id="seed-txt"
                     required
                     aria-describedby="seed-count"
+                    aria-invalid={seedOverLimit > 0 || undefined}
                     value={seedText}
                     onChange={(event) => setSeedText(event.target.value)}
                   />
@@ -431,8 +433,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   />
                 </label>
                 <div className="admin-form__actions">
-                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending}>{msg('stmts-seed-submit')}</button>
-                  <span id="seed-count" className="admin-form__count">{seedText.length} / 280</span>
+                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending || seedOverLimit > 0}>{msg('stmts-seed-submit')}</button>
+                  <span id="seed-count" className="admin-form__count">{seedOverLimit > 0 ? msg('conv-composer-over-limit', seedOverLimit) : `${seedText.length} / 280`}</span>
                 </div>
                 <FormFeedback lines={seedFeedback} />
               </form>

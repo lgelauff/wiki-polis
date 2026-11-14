@@ -258,6 +258,34 @@ test.each([
   },
 );
 
+test('a statement over 280 characters is kept in full and waits at Submit until it fits', async () => {
+  serve(workspace, {
+    ...explore,
+    progress: {completed: 12, total: 12, remaining: 0, allDone: true},
+    newStatement: {unlocked: true, unlockAfter: 4, quota: 3, used: 0, remaining: 3},
+  });
+  renderWorkspace('qqx');
+  fireEvent.click(await screen.findByRole('button', {name: /conv-triad-newstmt-title/}, {timeout: 10_000}));
+  const field = document.querySelector<HTMLTextAreaElement>('.v2-composer-textarea')!;
+  const submit = screen.getByRole('button', {name: '(conv-composer-submit)'});
+
+  // Catches the browser cutting pasted text silently (#558, seen live: statements ended
+  // mid-word): a `maxlength` drops the rest before the counter or the server can see it.
+  expect(field).not.toHaveAttribute('maxlength');
+  const over = 'x'.repeat(292);
+  fireEvent.change(field, {target: {value: over}});
+  expect(field).toHaveValue(over);
+  expect(submit).toBeDisabled();
+  expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(document.getElementById('composer-newstmt-count')).toHaveTextContent('(conv-composer-over-limit: 12)');
+  expect(field.getAttribute('aria-describedby')?.split(' ')).toEqual(['composer-newstmt-helper', 'composer-newstmt-count']);
+
+  fireEvent.change(field, {target: {value: over.slice(12)}});
+  expect(submit).toBeEnabled();
+  expect(field).not.toHaveAttribute('aria-invalid');
+  expect(field.getAttribute('aria-describedby')).toBe('composer-newstmt-helper');
+});
+
 test.each([
   ['derivative_similarity_too_low', 409, 'true'],
   ['statement_exists', 409, 'true'],

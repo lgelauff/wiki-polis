@@ -31,6 +31,8 @@ type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
 type Explore = components['schemas']['ExploreState'];
 type VoteChoice = components['schemas']['ExploreVoteRequest']['choice'];
 type ComposerMode = 'suggest' | 'new' | null;
+/** The most characters a statement may have; the server refuses a longer one. */
+const STATEMENT_MAX_CHARACTERS = 280;
 type InviteOnlyDetails = {
   title: string;
   slug?: string;
@@ -227,6 +229,11 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   const textRejected = mutation.error instanceof ApiContractError
     && (mutation.error.code === 'derivative_similarity_too_low'
       || mutation.error.code === 'statement_exists');
+  // Text over the limit is kept as typed, never cut (#558): the counter says how much to
+  // remove and Submit waits until it fits. The server's 1–280 check stays the backstop.
+  const countId = suggest ? 'composer-suggest-count' : 'composer-newstmt-count';
+  const overLimit = Math.max(0, text.length - STATEMENT_MAX_CHARACTERS);
+  const describedBy = [helperId, overLimit > 0 && countId, mutation.error && errorId].filter(Boolean).join(' ');
   return (
     <div id={suggest ? 'composer-suggest' : 'composer-newstmt'} className="v2-composer">
       <div className="v2-composer-header">
@@ -234,14 +241,14 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
           <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink></div>
         </div>
-        <span className="propose-charcount">{msg('conv-composer-charcount', text.length)}</span>
+        <span className="propose-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : msg('conv-composer-charcount', text.length)}</span>
       </div>
-      <textarea className="v2-composer-textarea" maxLength={280} aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={mutation.error ? `${helperId} ${errorId}` : helperId} aria-invalid={textRejected || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
+      <textarea className="v2-composer-textarea" aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={describedBy} aria-invalid={textRejected || overLimit > 0 || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
       <div className="v2-composer-footer">
         <span className="v2-composer-hint">{suggest ? msg('conv-suggest-hint') : msg('conv-newstmt-hint')}</span>
         <div className="v2-composer-btns">
           <button type="button" className="btn-small btn-muted" onClick={onCancel}>{msg('common-cancel')}</button>
-          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
+          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || overLimit > 0 || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
         </div>
       </div>
       {mutation.error && <p className="error" id={errorId} role="alert">{statementErrorCopy(msg, mutation.error)}</p>}

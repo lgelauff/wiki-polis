@@ -307,6 +307,25 @@ test('seeding and importing are still on this page', async () => {
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
 });
 
+test('a seed statement over 280 characters is kept in full and waits at Add until it fits', async () => {
+  serveWorkspace({pending: [], approved: [], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  // Catches the browser cutting a pasted seed silently (#558).
+  const text = await screen.findByLabelText('Statement text (max 280 characters)', {}, {timeout: 10_000});
+  const add = screen.getByRole('button', {name: 'Add seed statement'});
+  expect(text).not.toHaveAttribute('maxlength');
+  const over = 'x'.repeat(281);
+  fireEvent.change(text, {target: {value: over}});
+  expect(text).toHaveValue(over);
+  expect(add).toBeDisabled();
+  expect(text).toHaveAttribute('aria-invalid', 'true');
+  fireEvent.change(text, {target: {value: over.slice(1)}});
+  expect(add).toBeEnabled();
+  expect(text).not.toHaveAttribute('aria-invalid');
+});
+
 test('a seed statement\'s result and refusal are said under its form, never as a toast', async () => {
   serveWorkspace({pending: [], approved: [], hidden: []});
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
