@@ -595,10 +595,11 @@ manually.
 
 The job keeps running during a deploy. Between the checkout and `flask db upgrade` the code
 expects a newer schema than the database has, so `process-phase-schedules` compares the
-database's Alembic revision with the code's head first: if they differ, it prints
-"Skipping: migrations pending" and exits 0 without touching any conversation. The first run
-after the migration fires whatever came due in the meantime. A skipped run sends no failure email,
-so if a revision with a new migration was deployed without `--migrate`, or its migration failed,
+database's Alembic revision with the code's head first: if the database is behind the code, it
+prints "Skipping: migrations pending" and exits 0 without touching any conversation. The first
+run after the migration fires whatever came due in the meantime. A database the code does not
+know (ahead of it, after a rollback) runs as before. A skipped run sends no failure email, so if
+a revision with a new migration was deployed without `--migrate`, or its migration failed,
 scheduled transitions stay silently paused until the database is at head: run
 `deploy.sh --migrate` again.
 

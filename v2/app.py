@@ -6329,13 +6329,16 @@ def create_app(test_config: dict | None = None) -> Flask:
         # A deploy checks out the new code minutes before it runs `flask db upgrade` (#456).
         # A run in that gap would query columns the database does not have yet; the next
         # run after the migration fires whatever is due, so skip without failing the job.
-        _, current_rev, head_rev = _alembic_revisions()
-        if current_rev != head_rev:
-            message = (f'Skipping: migrations pending (database at {current_rev}, '
-                       f'code expects {head_rev}).')
-            app.logger.warning('process-phase-schedules: %s', message)
-            click.echo(message)
-            return
+        # Only a database *behind* the code skips: one ahead of it (a rollback) or at a
+        # revision the code does not know runs as it did before.
+        alembic_cfg, current_rev, head_rev = _alembic_revisions()
+        if current_rev is not None and current_rev != head_rev:
+            from alembic.script import ScriptDirectory
+            script = ScriptDirectory.from_config(alembic_cfg)
+            if current_rev in {rev.revision for rev in script.iterate_revisions(head_rev, 'base')}:
+                click.echo(f'Skipping: migrations pending (database at {current_rev}, '
+                           f'code expects {head_rev}).')
+                return
         result = _process_due_scheduled_transitions()
         click.echo(
             'Scheduled transitions: '
