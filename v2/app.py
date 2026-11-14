@@ -6221,6 +6221,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     csrf.init_app(app)
     limiter.init_app(app)
 
+    def _alembic_revisions():
+        """(Alembic config, the database's revision, the checked-out code's head revision)."""
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        alembic_cfg = app.extensions['migrate'].migrate.get_config()
+        with db.engine.connect() as _conn:
+            current_rev = MigrationContext.configure(_conn).get_current_revision()
+        head_rev = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+        return alembic_cfg, current_rev, head_rev
+
     @app.cli.command('init-db')
     def init_db_cmd():
         """Initialise or migrate the database. Idempotent.
@@ -6232,14 +6242,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         import sqlalchemy as _sa
         from flask_migrate import upgrade as _upgrade
         from alembic import command as _alembic_cmd
-        from alembic.runtime.migration import MigrationContext
-        from alembic.script import ScriptDirectory
-        migrate_ext = app.extensions.get('migrate')
-        alembic_cfg = migrate_ext.migrate.get_config()
         inspector = _sa.inspect(db.engine)
-        with db.engine.connect() as _conn:
-            current_rev = MigrationContext.configure(_conn).get_current_revision()
-        head_rev = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+        alembic_cfg, current_rev, head_rev = _alembic_revisions()
         if current_rev == head_rev:
             click.echo('Database already at head revision.')
         elif 'participants' not in inspector.get_table_names():
@@ -6322,6 +6326,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():
         """Fire due scheduled active-to-passive phase transitions."""
+        # A deploy checks out the new code minutes before it runs `flask db upgrade` (#456).
+        # A run in that gap would query columns the database does not have yet; the next
+        # run after the migration fires whatever is due, so skip without failing the job.
+        # Only a database *behind* the code skips: one ahead of it (a rollback) or at a
+        # revision the code does not know runs as it did before.
+        alembic_cfg, current_rev, head_rev = _alembic_revisions()
+        if current_rev is not None and current_rev != head_rev:
+            from alembic.script import ScriptDirectory
+            script = ScriptDirectory.from_config(alembic_cfg)
+            if current_rev in {rev.revision for rev in script.iterate_revisions(head_rev, 'base')}:
+                click.echo(f'Skipping: migrations pending (database at {current_rev}, '
+                           f'code expects {head_rev}).')
+                return
         result = _process_due_scheduled_transitions()
         click.echo(
             'Scheduled transitions: '

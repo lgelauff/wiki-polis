@@ -112,6 +112,17 @@ if [ -n "$EXPECTED_REV" ] && [[ "$TARGET_REV" != "$EXPECTED_REV"* ]]; then
   exit 1
 fi
 
+# Files the frontend build rewrites in place (package.json "api:generate").
+# Restore them so a previous build cannot block the checkout; any other
+# local modification still aborts the deploy with git's own message.
+GENERATED_FILES="v2/frontend/src/api/schema.ts"
+for path in $GENERATED_FILES; do
+  if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 && ! git diff --quiet -- "$path"; then
+    echo "    Restoring generated file $path (rewritten by the previous build)"
+    git checkout -- "$path"
+  fi
+done
+
 SELF_HASH_BEFORE=$(git hash-object "$SELF_PATH")
 if [ -n "$PULL_REQUEST" ]; then
   git checkout --detach "$TARGET_REV"
