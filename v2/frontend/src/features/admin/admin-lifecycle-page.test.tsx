@@ -17,6 +17,7 @@ type Lifecycle = components['schemas']['AdminLifecycle'];
 const LIFECYCLE_URL = new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString();
 const TERMINATION_URL = new URL('/api/v1/admin/conversations/7/termination', globalThis.location.origin).toString();
 const ARCHIVE_URL = new URL('/api/v1/admin/conversations/7/archive', globalThis.location.origin).toString();
+const SCHEDULE_URL = new URL('/api/v1/admin/conversations/7/schedule', globalThis.location.origin).toString();
 
 /** An active consultation mid-route: one unmet readiness check, live statistics from an
  *  informed-voting round, and the advanced controls visible. Enough branches in one
@@ -370,6 +371,40 @@ test('a moderator sees no next-phase line when nothing is scheduled, or the sche
     expect(container.querySelector('.admin-scheduled-transition')).toBeNull();
     unmount();
   }
+});
+
+test('an organizer who is not a site admin is offered the schedule, as they are Move on (#305)', async () => {
+  serve({
+    ...lifecycle,
+    operator: {roleLabel: 'Organizer'},
+    schedule: {canSchedule: true, scheduledAt: null, targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false},
+    capabilities: {...lifecycle.capabilities, pause: false, useAdvancedPhases: false, archive: false, previewReport: false},
+  });
+  const {container} = renderConsole();
+
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  expect(container.querySelector('.schedule-card input#scheduled-at')).not.toBeNull();
+});
+
+test.each([
+  ['a cancel that found no schedule left says so', false, true],
+  ['a cancel that cleared the schedule adds no note', true, false],
+] as const)('%s (#344)', async (_name, changed, noted) => {
+  const scheduled: Lifecycle = {...lifecycle, schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false}};
+  const cleared: Lifecycle = {...lifecycle, schedule: {...scheduled.schedule, scheduledAt: null}};
+  let cancelled = false;
+  server.use(http.put(SCHEDULE_URL, () => {
+    cancelled = true;
+    return HttpResponse.json({data: {changed, lifecycle: cleared}});
+  }));
+  serve(scheduled);
+  const {container} = renderConsole();
+
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  within(container.querySelector<HTMLElement>('.schedule-card')!).getByRole('button', {name: testMessages['common-cancel']!}).click();
+  await screen.findByText(testMessages['adminconv-no-schedule']!);
+  expect(cancelled).toBe(true);
+  expect(screen.queryByText(testMessages['adminconv-schedule-nothing-to-cancel']!) !== null).toBe(noted);
 });
 
 test('a site admin can preview the report from the Publish report row while it is unpublished', async () => {

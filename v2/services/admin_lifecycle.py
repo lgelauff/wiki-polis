@@ -108,7 +108,7 @@ def build_admin_lifecycle(
             'canSchedule': (
                 bool(conversation.active)
                 and schedule['can_schedule']
-                and can_administer
+                and can_organize
             ),
             'scheduledAt': _utc_iso(schedule['scheduled_at']),
             'targetKey': schedule['scheduled_target'],
@@ -304,10 +304,12 @@ def set_phase_schedule(
         else:
             session.commit()
         return changed
-    if scheduled_at <= now:
-        raise ScheduleInPast()
+    # Nothing left to schedule is the more fundamental refusal: a stale page submits a
+    # time that has also passed, and "choose a future time" would not help.
     if not schedulable or transition is None:
         raise ScheduleUnavailable()
+    if scheduled_at <= now:
+        raise ScheduleInPast()
     target = transition['target']['key']
     changed = (
         current_at != scheduled_at

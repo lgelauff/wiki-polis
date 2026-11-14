@@ -456,6 +456,55 @@ def test_schedule_api_converges_and_cancels(admin_client, conversation):
     assert cancel.get_json()['data']['lifecycle']['schedule']['scheduledAt'] is None
 
 
+def test_schedule_api_is_an_organizer_control(client, conversation, participant):
+    """Scheduling is a phase control like Move on: the conversation's organizer may set
+    it; a moderator may not, and is not offered it."""
+    conversation.phase_submission = True
+    role = AdminRole(
+        participant_id=participant.id, conversation_id=conversation.id,
+        role='moderator',
+    )
+    db.session.add(role)
+    db.session.commit()
+    login(client, 'testuser')
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/schedule'
+    future = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    body = {'scheduledAt': future.isoformat(), 'frozen': False}
+
+    as_moderator = client.put(endpoint, json=body)
+    moderator_view = client.get(
+        f'/api/v1/admin/conversations/{conversation.id}',
+    ).get_json()['data']
+    role.role = 'organizer'
+    db.session.commit()
+    organizer_view = client.get(
+        f'/api/v1/admin/conversations/{conversation.id}',
+    ).get_json()['data']
+    as_organizer = client.put(endpoint, json=body)
+
+    assert as_moderator.status_code == 403
+    assert moderator_view['schedule']['canSchedule'] is False
+    assert organizer_view['schedule']['canSchedule'] is True
+    assert as_organizer.status_code == 200
+    assert as_organizer.get_json()['data']['changed'] is True
+    db.session.refresh(conversation)
+    assert conversation.scheduled_transition_target == 'featured_selection'
+
+
+def test_schedule_api_reports_no_schedule_before_a_stale_past_time(
+    admin_client, conversation,
+):
+    """A page left open after the schedule fired submits a time that has also passed:
+    the refusal says there is nothing to schedule, not "choose a future time"."""
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/schedule',
+        json={'scheduledAt': '2020-01-01T00:00:00Z', 'frozen': False},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'schedule_unavailable'
+
+
 def test_schedule_api_rejects_unschedulable_and_past_transitions(
     admin_client, conversation,
 ):
@@ -464,6 +513,8 @@ def test_schedule_api_rejects_unschedulable_and_past_transitions(
     unavailable = admin_client.put(
         endpoint, json={'scheduledAt': future.isoformat(), 'frozen': False},
     )
+    conversation.phase_submission = True
+    db.session.commit()
     past = admin_client.put(
         endpoint,
         json={'scheduledAt': '2020-01-01T00:00:00Z', 'frozen': False},

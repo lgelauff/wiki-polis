@@ -834,6 +834,7 @@
     "adminconv-freeze": "Freeze",
     "adminconv-scheduling-unavailable": "Scheduling unavailable.",
     "adminconv-scheduling-why": "Opening an active participant phase still requires the full manual checklist.",
+    "adminconv-schedule-nothing-to-cancel": "There was no scheduled transition left to cancel. It may already have run.",
     "adminconv-advanced-note": "<strong>Advanced.</strong> These toggles act independently and out of order, with no readiness checks — for demos and recovery, not routine runs.",
     "adminconv-phase-submission": "Statement submission (Explore)",
     "adminconv-phase-personal": "Personal results",

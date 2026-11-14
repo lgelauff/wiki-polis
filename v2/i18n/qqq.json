@@ -833,6 +833,7 @@
     "adminconv-freeze": "Button to freeze a scheduled transition.",
     "adminconv-scheduling-unavailable": "Bold label when scheduling a transition is not available.",
     "adminconv-scheduling-why": "Explanation of why scheduling is unavailable.",
+    "adminconv-schedule-nothing-to-cancel": "Muted note on the admin overview of a consultation. Shown after an organizer or site admin cancels a scheduled phase transition with {{msg-proto|common-cancel}} and the server reports that nothing changed: the transition had already run, or someone else had cleared it.\n\nSee also:\n* {{msg-proto|adminconv-no-schedule}}",
     "adminconv-advanced-note": "Warning above the advanced phase toggles (contains bold; no parameters). Keep the HTML and the text inside it.",
     "adminconv-phase-submission": "Advanced toggle: statement submission phase.",
     "adminconv-phase-personal": "Advanced toggle: personal results phase.",

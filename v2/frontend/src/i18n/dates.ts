@@ -52,10 +52,15 @@ export function formatMonthYear(locale: string, value: string): string {
   return format(locale, {month: 'short', year: 'numeric', timeZone: 'UTC'}, value);
 }
 
-/** A moment, "2 Aug 2026, 09:30", in the reader's own timezone: a scheduled phase change
- *  happens at a time of day, and the reader needs it where they are. */
+/** A moment, "2 Aug 2026, 09:30 CEST", in the reader's own timezone: a scheduled phase
+ *  change happens at a time of day, and the reader needs it where they are. The zone is
+ *  named, or the same instant reads as a contradiction next to the admin console's UTC.
+ *  Component options, not dateStyle/timeStyle: Intl refuses timeZoneName alongside those. */
 export function formatDateTime(locale: string, value: string): string {
-  return format(locale, {dateStyle: 'medium', timeStyle: 'short'}, value);
+  return format(locale, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  }, value);
 }
 
 export function useDateFormat() {

@@ -43,8 +43,8 @@ test('renders the public moderation accountability table', async () => {
   // and the machine-readable value dropping out of the <time> element.
   const when = [...document.querySelectorAll('tbody tr td:first-child time')];
   expect(when.map((node) => [node.getAttribute('datetime'), node.textContent])).toEqual([
-    ['2026-08-14T09:30:00Z', '14 Aug 2026, 09:30'],
-    ['2026-08-13T08:15:00Z', '13 Aug 2026, 08:15'],
+    ['2026-08-14T09:30:00Z', '14 Aug 2026, 09:30 UTC'],
+    ['2026-08-13T08:15:00Z', '13 Aug 2026, 08:15 UTC'],
   ]);
   expect(screen.getByText('quiet-otter')).toBeVisible();
   expect(screen.getByText('patient-fox')).toBeVisible();
@@ -99,7 +99,7 @@ test('under qqx, the About page carries no English but the consultation and the 
   // Catches hardcoded copy and any server label (phase, output, scheduled phase) rendered
   // as sent: the fixture's labels are all "SERVER ENGLISH", so one reaching the page shows.
   const page = document.querySelector('.container');
-  expect(untranslatedCopy([page], ['Community strategy', 'quiet-otter', '1 Oct 2026, 12:00'])).toEqual([]);
+  expect(untranslatedCopy([page], ['Community strategy', 'quiet-otter', '1 Oct 2026, 12:00 UTC'])).toEqual([]);
   expect(document.title).toBe('(about-doc-title: Community strategy)');
 });
 
@@ -120,7 +120,7 @@ test('the About page maps the scheduled phase and output names from their identi
   // marker the catalogue does not contain.
   expect(document.body.textContent).not.toContain('SERVER');
   const next = document.querySelector('time[datetime="2026-10-01T12:00:00Z"]')!.closest('p')!;
-  expect(next).toHaveTextContent('Next: Informed opinion on 1 Oct 2026, 12:00.');
+  expect(next).toHaveTextContent('Next: Informed opinion on 1 Oct 2026, 12:00 UTC.');
   expect(screen.getByText(/^Current phase:/).closest('p')).toHaveTextContent('Current phase: Explore');
   const outputs = [...document.querySelectorAll('.landing-section li')].map((node) => node.textContent);
   expect(outputs.at(-1)).toBe('Report — pending');
@@ -174,7 +174,7 @@ test('under qqx, the moderation log carries no English but pseudonyms and modera
   // server sends them. The allowed content is the fixture's data: title, pseudonyms, moderator
   // usernames, and the two timestamps as the en-GB date format writes them.
   expect(untranslatedCopy([document.querySelector('.container')], [
-    'Community strategy', 'quiet-otter', 'patient-fox', 'adminuser', 'mod-kestrel', '14 Aug 2026, 09:30', '13 Aug 2026, 08:15',
+    'Community strategy', 'quiet-otter', 'patient-fox', 'adminuser', 'mod-kestrel', '14 Aug 2026, 09:30 UTC', '13 Aug 2026, 08:15 UTC',
   ])).toEqual([]);
 });
 

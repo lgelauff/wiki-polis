@@ -120,7 +120,7 @@ test('renders the voting workspace from the catalogue English', async () => {
   expect(warning).toHaveTextContent('These are active consultation processes with real responses.');
   // A sentence whose two values are an interface label and a <time> element.
   expect(document.querySelector('.output-context p')?.textContent)
-    .toBe('Next: Arguments on 2 Aug 2026, 09:30.');
+    .toBe('Next: Arguments on 2 Aug 2026, 09:30 UTC.');
   expect(document.querySelector('.output-context time'))
     .toHaveAttribute('title', 'Shown in your local timezone');
   // The document title is an interface frame around an untranslated content value.
@@ -188,7 +188,7 @@ test('renders workspace text from the catalogue, not from source literals', asyn
   expect(within(screen.getByRole('alert')).getByText('CATALOGUE LEAD.').tagName).toBe('STRONG');
   expect(document.querySelector('.output-context em')?.textContent).toBe('Arguments');
   expect(document.querySelector('.output-context p')?.textContent)
-    .toBe('Then Arguments at 2 Aug 2026, 09:30, catalogue-side.');
+    .toBe('Then Arguments at 2 Aug 2026, 09:30 UTC, catalogue-side.');
   expect(document.title).toBe('Workspace for Community strategy');
   expect(screen.queryByRole('button', {name: 'Agree'})).not.toBeInTheDocument();
   expect(screen.queryByText('Unlocks after 1 more response')).not.toBeInTheDocument();
