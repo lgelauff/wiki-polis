@@ -5740,7 +5740,17 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
     statement text, vote values, usernames, xid, or any PII. The row is not redaction-filtered;
     this contract is the control (enforced by tests).
     """
-    actor = getattr(g.get('participant'), 'id', None)
+    participant = g.get('participant')
+    if participant is None and has_request_context():
+        # An ADMIN_USERS admin passes _is_global_admin without g.participant ever being
+        # loaded (#309), so resolve it here rather than record a NULL actor. A failed
+        # lookup must not break the caller, whose action has already committed.
+        try:
+            participant = _current_participant()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('audit actor lookup failed: %s', operation)
+    actor = getattr(participant, 'id', None)
     if actor is None and has_request_context() and session.get('username'):
         # Authenticated admin with no Participant row (env-listed ADMIN_USERS superadmin).
         # Mark the row so a NULL actor is explained, not ambiguous — without storing the
