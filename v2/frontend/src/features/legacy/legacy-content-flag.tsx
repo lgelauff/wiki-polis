@@ -55,17 +55,26 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
 }) {
   const msg = useMessage();
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const triggerRef = useRef<HTMLElement>(null);
   const fieldId = useId().replaceAll(':', '');
   const [category, setCategory] = useState<'personal_attack' | 'privacy' | 'off_topic' | 'other'>('personal_attack');
   const [detail, setDetail] = useState('');
   const [open, setOpen] = useState(false);
+  // The label also shows as a tooltip on keyboard focus and on a tap, where `title` never
+  // shows (#254). After a tap it fades on its own.
+  const [tip, setTip] = useState<'focus' | 'tap' | null>(null);
+  useEffect(() => {
+    if (tip !== 'tap') return;
+    const timeout = globalThis.setTimeout(() => setTip(null), 1500);
+    return () => globalThis.clearTimeout(timeout);
+  }, [tip]);
   const [place, setPlace] = useState<FlagPanelPlacement>({opensRight: false});
   useLayoutEffect(() => {
     const details = detailsRef.current;
-    setPlace(open && details
+    setPlace((open || tip) && details
       ? placeFlagPanel(details.getBoundingClientRect(), clipBounds(details))
       : {opensRight: false});
-  }, [open]);
+  }, [open, tip]);
   // Keyed by every content type, so a new one fails to compile until it has its own label.
   const triggerLabel: Record<ContentType, string> = {
     statement: msg('conv-flag-aria-statement'),
@@ -79,6 +88,9 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
   });
   useEffect(() => {
     if (!mutation.data) return;
+    // The form just hid under the focus: put it back on the trigger, which stays.
+    const active = document.activeElement;
+    if (!active || active === document.body || detailsRef.current?.contains(active)) triggerRef.current?.focus();
     const timeout = globalThis.setTimeout(() => {
       if (detailsRef.current) detailsRef.current.open = false;
       setDetail('');
@@ -87,8 +99,15 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
     return () => globalThis.clearTimeout(timeout);
   }, [mutation.data, mutation.reset]);
   return (
-    <details ref={detailsRef} className={`content-flag${corner ? ' content-flag--corner' : ''}${place.opensRight ? ' content-flag--opens-right' : ''}`} style={place.width === undefined ? undefined : {'--content-flag-width': `${place.width}px`} as CSSProperties} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="content-flag-trigger" aria-label={triggerLabel[target.contentType]} title={triggerLabel[target.contentType]}>
+    <details ref={detailsRef} className={`content-flag${corner ? ' content-flag--corner' : ''}${place.opensRight ? ' content-flag--opens-right' : ''}`} style={place.width === undefined ? undefined : {'--content-flag-width': `${place.width}px`} as CSSProperties} onToggle={(event) => setOpen(event.currentTarget.open)} onKeyDown={(event) => {
+      if (event.key !== 'Escape' || !event.currentTarget.open) return;
+      event.currentTarget.open = false;
+      triggerRef.current?.focus();
+    }}>
+      <summary ref={triggerRef} className={`content-flag-trigger${tip ? ' content-flag-trigger--tip' : ''}`} aria-label={triggerLabel[target.contentType]} title={triggerLabel[target.contentType]}
+        onPointerDown={(event) => { if (event.pointerType !== 'mouse') setTip('tap'); }}
+        onFocus={(event) => { if (event.currentTarget.matches(':focus-visible')) setTip('focus'); }}
+        onBlur={() => setTip((current) => current === 'focus' ? null : current)}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21V4a1 1 0 0 1 1-1h11.5a1 1 0 0 1 .8 1.6L14 9l3.3 4.4a1 1 0 0 1-.8 1.6H5" /></svg>
       </summary>
       <form hidden={Boolean(mutation.data)} onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
@@ -100,7 +119,8 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
         <textarea id={`${fieldId}-detail`} name="detail" rows={2} maxLength={1000} required={category === 'other'} placeholder={category === 'other' ? msg('conv-flag-details-required-placeholder') : msg('conv-flag-details-placeholder')} value={detail} onChange={(event) => setDetail(event.target.value)} />
         <button type="submit" className="btn-small" disabled={mutation.isPending}>{msg('conv-flag-send')}</button>
       </form>
-      {mutation.data && <p className="content-flag-thanks" role="status">{msg('conv-flag-thanks')}</p>}
+      {/* Always present, so screen readers announce the thanks when it is filled in (#254). */}
+      <p className={mutation.data ? 'content-flag-thanks' : 'sr-only'} role="status">{mutation.data ? msg('conv-flag-thanks') : null}</p>
     </details>
   );
 }

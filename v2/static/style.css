@@ -308,7 +308,7 @@ header {
 .content-flag {
   display: inline-block;
   position: relative;
-  margin-left: 6px;
+  margin-inline-start: 6px;
   font-size: 12px;
 }
 
@@ -316,7 +316,7 @@ header {
   position: absolute;
   top: 14px;
   right: 16px;
-  margin-left: 0;
+  margin-inline-start: 0;
   z-index: 5;
 }
 
@@ -345,6 +345,31 @@ header {
 
 .content-flag-trigger:hover {
   background: var(--hairline);
+}
+
+/* The label as a tooltip on keyboard focus and after a tap (#254), above the trigger so it
+   stays clear of the panel; it sides with the panel so it stays on screen too. */
+.content-flag-trigger--tip::after {
+  content: attr(aria-label);
+  position: absolute;
+  z-index: 21;
+  bottom: calc(100% + 4px);
+  right: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: var(--content-flag-width, 220px);
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.content-flag--opens-right .content-flag-trigger--tip::after {
+  right: auto;
+  left: 0;
 }
 
 .content-flag summary::-webkit-details-marker {
@@ -2352,6 +2377,9 @@ a { color: var(--pass); }
   padding: 4px;
   border-radius: 10px;
   width: fit-content;
+  /* At phone width the tabs wrap instead of widening the page (#254). */
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .tab-btn {
@@ -3620,7 +3648,8 @@ a { color: var(--pass); }
   position: relative;
   border: 1px solid var(--hairline);
   border-radius: 14px;
-  overflow: hidden;
+  /* Clip sideways only: a flag panel opened on the last argument may hang below the card (#254). */
+  overflow-x: clip;
   background: var(--surface);
   box-shadow: 0 1px 2px rgba(0,0,0,.02), 0 14px 36px -22px rgba(0,0,0,.10);
   margin-bottom: 1rem;
@@ -3633,6 +3662,8 @@ a { color: var(--pass); }
   padding: 18px 22px;
   background: var(--surface2);
   border-bottom: 1px solid var(--hairline);
+  /* The panel no longer clips its corners vertically: round its first and last bands. */
+  border-radius: 13px 13px 0 0;
   align-items: flex-start;
   flex-wrap: wrap;
 }
@@ -3887,6 +3918,7 @@ a { color: var(--pass); }
   padding: 14px 20px;
   background: var(--surface2);
   border-top: 1px solid var(--hairline);
+  border-radius: 0 0 13px 13px;
 }
 .at-navbtn {
   display: inline-flex;
@@ -3950,6 +3982,11 @@ a { color: var(--pass); }
   .at-rule  { display: none; }
   .at-col + .at-col { border-top: 1px solid var(--hairline); }
   .at-navbtn { padding: 8px 12px; font-size: 12px; }
+  /* Narrower than these rows, the card pushed the page sideways (#254): the statement
+     column may shrink, and the circles take their own row above Previous and Next. */
+  .at-head-main { min-width: 0; }
+  .at-nav { flex-wrap: wrap; }
+  .at-circles { order: -1; flex: 1 0 100%; justify-content: center; flex-wrap: wrap; }
 }
 
 /* ── Identity-reveal timeline (#70) ───────────────────────────────────────── */
