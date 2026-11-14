@@ -21,6 +21,7 @@ const preview: components['schemas']['ResultsReport'] = {
   resultsAvailable: false,
   openedAt: '2026-05-01T12:00:00Z',
   closedAt: null,
+  phases: [],
   context: {phase: 'x', status: 'provisional', method: 'x'},
   participation: {initialRound: null, informedRound: null, matchedRounds: null},
   dataAvailability: {detailedCounts: false, opinionGroups: false, personalLens: false, responseFloor: 10},

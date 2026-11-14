@@ -5,7 +5,7 @@ import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {usePercentFormat} from '../../i18n/numbers';
-import {outputMethod, outputPhase} from '../../i18n/server-labels';
+import {outputMethod, outputPhase, phaseLabel} from '../../i18n/server-labels';
 import {rankOpinionStatements} from './statement-rankings';
 
 type Report = components['schemas']['ResultsReport'];
@@ -57,12 +57,21 @@ function ProcessTimeline({report}: {report: Report}) {
         <span className="report-timeline-label">{msg('report-process-opened')}</span>
         <span className="report-timeline-value">{dates.date(report.openedAt)}</span>
       </div>
-      {[msg('report-process-submission'), msg('report-process-argmap'), msg('report-process-informed')].map((label) => (
-        <div className="report-timeline-item report-timeline-item--placeholder" key={label}>
-          <span className="report-timeline-label">{label}</span>
-          <span className="report-timeline-value report-placeholder-inline">{msg('report-process-dates-tbd')}</span>
-        </div>
-      ))}
+      {report.phases.map((phase) => {
+        // A phase reached before phase changes were recorded has no dates (#599).
+        const undated = phase.state === 'ended' && !(phase.startedAt && phase.endedAt);
+        const value = phase.state === 'not_started' ? msg('report-process-not-started')
+          : phase.state === 'running' ? (phase.startedAt
+            ? msg('report-process-running-since', dates.date(phase.startedAt))
+            : msg('report-process-running'))
+          : undated ? msg('report-process-dates-tbd')
+          : msg('report-process-dates', dates.date(phase.startedAt!), dates.date(phase.endedAt!));
+        const muted = phase.state === 'not_started' || undated;
+        return <div className={`report-timeline-item${muted ? ' report-timeline-item--placeholder' : ''}`} key={phase.key}>
+          <span className="report-timeline-label">{phaseLabel(msg, phase.key)}</span>
+          <span className={`report-timeline-value${muted ? ' report-placeholder-inline' : ''}`}>{value}</span>
+        </div>;
+      })}
       {report.closedAt && <div className="report-timeline-item">
         <span className="report-timeline-label">{msg('report-process-closed')}</span>
         <span className="report-timeline-value">{dates.date(report.closedAt)}</span>

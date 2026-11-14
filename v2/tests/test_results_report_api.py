@@ -547,6 +547,7 @@ def test_preliminary_results_order_does_not_depend_on_cross_round_shift(
         about_link='/about',
         identity_reveal_link=None,
         full_view=False,
+        phases=[],
     )
 
     # Identical informed tallies must not let different P2→P6 shifts choose which
