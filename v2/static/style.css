@@ -347,6 +347,31 @@ header {
   background: var(--hairline);
 }
 
+/* The label as a tooltip on keyboard focus and after a tap (#254), above the trigger so it
+   stays clear of the panel; it sides with the panel so it stays on screen too. */
+.content-flag-trigger--tip::after {
+  content: attr(aria-label);
+  position: absolute;
+  z-index: 21;
+  bottom: calc(100% + 4px);
+  right: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: var(--content-flag-width, 220px);
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.content-flag--opens-right .content-flag-trigger--tip::after {
+  right: auto;
+  left: 0;
+}
+
 .content-flag summary::-webkit-details-marker {
   display: none;
 }

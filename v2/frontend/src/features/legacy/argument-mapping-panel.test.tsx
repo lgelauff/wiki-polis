@@ -2,7 +2,7 @@ import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {App} from '../../app';
@@ -278,4 +278,76 @@ test("an argument's flag panel opens toward the room it has, and narrows when it
   } finally {
     Reflect.deleteProperty(document.documentElement, 'clientWidth');
   }
+});
+
+const argumentFlag = () => document.querySelector<HTMLDetailsElement>('[data-arg-id="92"] details.content-flag')!;
+
+test('Escape closes the flag panel and puts focus back on its trigger (#254)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  const flag = argumentFlag();
+  flag.open = true;
+  const box = within(flag).getByRole('textbox');
+  box.focus();
+  fireEvent.keyDown(box, {key: 'Escape'});
+  expect(flag.open).toBe(false);
+  expect(document.activeElement).toBe(flag.querySelector('summary'));
+});
+
+test('after Send, focus is on the trigger and the thanks lands in a live region that was already there (#254)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  const flag = argumentFlag();
+  flag.open = true;
+  // A region added together with its text is often not read out: it must exist, empty, first.
+  const region = within(flag).getByRole('status');
+  expect(region).toBeEmptyDOMElement();
+  const send = within(flag).getByRole('button');
+  send.focus();
+  fireEvent.submit(flag.querySelector('form')!);
+  await waitFor(() => expect(region).not.toBeEmptyDOMElement());
+  expect(within(flag).getByRole('status')).toBe(region);
+  expect(document.activeElement).toBe(flag.querySelector('summary'));
+});
+
+test("the flag's label shows as a tooltip after a tap and on keyboard focus, sided like the panel (#254)", async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  // jsdom has no layout: the trigger near the left of a clipping card, as on a phone.
+  const statementPanel = document.getElementById('fs-8')!;
+  statementPanel.style.overflowX = 'clip';
+  statementPanel.getBoundingClientRect = () => DOMRect.fromRect({x: 10, y: 0, width: 300, height: 600});
+  const flag = argumentFlag();
+  flag.getBoundingClientRect = () => DOMRect.fromRect({x: 100, y: 0, width: 22, height: 22});
+  const trigger = flag.querySelector('summary')!;
+  const tipShown = () => trigger.classList.contains('content-flag-trigger--tip');
+
+  // A mouse has `title`; no extra tooltip.
+  fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+  expect(tipShown()).toBe(false);
+
+  // A tap shows it, on the side with room, and does not stop the tap from opening the panel.
+  fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+  await waitFor(() => expect(tipShown()).toBe(true));
+  expect(flag).toHaveClass('content-flag--opens-right');
+  fireEvent.click(trigger);
+  await waitFor(() => expect(flag.open).toBe(true));
+  // ...and it goes away by itself.
+  await waitFor(() => expect(tipShown()).toBe(false), {timeout: 3000});
+
+  // Keyboard focus shows it until focus leaves. jsdom neither focuses a <summary> nor knows
+  // which focus is from the keyboard, so it is told the focus is :focus-visible.
+  flag.open = false;
+  const matches = trigger.matches.bind(trigger);
+  vi.spyOn(trigger, 'matches').mockImplementation((selector) => selector === ':focus-visible' || matches(selector));
+  fireEvent.focus(trigger);
+  await waitFor(() => expect(tipShown()).toBe(true));
+  fireEvent.blur(trigger);
+  await waitFor(() => expect(tipShown()).toBe(false));
 });
