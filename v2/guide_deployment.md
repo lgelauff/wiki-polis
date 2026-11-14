@@ -593,6 +593,15 @@ step is non-fatal but loud — if `toolforge jobs load` fails, the script prints
 continues the web deploy, but scheduled phase transitions won't fire until the job is reloaded
 manually.
 
+The job keeps running during a deploy. Between the checkout and `flask db upgrade` the code
+expects a newer schema than the database has, so `process-phase-schedules` compares the
+database's Alembic revision with the code's head first: if they differ, it prints
+"Skipping: migrations pending" and exits 0 without touching any conversation. The first run
+after the migration fires whatever came due in the meantime. A skipped run sends no failure email,
+so if a revision with a new migration was deployed without `--migrate`, or its migration failed,
+scheduled transitions stay silently paused until the database is at head: run
+`deploy.sh --migrate` again.
+
 The script also builds the React frontend on every deploy. When `npm` is available it builds
 directly; on a Toolforge bastion, where application runtimes are intentionally absent, it
 automatically opens an ephemeral `node20` runtime shell and builds there. Toolforge mounts the
@@ -819,6 +828,7 @@ export DATABASE_URL
 | `webservice restart` fails | Must run from `~`, not from inside the repo |
 | Frontend build dies with "JavaScript heap out of memory" in the `node20` shell pod | The default pod is too small for the SPA build; `deploy.sh` asks for `--mem 2Gi`. If a deploy stopped there, rerun the build by hand with the same flag, then `toolforge jobs load ~/wiki-polis/jobs.yaml` and restart the webservice |
 | A change to `deploy.sh` itself had no effect on the deploy that brought it | bash keeps reading the copy of the script it started with. `deploy.sh` now notices when the checkout changed it and restarts itself once (`DEPLOY_REEXEC=1`), pinned to the same revision with `--expect` |
+| `error: Your local changes to the following files would be overwritten by checkout: v2/frontend/src/api/schema.ts` | The frontend build regenerates that tracked file in place (`api:generate`). `deploy.sh` now restores it before switching revisions. Any other file named in that message is a local edit: commit, stash or discard it by hand, then deploy again |
 | No SQLite CLI on Toolforge | Use `python3 -c 'import sqlite3; ...'` if needed |
 | Replica DBs unavailable locally | `get_polis_stats()` already handles missing `POLIS_DATABASE_URL` gracefully |
 | "lseek: Illegal seek" in logs | uWSGI stdout rotation noise — safe to ignore |
