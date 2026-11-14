@@ -258,7 +258,8 @@ test('each progress circle is a button that names its state and marks the shown 
 });
 
 /** The colour tokens the circles paint with, as style.css's :root defines them. jsdom applies
- *  no stylesheet and vite will not serve style.css as text to the tests, so they are copied. */
+ *  no stylesheet and vite will not serve style.css as text to the tests, so they are copied;
+ *  v2/tests/test_argument_controls_css.py checks the copy still matches style.css. */
 const TOKENS: Record<string, string> = {
   '--ink': '#0c0c0e', '--surface': '#ffffff', '--pass': '#3d6dba', '--spot': '#b45309', '--blue-dark': '#2a4f8a',
 };
@@ -268,7 +269,7 @@ function resolve(paint: string | null): string {
   const variable = /^var\((--[\w-]+)/.exec(paint)?.[1];
   const value = variable ? TOKENS[variable] : paint;
   if (!value) throw new Error(`no token for ${paint}`);
-  return value === '#fff' ? '#ffffff' : value;
+  return value;
 }
 
 function contrast(first: string, second: string): number {
@@ -297,5 +298,10 @@ test('the number in each progress circle meets text contrast against what is beh
     const half = circle.querySelector('path') !== null;
     const backing = half ? text.getAttribute('stroke') : circle.querySelector('circle')!.getAttribute('fill');
     expect(contrast(resolve(text.getAttribute('fill')), resolve(backing))).toBeGreaterThanOrEqual(4.5);
+    if (half) {
+      // The halo is drawn under the number and wide enough to stand on.
+      expect(text).toHaveAttribute('paint-order', 'stroke');
+      expect(Number(text.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(2);
+    }
   }
 });

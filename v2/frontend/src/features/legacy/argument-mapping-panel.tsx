@@ -94,7 +94,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
 
   return (
     <div className="contribute-wrapper" data-state={state} data-side={side} data-fs={featuredId}>
-      <button className={`at-contribute at-contribute--idle contribute-affordance contribute-affordance--${side}`} type="button" onClick={compose}>
+      <button className="at-contribute at-contribute--idle contribute-affordance" type="button" onClick={compose}>
         <span className="at-contribute-glyph" style={{background: side === 'pro' ? 'rgba(21,115,74,.15)' : 'rgba(178,58,58,.15)', color: side === 'pro' ? 'var(--agree)' : 'var(--disagree)', fontWeight: 700}} aria-hidden="true">{copy.sign}</span>
         {text.add}
       </button>
@@ -236,7 +236,7 @@ function Circle({state, number, current, onClick}: {state: 'none' | 'half' | 'co
         <circle cx="18" cy="18" r="15" fill={state === 'complete' ? 'var(--spot)' : 'var(--surface)'} stroke={current ? 'var(--ink)' : state === 'none' ? 'var(--muted)' : 'var(--pass)'} strokeWidth={current ? 3 : 2} />
         {state === 'half' && <path d="M18 3 A15 15 0 0 0 18 33 Z" fill="var(--spot)" />}
         {/* White on the amber fill; on the half fill the number straddles amber and white, so it is dark with a white halo. */}
-        <text x="18" y="22" textAnchor="middle" className="at-circle-label" fill={state === 'complete' ? '#fff' : state === 'half' ? 'var(--ink)' : 'var(--pass)'} stroke={state === 'half' ? 'var(--surface)' : undefined} strokeWidth={state === 'half' ? 3 : undefined} paintOrder="stroke">{number}</text>
+        <text x="18" y="22" textAnchor="middle" className="at-circle-label" fill={state === 'complete' ? 'var(--surface)' : state === 'half' ? 'var(--ink)' : 'var(--pass)'} stroke={state === 'half' ? 'var(--surface)' : undefined} strokeWidth={state === 'half' ? 3 : undefined} paintOrder="stroke">{number}</text>
       </svg>
     </button>
   );
