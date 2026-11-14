@@ -124,7 +124,7 @@ def test_seed_derivative_route_records_provenance_and_audit(client, app):
     from db import AuditEvent
     _login_admin(client, app)
     conv_id = _conv(app, 'provseed')
-    with patch('app.PolisServerClient.add_seed_return_id', return_value=99) as add_id, \
+    with patch('app.PolisServerClient.add_seed', return_value=(99, True)) as add_id, \
          patch('app._statement_text_map', return_value={11: 'parent text'}):
         r = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
                         json={'text': 'a corrected statement', 'derivedFromId': 11})
@@ -144,7 +144,7 @@ def test_seed_derivative_unknown_tid_is_rejected(client, app):
     _login_admin(client, app)
     conv_id = _conv(app, 'provbad')
     with patch('app._statement_text_map', return_value={5: 'a real one'}), \
-         patch('app.PolisServerClient.add_seed_return_id') as add_id:
+         patch('app.PolisServerClient.add_seed') as add_id:
         resp = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
                            json={'text': 'x', 'derivedFromId': 999})
     # Checking the rejection is what keeps the two negative assertions below
@@ -160,7 +160,7 @@ def test_plain_seed_route_writes_no_provenance(client, app):
     from unittest.mock import patch
     _login_admin(client, app)
     conv_id = _conv(app, 'provplain')
-    with patch('app.PolisServerClient.add_seed'):
+    with patch('app.PolisServerClient.add_seed', return_value=(98, True)):
         resp = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
                            json={'text': 'just a new one', 'derivedFromId': None})
     assert resp.status_code == 201                    # the seed really was accepted

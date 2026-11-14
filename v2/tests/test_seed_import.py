@@ -97,7 +97,7 @@ def _mock_polis(add_seed_side_effect=None, existing_statements=_UNSET):
                 successes += 1
             except PolisServerError as exc:
                 failures.append((text, exc))
-        return successes, failures
+        return successes, failures, 0
 
     mock_client.bulk_add_seeds.side_effect = _bulk_add_seeds
     if existing_statements is _UNSET:
@@ -465,7 +465,7 @@ def test_partial_polis_failure_still_imports_others(admin_client, conv):
 def test_outcome_counts_successes_and_upstream_skips_together(admin_client, conv):
     """The banner read "2 imported - 1 skipped"; those two numbers are the outcome."""
     def bulk_side_effect(conv_id, texts):
-        return len(texts) - 1, [(texts[-1], PolisServerError('already exists'))]
+        return len(texts) - 1, [(texts[-1], PolisServerError('already exists'))], 0
 
     with _mock_polis() as mock:
         mock.return_value.bulk_add_seeds.side_effect = bulk_side_effect
