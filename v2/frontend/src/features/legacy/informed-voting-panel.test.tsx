@@ -251,6 +251,10 @@ test('a returning participant does not resume on a card that cannot be voted', a
   await screen.findByText(STATEMENT);
 
   expect(shown()).toEqual([31]);
+  // Skipped, but not claimed as answered: it was never voted.
+  const card = panel()!.querySelector('.p6-card[data-fs-id="33"]')!;
+  expect(card).not.toHaveClass('p6-card--done');
+  expect(card.querySelector('.p6-answered-note')).not.toBeVisible();
 });
 
 test('a deck whose only open card cannot be voted counts as finished', async () => {
@@ -281,19 +285,46 @@ test('the last answer gives way to the completion panel, after the confirmation 
   fireEvent.click(cardButton(31, 'Agree'));
   expect(await screen.findByText('Agreed')).toBeVisible();
   expect(shown()).toEqual([31]);
-  expect(await screen.findByRole('heading', {name: "You've given your informed opinion."})).toBeVisible();
+  const heading = await screen.findByRole('heading', {name: "You've given your informed opinion."});
+  expect(heading).toBeVisible();
   expect(panel()!.querySelector('.p6-card')).toBeNull();
+  // The button that had focus went with the deck; focus lands on the completion heading.
+  await waitFor(() => expect(heading).toHaveFocus());
+});
+
+test('a finished deck shows a card again when a refetch makes one votable', async () => {
+  // A statement initialised after the participant finished: its card becomes votable.
+  let reads = 0;
+  const client = createQueryClient();
+  server.use(
+    http.get(url('/api/v1/conversations/community-strategy/workspace'), () => HttpResponse.json({data: workspace()})),
+    http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => {
+      reads += 1;
+      return deckResponse([answered, {...unvotable, canVote: reads > 1}]);
+    }),
+  );
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/informed-voting']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByRole('heading', {name: "You've given your informed opinion."});
+
+  await client.invalidateQueries({queryKey: ['informed-voting']});
+  await client.refetchQueries();
+  await waitFor(() => expect(panel()!.querySelector('.p6-card[data-fs-id="33"]')).not.toBeNull());
+  expect(screen.queryByRole('heading', {name: "You've given your informed opinion."})).toBeNull();
 });
 
 test('a deck that shrinks under the current card still shows a card and its navigation', async () => {
   // The advance after the vote heads for the third card; the refetch the vote triggers has
-  // lost it, as when a moderator unfeatures statements mid-session.
+  // lost the card before it, so the deck is one shorter (a statement unfeatured mid-session).
   let reads = 0;
   server.use(
     http.get(url('/api/v1/conversations/community-strategy/workspace'), () => HttpResponse.json({data: workspace()})),
     http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => {
       reads += 1;
-      return deckResponse(reads === 1 ? [answered, unanswered, later] : [answered]);
+      return deckResponse(reads === 1 ? [answered, unanswered, later] : [answered, later]);
     }),
     acceptVote(31),
   );
@@ -306,8 +337,8 @@ test('a deck that shrinks under the current card still shows a card and its navi
 
   fireEvent.click(cardButton(31, 'Agree'));
   await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
-  // Past the advance, which targeted index 2 of a deck that now has one card.
+  // Past the advance, which targeted index 2 of a deck that now has two cards.
   await new Promise((resolve) => setTimeout(resolve, 600));
-  expect(shown()).toEqual([32]);
-  expect(screen.getByRole('button', {name: 'Previous statement'})).toBeInTheDocument();
+  expect(shown()).toEqual([34]);
+  expect(cardButton(34, 'Previous statement')).toBeEnabled();
 });

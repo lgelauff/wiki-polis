@@ -70,7 +70,9 @@ function Completion({workspace}: {workspace: Workspace}) {
   const deliberationOpen = workspace.tabs.some((tab) => tab.key === 'vote' || tab.key === 'arguments');
   return (
     <div className="p6-done">
-      <h2 className="p6-done-heading">{msg('conv-p6-done-heading')}</h2>
+      {/* Focusable so that finishing the deck can move focus here: the vote button that
+          had it is gone with the deck. */}
+      <h2 className="p6-done-heading" tabIndex={-1}>{msg('conv-p6-done-heading')}</h2>
       {deliberationOpen ? (
         <p className="p6-done-text">{msg('conv-p6-done-open')}</p>
       ) : workspace.status === 'open' ? (
@@ -111,10 +113,15 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
   // Likewise: a deck the participant already finished should open on its completion
-  // panel rather than on card 1 of 3 with no sign anything happened.
-  const [done, setDone] = useState(() => (
-    data.cards.some((card) => card.canVote) && data.cards.every((card) => !card.canVote || card.voted)
+  // panel rather than on card 1 of 3 with no sign anything happened. Worked out from the
+  // deck on every render, not stored, so a refetch that brings a newly votable card
+  // (a statement initialised mid-round) shows that card again.
+  const done = data.cards.some((card) => card.canVote) && data.cards.every((card) => (
+    !card.canVote || card.voted || terminalIds.has(card.featuredStatementId)
   ));
+  // True only in the pause after the last answer, so its confirmation is seen before the
+  // deck gives way to the completion panel.
+  const [finishing, setFinishing] = useState(false);
   const advanceTimer = useRef<number | null>(null);
   // Clamped on read: a refetch can return a shorter deck (a statement unfeatured
   // mid-session), and an index past the end hides every card, navigation included (#319).
@@ -138,6 +145,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       putInformedVote(workspace.slug, card.featuredStatementId, {choice}, csrfToken)
     ),
     onSuccess: (receipt) => {
+      if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
       const nextTerminal = new Set(terminalIds).add(receipt.featuredStatementId);
       setVotes((existing) => ({...existing, [receipt.featuredStatementId]: receipt.choice}));
       setTerminalIds(nextTerminal);
@@ -168,10 +176,12 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       } else {
         // The last answer: the deck gives way to the completion panel, after the same pause
         // as an advance so the confirmation badge is seen first.
+        setFinishing(true);
         advanceTimer.current = globalThis.setTimeout(() => {
-          setDone(true);
+          setFinishing(false);
           globalThis.requestAnimationFrame(() => {
             document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
+            document.querySelector<HTMLElement>('.p6-done-heading')?.focus({preventScroll: true});
           });
         }, 400);
       }
@@ -187,7 +197,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   // A finished deck shows only its completion panel: card 1 with live vote buttons above
   // "You've given your informed opinion" invited overwriting a recorded vote (#319).
   return <>
-    {!done && data.cards.map((card, position) => {
+    {(!done || finishing) && data.cards.map((card, position) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
       // Answered in an earlier visit: the server says there is a vote, but the read
@@ -238,6 +248,6 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
         </div>
       </div>;
     })}
-    {done && <Completion workspace={workspace} />}
+    {done && !finishing && <Completion workspace={workspace} />}
   </>;
 }

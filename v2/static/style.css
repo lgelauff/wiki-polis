@@ -3202,9 +3202,13 @@ a { color: var(--pass); }
   .p6-statement-col {
     min-width: 0;
   }
+  .p6-card .p6-vote-row {
+    gap: 6px;
+  }
   .p6-card .vote-choice {
     min-width: 0;
-    padding: 12px 8px;
+    gap: 6px;
+    padding: 12px 4px;
   }
   .p6-args-panel {
     order: 1;  /* arguments follow statement on mobile — read statement first, then consider arguments */
