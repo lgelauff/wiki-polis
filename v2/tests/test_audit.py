@@ -190,6 +190,21 @@ def test_env_admin_without_participant_row_stays_env_admin(client, app, monkeypa
     assert 'EnvAdmin' not in blob
 
 
+def test_record_audit_survives_a_failed_actor_lookup(app, monkeypatch):
+    import app as app_module
+
+    def _boom():
+        raise RuntimeError('db down')
+    monkeypatch.setattr(app_module, '_current_participant', _boom)
+    with app.test_request_context('/'):
+        from flask import session
+        session['username'] = 'EnvAdmin'
+        app_module.record_audit('phase.set', conv_id=None)
+        row = AuditEvent.query.one()
+        assert row.actor_participant_id is None
+        assert row.detail == {'actor_kind': 'env_admin'}
+
+
 def test_record_audit_outside_a_request_has_no_actor(app):
     from app import record_audit
     with app.app_context():
