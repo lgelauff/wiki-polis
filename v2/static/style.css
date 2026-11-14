@@ -3196,11 +3196,30 @@ a { color: var(--pass); }
 
 /* Mobile: stack columns vertically */
 @media (max-width: 640px) {
+  /* minmax(0, …) and min-width: 0 let a track shrink below its content's min-content
+     width; with a bare 1fr the three vote buttons pushed the card past a 375px screen
+     and clipped Disagree (#355). */
+  .p6-card {
+    padding: 20px 16px;
+  }
   .p6-card-inner {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .p6-statement-col {
+    min-width: 0;
+  }
+  .p6-card .p6-vote-row {
+    gap: 6px;
+  }
+  .p6-card .vote-choice {
+    min-width: 0;
+    gap: 6px;
+    padding: 12px 4px;
   }
   .p6-args-panel {
     order: 1;  /* arguments follow statement on mobile — read statement first, then consider arguments */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-width: 0;
   }
 }
 

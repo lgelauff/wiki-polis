@@ -843,11 +843,12 @@ test('completes informed voting through the legacy workspace panel', async () =>
   expect(screen.getByText(/independent budgets/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
 
+  // The confirmation first; then the finished deck gives way to the completion panel.
+  expect(await screen.findByRole('alert')).toHaveTextContent('Agreed');
   expect(await screen.findByRole('heading', {
     name: "You've given your informed opinion.",
   })).toBeVisible();
   expect(screen.getByText(/responses are recorded under pseudonym/)).toHaveTextContent('quiet-otter');
-  expect(screen.getByRole('alert')).toHaveTextContent('Agreed');
 });
 
 test('routes preliminary results through the legacy workspace tab', async () => {
