@@ -321,6 +321,7 @@ test('a seed statement over 280 characters is kept in full and waits at Add unti
   expect(text).toHaveValue(over);
   expect(add).toBeDisabled();
   expect(text).toHaveAttribute('aria-invalid', 'true');
+  expect(document.getElementById('seed-count')).not.toHaveTextContent('281 / 280');
   fireEvent.change(text, {target: {value: over.slice(1)}});
   expect(add).toBeEnabled();
   expect(text).not.toHaveAttribute('aria-invalid');
