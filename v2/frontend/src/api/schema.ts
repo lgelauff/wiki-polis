@@ -2612,6 +2612,8 @@ export interface components {
             openedAt: string;
             /** Format: date-time */
             closedAt: string | null;
+            /** @description One row per phase on the consultation's route, in route order. Preparation and the phases the route skips are left out. The dates come from the audit log (#599). */
+            phases: components["schemas"]["ResultsReportPhase"][];
             context: {
                 phase: string;
                 /** @enum {string} */
@@ -2643,6 +2645,22 @@ export interface components {
                 revealState: "pending" | "open" | "revealed" | "expired" | null;
             };
             links: components["schemas"]["ResultsLinks"];
+        };
+        ResultsReportPhase: {
+            /** @enum {string} */
+            key: "submission" | "featured_selection" | "argument_mapping" | "cleanup" | "informed_voting" | "public_results";
+            /** @enum {string} */
+            state: "not_started" | "running" | "ended";
+            /**
+             * Format: date-time
+             * @description Null when the phase has not started, or when its start was not recorded.
+             */
+            startedAt: string | null;
+            /**
+             * Format: date-time
+             * @description Null when the phase has not ended, or when its end was not recorded.
+             */
+            endedAt: string | null;
         };
         ResultsStatement: {
             featuredStatementId: number;

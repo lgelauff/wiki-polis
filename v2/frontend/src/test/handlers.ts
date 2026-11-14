@@ -587,6 +587,7 @@ export const handlers = [
         resultsAvailable: true,
         openedAt: '2026-05-01T12:00:00Z',
         closedAt: '2026-07-01T12:00:00Z',
+        phases: [],
         context: {
           phase: 'Publish',
           status: 'final',

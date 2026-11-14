@@ -2588,7 +2588,7 @@
       },
       "ResultsReport": {
         "type": "object",
-        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
+        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "phases", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string"},
@@ -2597,6 +2597,11 @@
           "resultsAvailable": {"type": "boolean"},
           "openedAt": {"type": "string", "format": "date-time"},
           "closedAt": {"type": ["string", "null"], "format": "date-time"},
+          "phases": {
+            "type": "array",
+            "description": "One row per phase on the consultation's route, in route order. Preparation and the phases the route skips are left out. The dates come from the audit log (#599).",
+            "items": {"$ref": "#/components/schemas/ResultsReportPhase"}
+          },
           "context": {
             "type": "object",
             "required": ["phase", "status", "method"],
@@ -2650,6 +2655,17 @@
             }
           },
           "links": {"$ref": "#/components/schemas/ResultsLinks"}
+        }
+      },
+      "ResultsReportPhase": {
+        "type": "object",
+        "required": ["key", "state", "startedAt", "endedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string", "enum": ["submission", "featured_selection", "argument_mapping", "cleanup", "informed_voting", "public_results"]},
+          "state": {"type": "string", "enum": ["not_started", "running", "ended"]},
+          "startedAt": {"type": ["string", "null"], "format": "date-time", "description": "Null when the phase has not started, or when its start was not recorded."},
+          "endedAt": {"type": ["string", "null"], "format": "date-time", "description": "Null when the phase has not ended, or when its end was not recorded."}
         }
       },
       "ResultsStatement": {

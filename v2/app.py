@@ -67,6 +67,7 @@ from services.identity_reveal import (
 )
 from services.informed_voting import build_informed_voting_state
 from services import reporting_rules
+from services.phase_timeline import PHASE_OPERATIONS, build_phase_timeline
 from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
@@ -3329,6 +3330,25 @@ def _informed_round_open(conv: Conversation) -> bool:
     return bool(conv.phase_informed_voting and not conv.closed_at)
 
 
+def _report_phase_timeline(conv: Conversation) -> list[dict]:
+    """The report's Process timeline (#599): each route phase's dates, from the audit log."""
+    events = (
+        db.session.query(
+            AuditEvent.ts, AuditEvent.operation, AuditEvent.target_id, AuditEvent.detail,
+        )
+        .filter(
+            AuditEvent.conversation_id == conv.id,
+            AuditEvent.operation.in_(PHASE_OPERATIONS),
+            AuditEvent.outcome == 'ok',
+        )
+        .order_by(AuditEvent.ts, AuditEvent.id)
+        .all()
+    )
+    return build_phase_timeline(
+        conversation=conv, route=_phase_sequence_for(conv), events=events,
+    )
+
+
 def _results_report_api_payload(slug: str) -> dict:
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
@@ -3377,6 +3397,7 @@ def _results_report_api_payload(slug: str) -> dict:
         # counts, groups); everyone else the public one (owner, 2026-10-31). No one gets a
         # personalised view of someone else's.
         full_view=participation is not None or _can_organize(conv, participant),
+        phases=_report_phase_timeline(conv),
     )
 
 
@@ -5039,6 +5060,7 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
         about_link=_path_conversation(conv.slug, page='about'),
         identity_reveal_link=None,
         full_view=True,
+        phases=_report_phase_timeline(conv),
         preview=True,
     )
     # Ids and enums only (record_audit's privacy contract).

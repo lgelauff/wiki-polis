@@ -7,6 +7,7 @@ import {expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {FinalReportLegacyPage} from './final-report-page';
+import {formatDate} from '../../i18n/dates';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -22,6 +23,12 @@ const reportFixture: components['schemas']['ResultsReport'] = {
   resultsAvailable: true,
   openedAt: '2026-05-01T12:00:00Z',
   closedAt: '2026-07-01T12:00:00Z',
+  phases: [
+    {key: 'submission', state: 'ended', startedAt: '2026-05-02T09:00:00Z', endedAt: '2026-05-20T09:00:00Z'},
+    {key: 'featured_selection', state: 'ended', startedAt: null, endedAt: null},
+    {key: 'argument_mapping', state: 'running', startedAt: '2026-06-01T09:00:00Z', endedAt: null},
+    {key: 'public_results', state: 'not_started', startedAt: null, endedAt: null},
+  ],
   // Deliberately unlike the catalogue's English, so a page echoing the server shows the marker.
   context: {phase: 'SERVER ENGLISH', status: 'final', method: 'SERVER ENGLISH'},
   participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
@@ -212,6 +219,39 @@ test('the published report carries no preview banner', async () => {
   expect(await screen.findByRole('heading', {name: 'Methodology'}, {timeout: 5000})).toBeVisible();
   expect(screen.queryByRole('note')).toBeNull();
   expect(document.querySelector('.report-badge--preview')).toBeNull();
+});
+
+test('the process timeline has one row per phase the server sends, with its dates or state (#599)', async () => {
+  // Catalogue text unlike the English, so each row is shown to come from the right key.
+  server.use(
+    http.get(
+      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+      () => HttpResponse.json({
+        ...testMessages,
+        'report-process-dates': 'FROM $1 TO $2',
+        'report-process-running-since': 'RUNNING SINCE $1',
+        'report-process-dates-tbd': 'UNDATED',
+        'report-process-not-started': 'NOT STARTED',
+      }),
+    ),
+  );
+
+  const {container} = renderReport();
+
+  expect(await screen.findByText('NOT STARTED', {}, {timeout: 5000})).toBeVisible();
+  const rows = [...container.querySelectorAll('.report-timeline-item')].map((row) => [
+    row.querySelector('.report-timeline-label')?.textContent,
+    row.querySelector('.report-timeline-value')?.textContent,
+  ]);
+  // Opened, then the phases in the server's (the route's) order, then closed. A phase the
+  // route skips is not in the payload, so it gets no row.
+  expect(rows).toHaveLength(6);
+  expect(rows.slice(1, -1)).toEqual([
+    [testMessages['phase-label-submission'], `FROM ${formatDate('en', '2026-05-02T09:00:00Z')} TO ${formatDate('en', '2026-05-20T09:00:00Z')}`],
+    [testMessages['phase-label-featured_selection'], 'UNDATED'],
+    [testMessages['phase-label-argument_mapping'], `RUNNING SINCE ${formatDate('en', '2026-06-01T09:00:00Z')}`],
+    [testMessages['phase-label-public_results'], 'NOT STARTED'],
+  ]);
 });
 
 function stripTags(html: string) {

@@ -107,6 +107,7 @@ def build_results_report(
     self_link: str, conversation_link: str, about_link: str,
     identity_reveal_link: str | None,
     full_view: bool,
+    phases: list[dict],
     preview: bool = False,
 ) -> dict:
     """Build the results report. ``preview`` marks a site-admin preview, never published.
@@ -114,6 +115,7 @@ def build_results_report(
     ``full_view`` is for participants of the process, its organizers and site admins: exact
     counts and opinion groups. Everyone else gets the public view (decision 4, D8):
     percentages only, no groups. Neither view carries numbers below the floor.
+    ``phases`` is the route's timeline from services.phase_timeline: keys and dates only.
     """
     results = phase6_results or {}
     detailed = bool(results.get('pg_available'))
@@ -166,6 +168,7 @@ def build_results_report(
         'resultsAvailable': phase6_results is not None,
         'openedAt': _utc_iso(conversation.created_at),
         'closedAt': _utc_iso(conversation.closed_at),
+        'phases': phases,
         'context': {
             'phase': output_context['phase'],
             # A preview uses the report's output definition but is not final.
