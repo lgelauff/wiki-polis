@@ -5951,13 +5951,19 @@ def _statement_family_roots(conv_id):
 
 
 def _register_branded_error_pages(app) -> None:
-    """Serve a self-contained branded page for 404/403/500 on HTML routes.
+    """Serve a self-contained branded page for 403/404/405/500 on HTML routes.
 
     Registered after :func:`register_api_error_handlers`. Flask resolves a
     status-code handler before the generic ``HTTPException`` one, so these take
-    precedence for 403/404/500 and must hand ``/api/v1/*`` back to the JSON
+    precedence for these statuses and must hand ``/api/v1/*`` back to the JSON
     envelope themselves — that is what :func:`is_api_request` is for. Every other
-    status (400, 401, 405, 409, CSRF) still falls through to the API handlers.
+    status (400, 401, 409, ...) still falls through to the API handlers.
+
+    405 was added for #356: ``/logout`` opened as a link reaches it. The other 400 in
+    ordinary use, a form sent after the session expired, is a CSRF failure; its own
+    handler in api/v1.py renders the branded 400. A plain 400 is deliberately not
+    branded: it comes from a bad Host header or a malformed request, not from a
+    person, and the 400 page's "Session failure" copy would be wrong for it.
 
     The page deliberately depends on nothing: not the SPA bundle (``static/spa`` is
     gitignored and built at deploy time, so a missing build is exactly the failure
@@ -5966,12 +5972,16 @@ def _register_branded_error_pages(app) -> None:
 
     @app.errorhandler(403)
     @app.errorhandler(404)
+    @app.errorhandler(405)
     @app.errorhandler(500)
     def _branded_error_page(exc):
         if is_api_request():
             return http_exception_json(exc)
         code = getattr(exc, 'code', 500) or 500
-        return render_error_page(code), code
+        # A 405 must still say which methods the address takes (RFC 9110 15.5.6).
+        headers = {'Allow': ', '.join(exc.valid_methods)} if getattr(
+            exc, 'valid_methods', None) else {}
+        return render_error_page(code), code, headers
 
 
 def create_app(test_config: dict | None = None) -> Flask:
