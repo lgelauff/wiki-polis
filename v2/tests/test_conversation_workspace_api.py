@@ -169,6 +169,12 @@ def test_workspace_marks_the_cleanup_pause(auth_client, participant, conversatio
     paused = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
     assert paused['cleanup'] is False
 
+    conversation.paused = False
+    conversation.active = False
+    db.session.commit()
+    closed = auth_client.get('/api/v1/conversations/test-conv/workspace').get_json()['data']
+    assert closed['status'] == 'closed' and closed['cleanup'] is False
+
 
 def test_workspace_requires_real_authentication(client, conversation):
     response = client.get('/api/v1/conversations/test-conv/workspace')

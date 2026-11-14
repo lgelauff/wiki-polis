@@ -1983,7 +1983,7 @@
               {"type": "null"}
             ]
           },
-          "cleanup": {"type": "boolean", "description": "True while an open consultation is in the Cleanup phase, a quiet pause in which participants have nothing to do."},
+          "cleanup": {"type": "boolean", "description": "True while an open consultation is in the Cleanup phase (the phase_cleanup stage after arguments, not the report-pending cleanup window), a quiet pause in which participants have nothing to do."},
           "tabs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationWorkspaceTab"}},
           "defaultTab": {
             "type": ["string", "null"],
