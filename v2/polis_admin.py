@@ -699,14 +699,12 @@ class PolisServerClient:
                 f'{resp.text[:300]}'
             )
         try:
-            tid = resp.json().get('tid')
-        except ValueError:
+            tid = int(resp.json()['tid'])
+        except (ValueError, TypeError, KeyError, AttributeError):
             raise PolisServerError(
-                f'Polis returned non-JSON response: {resp.text[:100]}'
+                f'Polis returned no usable tid for seed statement: {resp.text[:100]}'
             )
-        if tid is None:
-            raise PolisServerError('Polis returned no tid for seed statement.')
-        return int(tid)
+        return tid
 
     def _approve_seed(self, sess, headers: dict, conversation_id: str, tid: int) -> bool:
         """Approve an organizer seed explicitly (#240), so its state does not depend

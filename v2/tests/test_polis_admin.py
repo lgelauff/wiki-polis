@@ -442,6 +442,22 @@ def test_bulk_seed_import_counts_approval_failures_apart_from_creation_failures(
     assert _approval_puts(sess) == [(5, 1), (7, 1)]
 
 
+def test_bulk_seed_import_counts_a_statement_without_a_usable_tid_as_failed():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.side_effect = [_mock_ok({}), _mock_ok(['x']), _mock_ok({'tid': 8})]
+    sess.put.return_value = _mock_ok({})
+
+    with login_patch:
+        successes, failures, failed_approvals = client.bulk_add_seeds(
+            'abc123', ['First', 'Second', 'Third'],
+        )
+
+    assert (successes, failed_approvals) == (1, 0)
+    assert [text for text, _exc in failures] == ['First', 'Second']
+    assert _approval_puts(sess) == [(8, 1)]
+
+
 def test_add_seed_return_id_leaves_moderation_to_its_caller():
     """Phase 6 seeding (add_seed_return_id) is outside #240 and stays unchanged."""
     client = _server_client()

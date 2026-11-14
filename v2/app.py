@@ -4539,7 +4539,8 @@ def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
                if statement_id is not None else {}),
         ),
         # #240: organizer seeds are approved explicitly, whatever the conversation's
-        # policy; the decision is audited like a participant statement's.
+        # policy; the decision is audited like a participant statement's. `decision` is
+        # the decision sent; outcome='failed' means Polis did not apply it (still pending).
         audit_approval=lambda statement_id, approved: record_audit(
             'statement.creation_moderation', conv_id=conv.id,
             target_type='statement', target_id=statement_id,
