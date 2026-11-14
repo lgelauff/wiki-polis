@@ -229,7 +229,6 @@ test('the argument box names the character limit it enforces', async () => {
   for (const [side, key] of [['pro', 'conv-arg-placeholder-for'], ['con', 'conv-arg-placeholder-against']] as const) {
     const box = document.querySelector<HTMLTextAreaElement>(`#fs-9 .contribute-wrapper[data-side="${side}"] textarea`)!;
     expect(box).toHaveAttribute('placeholder', `(${key}: ${ARGUMENT_MAX_CHARACTERS})`);
-    expect(box.maxLength).toBe(ARGUMENT_MAX_CHARACTERS);
   }
 });
 
@@ -350,4 +349,30 @@ test("the flag's label shows as a tooltip after a tap and on keyboard focus, sid
   await waitFor(() => expect(tipShown()).toBe(true));
   fireEvent.blur(trigger);
   await waitFor(() => expect(tipShown()).toBe(false));
+});
+
+test('an argument over the limit is kept in full and waits at Submit until it fits', async () => {
+  serve(mapping());
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the browser cutting pasted text silently (#558): a `maxlength` drops the rest
+  // before the counter or the server can see it.
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  const box = wrapper.querySelector('textarea')!;
+  const submit = wrapper.querySelector<HTMLButtonElement>('.contribute-submit-btn')!;
+  expect(box).not.toHaveAttribute('maxlength');
+  const over = 'x'.repeat(ARGUMENT_MAX_CHARACTERS + 3);
+  fireEvent.change(box, {target: {value: over}});
+  expect(box).toHaveValue(over);
+  expect(submit).toBeDisabled();
+  expect(box).toHaveAttribute('aria-invalid', 'true');
+  const count = wrapper.querySelector('.contribute-charcount')!;
+  expect(count).toHaveTextContent('(conv-composer-over-limit: 3)');
+  expect(box.getAttribute('aria-describedby')).toBe(count.id);
+
+  fireEvent.change(box, {target: {value: over.slice(3)}});
+  expect(submit).toBeEnabled();
+  expect(box).not.toHaveAttribute('aria-invalid');
 });

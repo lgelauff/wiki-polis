@@ -398,6 +398,7 @@
     "conv-suggest-hint": "Note under the box for suggesting clearer wording of an existing statement, saying where the suggestion goes and that the wording is released under CC0, as agreed on joining ({{msg-proto|accept-licence-intro}}). \"CC0\" is the licence name and is not translated.",
     "conv-composer-submit": "Submit button in the statement composers.",
     "conv-composer-charcount": "Character counter under the statement composer. $1 is the number of characters typed so far; 280 is the fixed limit.",
+    "conv-composer-over-limit": "Shown in place of the character counter ({{msg-proto|conv-composer-charcount}}) when the text is longer than the 280-character limit. The text is kept as typed and the Submit button stays disabled until it fits. Used under the statement composers, the argument box and the admin seed-statement field.\n\nParameters:\n* $1 - how many characters are over the limit, e.g. 12",
     "conv-newstmt-helper": "Helper text in the new-statement composer; a 'Writing tips' link follows.",
     "conv-newstmt-placeholder": "Placeholder in the new-statement textarea.",
     "conv-newstmt-hint": "Note under the box for writing a new statement, saying that others respond to it too and that it is released under CC0, as agreed on joining ({{msg-proto|accept-licence-intro}}). \"CC0\" is the licence name and is not translated.",
