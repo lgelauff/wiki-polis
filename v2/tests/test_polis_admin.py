@@ -364,18 +364,52 @@ def test_add_seed_classifies_post_login_disconnect_for_admins():
     assert exc_info.value.admin_message == POLIS_UNREACHABLE_MESSAGE
 
 
-def test_bulk_seed_import_posts_explicit_approved_seed_statements():
+def _approval_puts(sess):
+    return [
+        (call.kwargs['json']['tid'], call.kwargs['json']['mod'])
+        for call in sess.put.call_args_list
+    ]
+
+
+def test_add_seed_approves_the_created_statement_on_the_same_session():
+    """#240: an organizer seed is approved explicitly (mod=1), not left to whether
+    the Polis account happens to moderate the conversation."""
     client = _server_client()
     login_patch, sess = _mock_login(client)
-    sess.post.return_value = _mock_ok({})
+    sess.post.return_value = _mock_ok({'tid': 17})
+    sess.put.return_value = _mock_ok({})
+
+    with login_patch as login:
+        assert client.add_seed('abc123', 'A seed statement') == (17, True)
+
+    login.assert_called_once()
+    assert _approval_puts(sess) == [(17, 1)]
+    assert sess.put.call_args.kwargs['json']['conversation_id'] == 'abc123'
+
+
+def test_add_seed_reports_a_failed_approval_without_hiding_the_created_statement():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.return_value = _mock_ok({'tid': 17})
+    sess.put.return_value = _mock_err(500)
 
     with login_patch:
-        successes, failures = client.bulk_add_seeds(
+        assert client.add_seed('abc123', 'A seed statement') == (17, False)
+
+
+def test_bulk_seed_import_posts_and_approves_each_seed_statement():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.side_effect = [_mock_ok({'tid': 5}), _mock_ok({'tid': 6})]
+    sess.put.return_value = _mock_ok({})
+
+    with login_patch as login:
+        successes, failures, failed_approvals = client.bulk_add_seeds(
             'abc123', ['First seed', 'Second seed'],
         )
 
-    assert successes == 2
-    assert failures == []
+    assert (successes, failures, failed_approvals) == (2, [], 0)
+    login.assert_called_once()
     assert [call.kwargs['json'] for call in sess.post.call_args_list] == [
         {
             'conversation_id': 'abc123', 'txt': 'First seed',
@@ -386,6 +420,38 @@ def test_bulk_seed_import_posts_explicit_approved_seed_statements():
             'is_seed': True, 'vote': 0,
         },
     ]
+    assert _approval_puts(sess) == [(5, 1), (6, 1)]
+
+
+def test_bulk_seed_import_counts_approval_failures_apart_from_creation_failures():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.side_effect = [
+        _mock_ok({'tid': 5}), _mock_err(500), _mock_ok({'tid': 7}),
+    ]
+    sess.put.side_effect = [_mock_err(500), _mock_ok({})]
+
+    with login_patch:
+        successes, failures, failed_approvals = client.bulk_add_seeds(
+            'abc123', ['First', 'Second', 'Third'],
+        )
+
+    assert successes == 2
+    assert [text for text, _exc in failures] == ['Second']
+    assert failed_approvals == 1
+    assert _approval_puts(sess) == [(5, 1), (7, 1)]
+
+
+def test_add_seed_return_id_leaves_moderation_to_its_caller():
+    """Phase 6 seeding (add_seed_return_id) is outside #240 and stays unchanged."""
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.return_value = _mock_ok({'tid': 9})
+
+    with login_patch:
+        assert client.add_seed_return_id('abc123', 'A seed statement') == 9
+
+    sess.put.assert_not_called()
 
 
 def test_close_and_hide_conversation_deactivates_and_hides_results():

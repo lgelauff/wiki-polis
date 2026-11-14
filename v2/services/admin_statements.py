@@ -216,8 +216,8 @@ class SeedStatementResult:
 
 def add_seed_statement(
     *, conversation, text: str, derived_from_id: int | None,
-    sanitize, statement_text_map, add_seed, add_seed_return_id,
-    record_provenance, audit, max_characters: int,
+    sanitize, statement_text_map, add_seed,
+    record_provenance, audit, audit_approval, max_characters: int,
     upstream_errors: tuple[type[Exception], ...],
 ) -> SeedStatementResult:
     clean = sanitize(text.strip())
@@ -226,7 +226,8 @@ def add_seed_statement(
 
     try:
         if derived_from_id is None:
-            add_seed(conversation.polis_id, clean)
+            statement_id, approved = add_seed(conversation.polis_id, clean)
+            audit_approval(statement_id=statement_id, approved=approved)
             audit(statement_id=None, derived_from_id=None)
             return SeedStatementResult(
                 statement_id=None,
@@ -237,7 +238,7 @@ def add_seed_statement(
         text_by_id = statement_text_map(conversation.polis_id)
         if derived_from_id not in text_by_id:
             raise SeedStatementParentNotFound(derived_from_id)
-        statement_id = add_seed_return_id(conversation.polis_id, clean)
+        statement_id, approved = add_seed(conversation.polis_id, clean)
     except SeedStatementParentNotFound:
         raise
     except upstream_errors as exc:
@@ -245,6 +246,7 @@ def add_seed_statement(
             getattr(exc, 'admin_message', 'The voting service is unavailable.'),
         ) from exc
 
+    audit_approval(statement_id=statement_id, approved=approved)
     provenance = record_provenance(
         conversation.id,
         statement_id,
@@ -310,10 +312,12 @@ def import_seed_statements(
     }
     pending = [text for text in normalized if text.casefold() not in existing]
     skipped_existing = len(normalized) - len(pending)
-    imported = failed = 0
+    imported = failed = failed_approval = 0
     if pending:
         try:
-            imported, failures = bulk_add_seeds(conversation.polis_id, pending)
+            imported, failures, failed_approval = bulk_add_seeds(
+                conversation.polis_id, pending,
+            )
         except upstream_errors as exc:
             raise SeedImportUpstreamFailed(
                 getattr(exc, 'admin_message', 'The voting service is unavailable.'),
@@ -333,6 +337,7 @@ def import_seed_statements(
             skipped_existing=skipped_existing,
             skipped_duplicate_input=skipped_duplicate_input,
             failed_upstream=failed,
+            failed_approval=failed_approval,
         )
     return SeedImportResult(
         imported=imported,

@@ -105,7 +105,7 @@ def test_audit_rows_carry_no_pii_or_content(client, app):
         db.session.commit()
         conv_id = conv.id
     secret_text = 'THE QUICK BROWN FOX statement body'
-    with patch('app.PolisServerClient.add_seed'):          # seed path now commits a row
+    with patch('app.PolisServerClient.add_seed', return_value=(7, True)):  # seed path commits a row
         r = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
                         json={'text': secret_text, 'derivedFromId': None})
         assert r.status_code == 201

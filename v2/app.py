@@ -4531,13 +4531,19 @@ def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
         sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
         statement_text_map=_statement_text_map,
         add_seed=_polis_server_client().add_seed,
-        add_seed_return_id=_polis_server_client().add_seed_return_id,
         record_provenance=record_statement_provenance,
         audit=lambda statement_id, derived_from_id: record_audit(
             'statement.seed', conv_id=conv.id,
             **({'target_type': 'statement', 'target_id': statement_id,
                 'derived_from': derived_from_id}
                if statement_id is not None else {}),
+        ),
+        # #240: organizer seeds are approved explicitly, whatever the conversation's
+        # policy; the decision is audited like a participant statement's.
+        audit_approval=lambda statement_id, approved: record_audit(
+            'statement.creation_moderation', conv_id=conv.id,
+            target_type='statement', target_id=statement_id,
+            outcome='ok' if approved else 'failed', decision=1, source='seed',
         ),
         max_characters=MAX_TEXT_CHARS,
         upstream_errors=(PolisServerError, PolisParticipantError),

@@ -645,7 +645,14 @@ class PolisServerClient:
     def moderate(self, conversation_id: str, tid: int, mod: int) -> None:
         """Set mod value on a statement (1=approved, 0=pending, -1=hidden)."""
         sess, auth_headers = self._login()
-        headers = {**self._HEADERS, **auth_headers}
+        self._moderate_with(
+            sess, {**self._HEADERS, **auth_headers}, conversation_id, tid, mod,
+        )
+
+    def _moderate_with(
+        self, sess, headers: dict, conversation_id: str, tid: int, mod: int,
+    ) -> None:
+        """PUT a moderation decision on an already logged-in session."""
         try:
             resp = sess.put(
                 f'{self._base}/api/v3/comments',
@@ -667,8 +674,9 @@ class PolisServerClient:
                 f'Polis moderation failed (HTTP {resp.status_code}): {resp.text[:300]}'
             )
 
-    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> requests.Response:
-        """POST a single seed statement to Polis. Raises PolisServerError on failure."""
+    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> int:
+        """POST a single seed statement to Polis and return its tid.
+        Raises PolisServerError on failure, or when the response carries no tid."""
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/comments',
@@ -690,40 +698,6 @@ class PolisServerClient:
                 f'Polis seed statement creation failed (HTTP {resp.status_code}): '
                 f'{resp.text[:300]}'
             )
-        return resp
-
-    def add_seed(self, conversation_id: str, text: str) -> None:
-        """Add a seed statement via the Polis admin API, marked is_seed=True.
-        Raises PolisServerError on non-2xx response or network failure.
-        Does not require a tid in the response (fire-and-record semantics)."""
-        sess, auth_headers = self._login()
-        self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
-
-    def bulk_add_seeds(
-        self, conversation_id: str, texts: list[str]
-    ) -> tuple[int, list[tuple[str, PolisServerError]]]:
-        """Add multiple seed statements with a single login.
-
-        Returns (successes, failures) where failures is a list of (text, exc)
-        pairs. Raises PolisServerError only if login itself fails.
-        """
-        sess, auth_headers = self._login()
-        headers = {**self._HEADERS, **auth_headers}
-        successes = 0
-        failures: list[tuple[str, PolisServerError]] = []
-        for text in texts:
-            try:
-                self._post_seed(sess, headers, conversation_id, text)
-                successes += 1
-            except (requests.RequestException, PolisServerError) as exc:
-                failures.append((text, PolisServerError(str(exc)) if not isinstance(exc, PolisServerError) else exc))
-        return successes, failures
-
-    def add_seed_return_id(self, conversation_id: str, text: str) -> int:
-        """Add a seed statement and return the Polis statement ID (tid).
-        Raises PolisServerError if the response is not JSON or does not include a tid."""
-        sess, auth_headers = self._login()
-        resp = self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
         try:
             tid = resp.json().get('tid')
         except ValueError:
@@ -733,6 +707,62 @@ class PolisServerClient:
         if tid is None:
             raise PolisServerError('Polis returned no tid for seed statement.')
         return int(tid)
+
+    def _approve_seed(self, sess, headers: dict, conversation_id: str, tid: int) -> bool:
+        """Approve an organizer seed explicitly (#240), so its state does not depend
+        on whether the Polis account happens to moderate this conversation.
+        Returns False, and logs, when the statement exists but approval failed."""
+        try:
+            self._moderate_with(sess, headers, conversation_id, tid, 1)
+        except PolisServerError:
+            logger.warning(
+                'Seed statement %s in %s was created but not approved',
+                tid, conversation_id, exc_info=True,
+            )
+            return False
+        return True
+
+    def add_seed(self, conversation_id: str, text: str) -> tuple[int, bool]:
+        """Add an organizer seed statement (is_seed=True) and approve it.
+
+        Returns (tid, approved). Raises PolisServerError when the statement could
+        not be created; an approval failure after creation returns approved=False.
+        """
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
+        tid = self._post_seed(sess, headers, conversation_id, text)
+        return tid, self._approve_seed(sess, headers, conversation_id, tid)
+
+    def bulk_add_seeds(
+        self, conversation_id: str, texts: list[str]
+    ) -> tuple[int, list[tuple[str, PolisServerError]], int]:
+        """Add and approve multiple seed statements with a single login.
+
+        Returns (successes, failures, failed_approvals): successes counts created
+        statements, failures is a list of (text, exc) pairs for statements that
+        were not created, and failed_approvals counts created statements whose
+        approval failed. Raises PolisServerError only if login itself fails.
+        """
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
+        successes = failed_approvals = 0
+        failures: list[tuple[str, PolisServerError]] = []
+        for text in texts:
+            try:
+                tid = self._post_seed(sess, headers, conversation_id, text)
+            except (requests.RequestException, PolisServerError) as exc:
+                failures.append((text, PolisServerError(str(exc)) if not isinstance(exc, PolisServerError) else exc))
+                continue
+            successes += 1
+            if not self._approve_seed(sess, headers, conversation_id, tid):
+                failed_approvals += 1
+        return successes, failures, failed_approvals
+
+    def add_seed_return_id(self, conversation_id: str, text: str) -> int:
+        """Add a seed statement and return the Polis statement ID (tid).
+        Raises PolisServerError if the response is not JSON or does not include a tid."""
+        sess, auth_headers = self._login()
+        return self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
 
     # ── Direct Postgres reads ─────────────────────────────────────────────────
 
