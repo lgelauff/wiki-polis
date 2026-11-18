@@ -286,7 +286,56 @@ different artefact. A ledger survives revision; a paragraph survives argument.
   receiving process can cite — which is also what makes survival measurable
   years later.
 
-## 10. Limitations
+
+## 10. Comparison: nlwiki's codified vote procedure
+
+Dutch Wikipedia runs the same class of question through a written procedure
+rather than a per-close judgement. The rules (my translations; nlwiki
+`Wikipedia:Stemprocedure`, rev 71301286):
+
+- **Escalation ladder.** Ordinary discussion first; if it deadlocks, a
+  *non-binding* opinion poll on a talk page; only if that fails (no large
+  majority, or little response) a vote in the Stemlokaal. A poll has **no
+  quorum** and cannot bind anyone (`Wikipedia:Opiniepeiling`, rev 72180385).
+- **Adoption rule, in numbers.** A proposal (or an option within one) is
+  adopted if it has "the support of at least **20 valid votes** (the minimum is
+  announced before the vote starts) and at least **55%** of the total number of
+  valid votes" (Art. 5). Neutral declarations do not count.
+- **Options are frozen.** The initiator becomes *stemcoördinator* — explicitly
+  "a chore without privileges" — and "once the vote has started, no new options
+  may be added" (Art. 2). Options should preferably be yes/no.
+- **Moderator appointments** use the same machinery with a higher bar: a
+  one-week poll, "a qualified majority of at least **75%** of responses", and
+  only editors with ≥100 non-vandalism edits in the preceding twelve months may
+  vote (`Wikipedia:Aanmelding moderatoren`, rev 71690742).
+- **Iteration is normal.** The 2007 moderator-guideline simplification ran a
+  first phase in which proponents argued each proposed change and unsupported
+  proposals could be withdrawn, followed by a separate short poll per surviving
+  proposal. The 2026 revision plan repeats the pattern — "poll on the draft,
+  possibly several times" — then a vote, then a **seven-day objection period**
+  before the old guidelines are retired.
+
+**Where this beats what enwiki did.** The 2019 resysop consultation had no
+participation floor, no threshold, no option freeze and no deduplication;
+nlwiki has all four, and its freeze-before-vote rule plus per-proposal polls
+address precisely the competing-framings artefact of §5 F5. It is also
+protected against the opposite failure: a 20-vote floor stops a 22-signature
+100% from carrying a policy.
+
+**Where it is weaker.** Its provenance is thin. The moderator guidelines cite
+only two polls or votes in 28 KB of text, so the chain from decision to rule is
+not maintained — unlike `WP:ACERULES` (§8), where every rule carries the RfC
+section that produced it. The 2026 plan even warns against reusing the old page
+titles, because "20 years of discussion links … would then point at the new
+policy" — the provenance problem recognised, and routed around rather than
+solved.
+
+**The summary that matters for tool design:** nlwiki formalises the *decision*
+and loses the *trace*; the ArbCom-election family keeps the trace and leaves the
+decision to judgement; the resysop consultation did neither. A consultation tool
+should take nlwiki's freeze-and-threshold and ACERULES' ledger.
+
+## 11. Limitations
 
 - Endorsement lists are self-selected and incomplete; several signers endorsed
   competing statements, and 11 appear on both sides of one statement.
