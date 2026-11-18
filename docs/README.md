@@ -15,6 +15,10 @@ Participants use the **website**, not this repo — they are not expected to rea
 - [Privacy & data handling](../v2/pub_privacy.md) (draft, pre-publication)
 - [Participant help](../guidance/pub_participant-help.md) — how voting works, writing statements / arguments (AI draft, pre-publication)
 
+## Case studies
+
+- [Retro: enwiki's 2019 resysop RfC as a Proto-shaped consultation](research/08-retro-resysop-rfc.md) — the community built the statement + endorsement pattern by hand (19 statements, 75 signers); what the numbers show about wording artefacts, duplicate signatures, the judgement-based threshold, and the trust signal the close lacked.
+
 ## Conventions
 
 See [documentation standards](../v2/docs/documentation-standards.md) for doc lifespans
