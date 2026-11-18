@@ -221,7 +221,49 @@ units there were. The exact-phrase search also undercounts: pages that use
 *Support/Oppose* per proposal, or *Option A/B/C*, are the same idea in other
 words.
 
-## 8. What this implies for Proto
+
+## 8. Reception, second case: the ArbCom-election family
+
+The annual pre-election RfCs are the same model in its mature form — "a request
+for comment … to amend the structure, rules, and procedures of that year's
+Arbitration Committee election and to resolve any issues not covered by
+existing rules" (noticeboard announcement, 2018). Because they are framed as
+amendments, they are also the only member of this family whose reception is
+institutionalised rather than interpretive.
+
+**A ledger, not a paragraph.** `Wikipedia:Arbitration Committee Election/Rules`
+is titled *"ACERFC decisions to date"*, carries the shortcut `WP:ACERULES`, and
+annotates **each rule with the specific RfC section it came from** — e.g. "There
+will be 15 arbitrators, seven seats on Tranche Alpha and eight on Tranche
+Beta from the 2019 elections.[…/Arbitration Committee Elections December
+2019#Number of arbitrators]". `Wikipedia:Arbitration Committee election
+requests for comment` (`WP:ALLACERFC`) is the hub that indexes the series.
+
+**Survival is measurable.** Counting the source citations on the current rules
+page: 78 citations across the 33 rule lines, distributed by year as 2020: 16,
+2012: 12, 2019: 9, 2021: 7, 2014: 6, 2013: 5, 2022: 4, 2024: 4, 2015: 3,
+2016: 3, 2017: 2, 2018: 2, 2023: 2, and one each for 2011, 2025 and 2026. The
+most-cited year is 2020 — the one with 74 endorsement sections.
+
+**Decisions get reversed, in public.** The hub page records the committee size
+as "15 members (was changed from 15 to 13 in WP:ACERFC2018 and back to 15 in
+WP:ACERFC2019)". Each flip is a later consultation overriding an earlier one,
+with both citations still on the page.
+
+**Even the threshold has been debated.** In September 2020 a proposal was
+pending "to require a minimum of 15 supports for a proposal to pass, but there
+are several … mutually exclusive proposals that have not had that level of
+engagement (i.e. 'Do X' and 'Do not do X' both have fewer than 15 supports)" —
+the same competing-framings artefact as §5 F5, recognised explicitly and
+mid-flight.
+
+**Why this matters for the contrast with §6.** The resysop outcome became a
+paragraph of policy whose wording is now litigated; the election outcome became
+a *cited list of amendments*, each traceable to the consultation and statement
+that produced it. Same consultation model, same keyhole of 30–100 signers —
+different artefact. A ledger survives revision; a paragraph survives argument.
+
+## 9. What this implies for Proto
 
 - **Duplicate/overlap detection before a consultation opens.** The 1/2 pair is
   the case for it: "these two statements say the same thing — do you support the
@@ -236,8 +278,15 @@ words.
   plainly, never ranked or summed into an outcome. Its jobs: choose who drafts
   the close from people trusted across positions, and let readers find the
   arguments others found worth trusting.
+- **Emit a decision ledger, not a summary.** The election family shows the
+  difference (§8): each rule carries the consultation and statement that
+  produced it, so a later community revises item by item instead of
+  re-litigating a paragraph. A Proto consultation should be able to hand over
+  "statement, wording, support, close, link to the discussion" as a table the
+  receiving process can cite — which is also what makes survival measurable
+  years later.
 
-## 9. Limitations
+## 10. Limitations
 
 - Endorsement lists are self-selected and incomplete; several signers endorsed
   competing statements, and 11 appear on both sides of one statement.
