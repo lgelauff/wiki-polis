@@ -135,7 +135,68 @@ exercise judgement — yet the only thing a participant could express was
 agreement with *text*. There was no way to record "I trust X to weigh this
 close", which is the signal the close actually needed.
 
-## 6. The same model recurs
+## 6. Reception: what Wikipedia did with this consultation
+
+Wikipedia does not evaluate its own processes. What it produces instead is four
+downstream signals, all measurable from the link graph (659 inbound links to the
+RfC page as of 2026-11-18: 609 from user talk pages carrying the RfC notice, 32
+in project space, 18 on user pages):
+
+**(a) Codification.** The outcome entered policy. The administrators' newsletter
+for December 2019 recorded it in one sentence:
+
+> "An RfC on the administrator resysop criteria was closed. 18 proposals have
+> been summarised with a variety of supported and opposed statements. The
+> inactivity grace period within which a new request for adminship is not
+> required has been reduced from three years to two. Additionally, Bureaucrats
+> are permitted to use their discretion when returning administrator rights."
+
+`WP:ADMIN` now carries statement 7's wording almost verbatim — "**Over two years
+with no edits.**" — and the page is reachable by the shortcuts `WP:RESYSOP2019`
+and `WP:RESYSOP 2019`, i.e. the consultation itself is a citable policy
+reference.
+
+**(b) Citation as precedent.** Later discussions treat it as the record of what
+the community decided. A 2021 RfC on sysop activity requirements says: "A year
+later, the inactivity requirements were strengthened further in [the 2019
+RfC]#Statement 7 by Amorymeltzer. In that same RfC (here) the community also
+decided to grant bureaucrats the discretion to refuse resysop to people they
+think have not actually returned."
+
+**(c) Contestation in application.** The wording is litigated, not the process.
+In March 2025 a bureaucrats' noticeboard dispute turned on exactly what the
+"returned to activity" sentence requires, with one editor asserting "the
+community consensus regarding a return to activity was to leave it to the
+discretion of the bureaucrats", and another that "the established community
+consensus is that bureaucrats do not have to be reasonably convinced that the
+requestor continues to hold the community's trust" — which is the content of
+**statement 2, the one that failed at 55%**. Note that this is one editor's
+characterisation in a live dispute, not a ruling; but it shows the rejected
+framing being read back into the record as settled.
+
+The first application of the tightened criteria produced the same kind of
+argument from the other direction. The *Signpost*'s August 2020 discussion
+report: "One resysop request by an admin who was desysopped for inactivity led
+to some controversy on the bureaucrats' noticeboard. The user would have been
+eligible to be resysopped under the criteria in place when his administrator
+rights were removed, but he was deemed to be no longer eligible due to the
+resysop criteria being tightened in 2019." A retroactivity problem created by a
+consultation that never asked about transitions.
+
+**(d) Supersession.** The half of the problem this RfC could not settle — what
+to do about admins who *should* lose the tools — went elsewhere: statement 16
+was spun out during the RfC, and the desysop question was eventually answered by
+a separate administrator-recall process (petition + re-request for adminship).
+`Wikipedia:Administrator recall` does not mention the 2019 RfC at all.
+
+**What is missing from all 659 links:** any discussion of whether nineteen
+statements, seventy-five signers, and a 55%-versus-64% boundary was a good way
+to decide. The reception is entirely about what the resulting words mean. That
+is the honest answer to "how does Wikipedia evaluate these processes": it
+evaluates the text, not the process, and the bill arrives as years of
+interpretive dispute.
+
+## 7. The same model recurs
 
 The "statement + endorsement list" pattern is not a one-off. Searching enwiki
 (namespace 4) for `insource:"Users who endorse statement"` returns five pages,
@@ -160,7 +221,7 @@ units there were. The exact-phrase search also undercounts: pages that use
 *Support/Oppose* per proposal, or *Option A/B/C*, are the same idea in other
 words.
 
-## 7. What this implies for Proto
+## 8. What this implies for Proto
 
 - **Duplicate/overlap detection before a consultation opens.** The 1/2 pair is
   the case for it: "these two statements say the same thing — do you support the
@@ -176,7 +237,7 @@ words.
   the close from people trusted across positions, and let readers find the
   arguments others found worth trusting.
 
-## 8. Limitations
+## 9. Limitations
 
 - Endorsement lists are self-selected and incomplete; several signers endorsed
   competing statements, and 11 appear on both sides of one statement.
