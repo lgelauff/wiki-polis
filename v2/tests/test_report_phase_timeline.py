@@ -98,9 +98,10 @@ def test_advanced_set_archive_reopen_and_close():
     assert phases['public_results'] == {
         'key': 'public_results', 'state': 'ended', 'startedAt': _iso(5), 'endedAt': _iso(9),
     }
-    # Reached (it lies before the current phase) but never recorded: ended, dates unknown.
+    # The log covers this process and the jump skipped it: it never started (owner,
+    # 2026-11-19: only phases that started show as ended).
     assert phases['featured_selection'] == {
-        'key': 'featured_selection', 'state': 'ended', 'startedAt': None, 'endedAt': None,
+        'key': 'featured_selection', 'state': 'not_started', 'startedAt': None, 'endedAt': None,
     }
 
 
@@ -131,6 +132,89 @@ def test_an_archived_phase_is_not_running():
     assert _by_key(rows)['submission'] == {
         'key': 'submission', 'state': 'ended', 'startedAt': _iso(0), 'endedAt': _iso(2),
     }
+
+
+def test_archiving_ends_only_the_phases_that_started():
+    """Owner, 2026-11-19: only show phases as ended if the phase actually started."""
+    events = [
+        _advance(0, 'preparation', 'submission'),
+        _advance(4, 'submission', 'featured_selection'),
+        (_at(6), 'conversation.archive', None, {}),
+    ]
+    rows = build_phase_timeline(
+        conversation=_conv(on=['featured_selection'], active=False),
+        route=_route(), events=events,
+    )
+
+    phases = _by_key(rows)
+    assert phases['submission']['endedAt'] == _iso(4)
+    # The phase that was running is ended at the archive date.
+    assert phases['featured_selection'] == {
+        'key': 'featured_selection', 'state': 'ended', 'startedAt': _iso(4), 'endedAt': _iso(6),
+    }
+    for key in ('argument_mapping', 'cleanup', 'informed_voting', 'public_results'):
+        assert phases[key] == {
+            'key': key, 'state': 'not_started', 'startedAt': None, 'endedAt': None,
+        }
+
+
+def test_archiving_after_an_advanced_jump_leaves_the_skipped_phases_not_started():
+    """A phase that lies before the current one but never ran is not started, archived or
+    not: its position alone does not make it ended."""
+    events = [
+        (_at(0), 'phase.set', None, {'active_keys': ['public_results', 'submission']}),
+        (_at(2), 'conversation.archive', None, {}),
+    ]
+    rows = build_phase_timeline(
+        conversation=_conv(on=['submission', 'public_results'], active=False),
+        route=_route(), events=events,
+    )
+
+    phases = _by_key(rows)
+    for key in ('submission', 'public_results'):
+        assert phases[key] == {
+            'key': key, 'state': 'ended', 'startedAt': _iso(0), 'endedAt': _iso(2),
+        }
+    for key in ('featured_selection', 'argument_mapping', 'cleanup', 'informed_voting'):
+        assert phases[key]['state'] == 'not_started'
+
+
+def test_a_phase_from_before_the_audit_log_still_shows_as_ended_undated():
+    events = [
+        _advance(5, 'featured_selection', 'argument_mapping'),
+        (_at(8), 'conversation.archive', None, {}),
+    ]
+    rows = build_phase_timeline(
+        conversation=_conv(on=['argument_mapping'], active=False),
+        route=_route(), events=events,
+    )
+
+    phases = _by_key(rows)
+    assert phases['submission'] == {
+        'key': 'submission', 'state': 'ended', 'startedAt': None, 'endedAt': None,
+    }
+    assert phases['featured_selection'] == {
+        'key': 'featured_selection', 'state': 'ended', 'startedAt': None, 'endedAt': _iso(5),
+    }
+    assert phases['argument_mapping']['endedAt'] == _iso(8)
+    assert phases['cleanup']['state'] == 'not_started'
+
+
+def test_a_closed_consultation_that_ran_every_phase_shows_them_all_ended():
+    keys = PHASE_ROUTES['default_7']['keys']
+    events = [_advance(day, source, target) for day, (source, target)
+              in enumerate(zip(keys, keys[1:]))]
+    closed_at = _at(len(keys) - 1)
+    events.append((closed_at, 'conversation.close', None, {}))
+    rows = build_phase_timeline(
+        conversation=_conv(on=['public_results'], active=False, closed_at=closed_at),
+        route=_route(), events=events,
+    )
+
+    assert rows == [
+        {'key': key, 'state': 'ended', 'startedAt': _iso(day), 'endedAt': _iso(day + 1)}
+        for day, key in enumerate(keys[1:])
+    ]
 
 
 def test_results_report_carries_phase_dates_from_the_audit_log(

@@ -67,8 +67,10 @@ def build_phase_timeline(*, conversation, route: list[dict], events) -> list[dic
     ``route`` is the route's stage list (``key`` and ``flag``), so a phase the route skips
     never appears. The state comes from the conversation as it is now: a phase is running
     while its flag is on and the consultation is neither archived nor closed. A phase is
-    ended once it has been reached and is no longer running; one reached before the audit
-    log existed is ended with its dates unknown (null).
+    ended once it has started and is no longer running, so archiving or closing ends only
+    the phases that started; the others stay not started. A phase with no audit row counts
+    as started only if it lies before every phase the audit log records and not after the
+    current phase: it ran before the log existed, and is ended with its dates unknown (null).
     """
     started, ended = _replay(events)
     open_now = bool(conversation.active) and conversation.closed_at is None
@@ -76,6 +78,12 @@ def build_phase_timeline(*, conversation, route: list[dict], events) -> list[dic
     for index, stage in enumerate(route):
         if stage['flag'] and getattr(conversation, stage['flag']):
             current = index
+    # Phases from the first recorded one on are covered by the log: no row, never started.
+    recorded = [
+        index for index, stage in enumerate(route)
+        if stage['flag'] and (stage['key'] in started or stage['key'] in ended)
+    ]
+    before_log = min(recorded + [current + 1])
     rows = []
     for index, stage in enumerate(route):
         if not stage['flag']:
@@ -83,7 +91,7 @@ def build_phase_timeline(*, conversation, route: list[dict], events) -> list[dic
         key = stage['key']
         if open_now and getattr(conversation, stage['flag']):
             state = 'running'
-        elif key in started or key in ended or index <= current:
+        elif key in started or key in ended or index < before_log:
             state = 'ended'
         else:
             state = 'not_started'
