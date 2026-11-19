@@ -358,6 +358,7 @@ TAGS:
     - adminconv-roles-summary
     - adminconv-roles-summary-count
     - adminconv-save-phases
+    - adminconv-schedule-nothing-to-cancel
     - adminconv-schedule-title
     - adminconv-scheduled-aria
     - adminconv-scheduling-unavailable

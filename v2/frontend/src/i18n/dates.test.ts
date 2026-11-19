@@ -10,7 +10,14 @@ test('dates follow the chosen interface language, not the runtime default', () =
 
 test('English is the source language, and it is written day-first', () => {
   expect(formatDate('en', '2026-09-01T10:00:00Z')).toBe('1 Sept 2026');
-  expect(formatDateTime('en', '2026-08-02T09:30:00Z')).toBe('2 Aug 2026, 09:30');
+  expect(formatDateTime('en', '2026-08-02T09:30:00Z')).toBe('2 Aug 2026, 09:30 UTC');
+});
+
+test('a moment names its timezone, so local time cannot be read as UTC or the reverse', () => {
+  // The runtime is pinned to UTC (vite.config.ts); the zone must appear in every locale.
+  for (const locale of ['en', 'nl', 'de']) {
+    expect(formatDateTime(locale, '2026-08-02T09:30:00Z')).toMatch(/UTC$/);
+  }
 });
 
 test('qqx formats like the source language rather than like the machine running it', () => {

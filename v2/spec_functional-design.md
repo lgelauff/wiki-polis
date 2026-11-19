@@ -18,9 +18,9 @@ A deliberation tool for the Wikimedia community. Participants vote on atomic sta
 
 **Moderator** — a participant with elevated trust for one *specific* consultation. Can approve or hide statements and arguments, feature statements, resolve (mark as handled) community flags, block and unblock participants, and add seed statements before the first phase and during Explore. Sees the admin Overview, including the phase control and statistics, read-only: cannot change phases, pause, schedule, initialise Phase 6 or publish. Sees Settings read-only (Basics including strict moderation, Access, the Roles list with usernames, the Invitations list with usernames), and the Moderation and Content sections. People and Participants show moderator-only viewers pseudonyms only, no usernames *(the owner may revisit Participants)*. Cannot change any setting (strict moderation is organizer-only), access or participation, roles, or phases. The way in is the **You moderate** list on the participant home, whose Admin link opens the consultation's admin pages; a console Admin home is planned ([#538](https://github.com/lgelauff/wiki-polis/issues/538)).
 
-**Organizer** — a consultation-scoped role above moderator. In addition to moderation, an organizer can change the consultation's settings (strict moderation included), advance the consultation through its phases via the guided "Move on" flow, and initialise Phase 6.
+**Organizer** — a consultation-scoped role above moderator. In addition to moderation, an organizer can change the consultation's settings (strict moderation included), advance the consultation through its phases via the guided "Move on" flow or schedule the next transition, and initialise Phase 6.
 
-**Site admin** (global) — site-wide control. Can create and manage any consultation, assign roles, curate featured statements, schedule phase transitions, and use the advanced (non-linear) phase toggles. The three consultation-facing tiers surface in the UI as *Site admin*, *Organizer*, and *Moderator*.
+**Site admin** (global) — site-wide control. Can create and manage any consultation, assign roles, curate featured statements, and use the advanced (non-linear) phase toggles. The three consultation-facing tiers surface in the UI as *Site admin*, *Organizer*, and *Moderator*.
 
 ---
 
@@ -320,7 +320,7 @@ A conversation moves through a linear sequence of phases, each backed by a boole
 
 **Cleanup vs. the preliminary-results window — two distinct things.** The **Cleanup phase** above (step 5, flag `phase_cleanup`) is a *pause before* the informed vote, while the organizer moderates arguments. Separately, there is a flag-less **preliminary-results window**: the inferred state where public results are on but the conversation is not yet closed (`active AND phase_public_results AND NOT phase_informed_voting AND closed_at is None`). During it participants see a "Preliminary results" banner, and the final report at `/c/<slug>/report` is only published once `closed_at` is set. At close, the `Phase6ResultsFilter` (excluded statements and participants) is snapshotted so the published figures are semi-immutable.
 
-**Scheduled transitions.** An admin can schedule a future phase advance (`scheduled_transition_at` / `scheduled_transition_target`); a Toolforge cron job (`phase-scheduler`, running `flask process-phase-schedules`) applies it. A pending schedule can be frozen or cancelled.
+**Scheduled transitions.** An organizer or site admin can schedule a future phase advance (`scheduled_transition_at` / `scheduled_transition_target`); a Toolforge cron job (`phase-scheduler`, running `flask process-phase-schedules`) applies it. A pending schedule can be frozen or cancelled. An archived consultation has no schedules: archiving cancels a pending one, and a schedule cannot be set or frozen while the consultation is archived.
 
 **Closing is irreversible** and starts the identity-reveal clock. It does not happen automatically — the organizer explicitly publishes the final report as a deliberate action.
 

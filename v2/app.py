@@ -5087,9 +5087,8 @@ def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
 
 
 def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
-    conv = Conversation.query.get_or_404(conv_id)
-    if not _is_global_admin():
-        _refuse_admin()
+    # A phase control, like Move on: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     scheduled_at = (
         _parse_utc_timestamp(body['scheduledAt'])
         if body['scheduledAt'] is not None else None

@@ -6452,7 +6452,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Archive receipt and refreshed lifecycle */
+            /** @description Archive receipt and refreshed lifecycle; archiving or reopening cancels any pending phase schedule */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6541,7 +6541,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Global admin permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6550,7 +6550,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The current transition cannot be scheduled */
+            /** @description The current transition cannot be scheduled, or the consultation is archived; reported before a past date-time. Cancelling (null) is always accepted */
             409: {
                 headers: {
                     [name: string]: unknown;
