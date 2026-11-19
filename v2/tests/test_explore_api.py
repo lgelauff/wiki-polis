@@ -653,7 +653,7 @@ def test_statement_command_parent_lookup_failure_is_safe_to_retry(
     _join(participant, conversation)
     _store_upstream_session(auth_client, conversation)
     with (
-        patch('app._statement_text_map', side_effect=PolisParticipantError('down')),
+        patch('app._statement_text_and_meta', side_effect=PolisParticipantError('down')),
         patch('app.polis_http.post') as upstream_post,
     ):
         response = auth_client.post(
@@ -679,7 +679,7 @@ def test_derivative_statement_records_provenance_without_consuming_quota(
     server = MagicMock()
 
     with (
-        patch('app._statement_text_map', return_value={7: 'Original claim'}),
+        patch('app._statement_text_and_meta', return_value=({7: 'Original claim'}, set())),
         patch('app._statement_similarity_scores', return_value={
             'char': 0.88, 'semantic-v1': 0.91,
         }),
@@ -793,7 +793,7 @@ def test_identical_derivative_records_no_provenance(
 
     with (
         caplog.at_level('WARNING'),
-        patch('app._statement_text_map', return_value={7: 'Original claim'}),
+        patch('app._statement_text_and_meta', return_value=({7: 'Original claim'}, set())),
         patch('app._statement_similarity_scores', return_value={'char': 0.9}),
         patch('app.polis_http.post', return_value=_response(
             _STATEMENT_EXISTS_PROBLEM, status=409,

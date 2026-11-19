@@ -736,7 +736,7 @@
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "409": {
-            "description": "Quota, derivative similarity, identical statement already in the conversation, idempotency conflict, or unknown outcome",
+            "description": "Quota, derivative similarity, identical statement already in the conversation, a meta statement as parent (meta_not_rewordable), idempotency conflict, or unknown outcome",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "502": {
@@ -1027,6 +1027,21 @@
         "503": {"description": "Current state could not be verified or saved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/statements/{statementId}/meta": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "statementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 0}}
+      ],
+      "put": {"operationId": "putAdminStatementMeta", "summary": "Mark or unmark a seed statement as a meta statement", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementMetaRequest"}}}}, "responses": {
+        "200": {"description": "Meta receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementMetaResponse"}}}},
+        "400": {"description": "Invalid request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation or statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Not a seed statement, a featured statement, or responses not acknowledged", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Statement service unavailable; nothing was changed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
       "parameters": [
         {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
@@ -1070,7 +1085,7 @@
         "200": {"description": "Selection receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedSelectionResponse"}}}},
         "400": {"description": "Invalid selection source", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "409": {"description": "Command outcome unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Command outcome unknown, or the statement is a meta statement (meta_not_featurable)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Live round synchronization failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "503": {"description": "Statement verification unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -1223,8 +1238,10 @@
       "AdminStatementModerationPolicyResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["mode", "changed", "reconciledStatements", "workspace"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["moderate", "auto_approve"]}, "changed": {"type": "boolean"}, "reconciledStatements": {"type": "integer", "minimum": 0}, "workspace": {"$ref": "#/components/schemas/AdminStatementWorkspace"}}}}},
       "AdminStatementModerationRequest": {"type": "object", "required": ["status"], "additionalProperties": false, "properties": {"status": {"type": "string", "enum": ["approved", "pending", "hidden"]}}},
       "AdminStatementModerationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "status", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "status": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
-      "AdminSeedStatementRequest": {"type": "object", "required": ["text", "derivedFromId"], "additionalProperties": false, "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 280}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}}},
-      "AdminSeedStatementResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "derivedFromId", "provenanceRecorded", "links"], "additionalProperties": false, "properties": {"statementId": {"type": ["integer", "null"], "minimum": 0}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "provenanceRecorded": {"type": ["boolean", "null"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
+      "AdminStatementMetaRequest": {"type": "object", "required": ["meta"], "additionalProperties": false, "properties": {"meta": {"type": "boolean"}, "acknowledgeResponses": {"type": "boolean", "default": false}}},
+      "AdminStatementMetaResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "meta", "changed", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "meta": {"type": "boolean"}, "changed": {"type": "boolean"}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
+      "AdminSeedStatementRequest": {"type": "object", "required": ["text", "derivedFromId"], "additionalProperties": false, "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 280}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "isMeta": {"type": "boolean", "default": false}}},
+      "AdminSeedStatementResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "derivedFromId", "provenanceRecorded", "metaRecorded", "links"], "additionalProperties": false, "properties": {"statementId": {"type": ["integer", "null"], "minimum": 0}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "provenanceRecorded": {"type": ["boolean", "null"]}, "metaRecorded": {"type": ["boolean", "null"], "description": "null: not asked to be meta; false: added, but not marked meta."}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
       "AdminStatementImportRequest": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 280}}}},
       "AdminStatementImportResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["outcome", "links"], "additionalProperties": false, "properties": {
         "outcome": {"type": "object", "required": ["imported", "skippedExisting", "skippedDuplicateInput", "failedUpstream"], "additionalProperties": false, "properties": {"imported": {"type": "integer", "minimum": 0}, "skippedExisting": {"type": "integer", "minimum": 0}, "skippedDuplicateInput": {"type": "integer", "minimum": 0}, "failedUpstream": {"type": "integer", "minimum": 0}}},
@@ -1265,8 +1282,11 @@
         "capabilities": {"type": "object", "required": ["moderate", "seed"], "additionalProperties": false, "properties": {"moderate": {"type": "boolean"}, "seed": {"type": "boolean"}}},
         "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
       }},
-      "AdminStatement": {"type": "object", "required": ["id", "text", "moderation", "seed", "featured", "votes", "provenance"], "additionalProperties": false, "properties": {
-        "id": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "moderation": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "seed": {"type": "boolean"}, "featured": {"type": "boolean"},
+      "AdminStatement": {"type": "object", "required": ["id", "text", "moderation", "seed", "meta", "hasResponses", "featured", "votes", "provenance"], "additionalProperties": false, "properties": {
+        "id": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "moderation": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "seed": {"type": "boolean"},
+        "meta": {"type": "boolean", "description": "A meta statement asks about the participant, not the topic (#415)."},
+        "hasResponses": {"type": "boolean", "description": "Someone other than its author has responded; a meta change then needs acknowledgeResponses."},
+        "featured": {"type": "boolean"},
         "votes": {"type": "object", "required": ["agree", "pass", "disagree"], "additionalProperties": false, "properties": {"agree": {"type": "integer", "minimum": 0}, "pass": {"type": "integer", "minimum": 0}, "disagree": {"type": "integer", "minimum": 0}}},
         "provenance": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["derivedFromId", "scores"], "additionalProperties": false, "properties": {"derivedFromId": {"type": "integer", "minimum": 0}, "scores": {"type": "array", "items": {"type": "object", "required": ["model", "value"], "additionalProperties": false, "properties": {"model": {"type": "string"}, "value": {"type": "number", "minimum": 0, "maximum": 1}}}}}}]}
       }},

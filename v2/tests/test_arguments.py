@@ -325,7 +325,7 @@ def test_both_sides_offer_a_direct_skip_before_any_contribution(
     while the contribution is still pending, and it must drop away once the side
     is answered.
     """
-    with patch('app._statement_text_map', return_value={}):
+    with patch('app._statement_text_and_meta', return_value=({}, set())):
         card = auth_client.get(
             '/api/v1/conversations/arg-conv/arguments',
         ).get_json()['data']['featuredStatements'][0]
@@ -336,7 +336,7 @@ def test_both_sides_offer_a_direct_skip_before_any_contribution(
                for side in card['sides'].values())
 
     assert auth_client.put(_skip_path('arg-conv', fs.id, 'pro')).status_code == 200
-    with patch('app._statement_text_map', return_value={}):
+    with patch('app._statement_text_and_meta', return_value=({}, set())):
         card = auth_client.get(
             '/api/v1/conversations/arg-conv/arguments',
         ).get_json()['data']['featuredStatements'][0]
@@ -361,7 +361,7 @@ def test_all_complete_state_requires_both_side_contributions(
     template source.
     """
     def read():
-        with patch('app._statement_text_map', return_value={}):
+        with patch('app._statement_text_and_meta', return_value=({}, set())):
             return auth_client.get(
                 '/api/v1/conversations/arg-conv/arguments',
             ).get_json()['data']
@@ -706,7 +706,7 @@ def test_participant_argument_flag_dedupes_open_flags(auth_client, arg_conv,
 
 
 def test_participant_can_flag_statement(auth_client, arg_conv, arg_part, participant):
-    with patch('app._statement_text_map', return_value={42: 'Statement text'}):
+    with patch('app._statement_text_and_meta', return_value=({42: 'Statement text'}, set())):
         resp = auth_client.post(_flags_path(), json={
             'contentType': 'statement', 'targetId': 42,
             'category': 'privacy', 'detail': 'Personal details',
@@ -748,7 +748,7 @@ def test_participant_can_flag_seed_statement(auth_client, arg_conv, arg_part, pa
 def test_participant_flag_statement_requires_detail_for_other(
     auth_client, arg_conv, arg_part, participant,
 ):
-    with patch('app._statement_text_map', return_value={42: 'Statement text'}):
+    with patch('app._statement_text_and_meta', return_value=({42: 'Statement text'}, set())):
         resp = auth_client.post(_flags_path(), json={
             'contentType': 'statement', 'targetId': 42,
             'category': 'other', 'detail': '   ',
@@ -767,7 +767,7 @@ def test_participant_flag_statement_requires_detail_for_other(
 def test_participant_can_flag_other_with_explanation(
     auth_client, arg_conv, arg_part, participant,
 ):
-    with patch('app._statement_text_map', return_value={42: 'Statement text'}):
+    with patch('app._statement_text_and_meta', return_value=({42: 'Statement text'}, set())):
         resp = auth_client.post(_flags_path(), json={
             'contentType': 'statement', 'targetId': 42,
             'category': 'other', 'detail': 'This needs contextual review.',
@@ -923,7 +923,7 @@ def test_admin_featured_workspace_accessible(admin_client, arg_conv, fs,
     returns the React shell with a 200 before route dispatch — so it asserted
     nothing. This asserts the moderator actually gets the workspace payload.
     """
-    with patch('app._statement_text_map', return_value={42: 'Featured text'}):
+    with patch('app._statement_text_and_meta', return_value=({42: 'Featured text'}, set())):
         resp = admin_client.get(_admin_featured_path(arg_conv.id))
 
     assert resp.status_code == 200
@@ -943,7 +943,7 @@ def test_admin_featured_workspace_shows_statement_provenance(admin_client, arg_c
     record_statement_provenance(arg_conv.id, fs.polis_statement_id, 7,
                                 parent_text='old statement', new_text='new statement')
 
-    with patch('app._statement_text_map', return_value={42: 'Featured text'}):
+    with patch('app._statement_text_and_meta', return_value=({42: 'Featured text'}, set())):
         resp = admin_client.get(_admin_featured_path(arg_conv.id))
 
     assert resp.status_code == 200
@@ -953,7 +953,7 @@ def test_admin_featured_workspace_shows_statement_provenance(admin_client, arg_c
 
 
 def test_admin_featured_add_by_tid(admin_client, arg_conv, admin_participant):
-    with patch('app._statement_text_map', return_value={99: 'Candidate text'}):
+    with patch('app._statement_text_and_meta', return_value=({99: 'Candidate text'}, set())):
         resp = admin_client.put(
             f'{_admin_featured_path(arg_conv.id)}/99', json={'source': 'manual'},
         )
@@ -965,7 +965,7 @@ def test_admin_featured_add_by_tid(admin_client, arg_conv, admin_participant):
 
 
 def test_admin_featured_add_deduplicates(admin_client, arg_conv, admin_participant):
-    with patch('app._statement_text_map', return_value={55: 'Candidate text'}):
+    with patch('app._statement_text_and_meta', return_value=({55: 'Candidate text'}, set())):
         first = admin_client.put(
             f'{_admin_featured_path(arg_conv.id)}/55', json={'source': 'manual'},
         )
