@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from db import AdminRole, AuditEvent, FeaturedStatement, db
+from db import AdminRole, AuditEvent, Conversation, FeaturedStatement, db
 from polis_admin import PolisServerError
 from tests.conftest import login
 from services.admin_lifecycle import (
@@ -456,6 +456,90 @@ def test_schedule_api_converges_and_cancels(admin_client, conversation):
     assert cancel.get_json()['data']['lifecycle']['schedule']['scheduledAt'] is None
 
 
+def test_schedule_api_is_an_organizer_control(client, conversation, participant):
+    """Scheduling is a phase control like Move on: the conversation's organizer may set
+    it; a moderator may not, and is not offered it."""
+    conversation.phase_submission = True
+    role = AdminRole(
+        participant_id=participant.id, conversation_id=conversation.id,
+        role='moderator',
+    )
+    db.session.add(role)
+    db.session.commit()
+    login(client, 'testuser')
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/schedule'
+    future = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    body = {'scheduledAt': future.isoformat(), 'frozen': False}
+
+    as_moderator = client.put(endpoint, json=body)
+    moderator_view = client.get(
+        f'/api/v1/admin/conversations/{conversation.id}',
+    ).get_json()['data']
+    role.role = 'organizer'
+    db.session.commit()
+    organizer_view = client.get(
+        f'/api/v1/admin/conversations/{conversation.id}',
+    ).get_json()['data']
+    as_organizer = client.put(endpoint, json=body)
+
+    assert as_moderator.status_code == 403
+    assert moderator_view['schedule']['canSchedule'] is False
+    assert organizer_view['schedule']['canSchedule'] is True
+    assert as_organizer.status_code == 200
+    assert as_organizer.get_json()['data']['changed'] is True
+    db.session.refresh(conversation)
+    assert conversation.scheduled_transition_target == 'featured_selection'
+
+
+def test_schedule_api_refuses_a_moderator_cancel_and_another_conversations_organizer(
+    client, conversation, participant,
+):
+    """Cancelling is the write that never raises, so it is gated too; and organizing one
+    consultation gives no hold on another one's schedule."""
+    future = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    conversation.phase_submission = True
+    conversation.scheduled_transition_at = future
+    conversation.scheduled_transition_target = 'featured_selection'
+    other = Conversation(
+        slug='other-conv', polis_id='zzz9876543', title='Other', active=True,
+        access_policy='public',
+    )
+    db.session.add(other)
+    db.session.commit()
+    db.session.add_all([
+        AdminRole(participant_id=participant.id, conversation_id=conversation.id,
+                  role='moderator'),
+        AdminRole(participant_id=participant.id, conversation_id=other.id,
+                  role='organizer'),
+    ])
+    db.session.commit()
+    login(client, 'testuser')
+
+    cancel = client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/schedule',
+        json={'scheduledAt': None, 'frozen': False},
+    )
+
+    assert cancel.status_code == 403
+    db.session.refresh(conversation)
+    assert conversation.scheduled_transition_target == 'featured_selection'
+    assert conversation.scheduled_transition_at is not None
+
+
+def test_schedule_api_reports_no_schedule_before_a_stale_past_time(
+    admin_client, conversation,
+):
+    """A page left open after the schedule fired submits a time that has also passed:
+    the refusal says there is nothing to schedule, not "choose a future time"."""
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/schedule',
+        json={'scheduledAt': '2020-01-01T00:00:00Z', 'frozen': False},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'schedule_unavailable'
+
+
 def test_schedule_api_rejects_unschedulable_and_past_transitions(
     admin_client, conversation,
 ):
@@ -464,6 +548,8 @@ def test_schedule_api_rejects_unschedulable_and_past_transitions(
     unavailable = admin_client.put(
         endpoint, json={'scheduledAt': future.isoformat(), 'frozen': False},
     )
+    conversation.phase_submission = True
+    db.session.commit()
     past = admin_client.put(
         endpoint,
         json={'scheduledAt': '2020-01-01T00:00:00Z', 'frozen': False},
@@ -567,6 +653,101 @@ def test_archive_api_refuses_published_conversation(admin_client, conversation):
 
     assert response.status_code == 409
     assert response.get_json()['error']['code'] == 'conversation_closed'
+
+
+def _pending_schedule(conversation, *, active=True):
+    conversation.active = active
+    conversation.phase_submission = True
+    conversation.scheduled_transition_at = (
+        datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    )
+    conversation.scheduled_transition_target = 'featured_selection'
+    db.session.commit()
+
+
+def _schedule_cancels():
+    return AuditEvent.query.filter_by(operation='phase.schedule.cancel').all()
+
+
+def test_archive_cancels_a_pending_schedule_and_audits_the_cancel(
+    admin_client, conversation,
+):
+    """An archived consultation has no schedules (owner, 2026-11-19): archiving cancels
+    the pending one in the same write, on the record like a cancel."""
+    _pending_schedule(conversation)
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/archive',
+        json={'archived': True},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['lifecycle']['schedule']['scheduledAt'] is None
+    db.session.refresh(conversation)
+    assert conversation.scheduled_transition_at is None
+    assert conversation.scheduled_transition_target is None
+    cancels = _schedule_cancels()
+    assert [(event.conversation_id, event.target_type, event.target_id) for event in cancels] == [
+        (conversation.id, 'phase', 'featured_selection'),
+    ]
+
+
+def test_schedule_api_refuses_setting_or_freezing_on_an_archived_consultation(
+    admin_client, conversation,
+):
+    """A time, frozen or not, is refused while archived, so nothing is left to fire on a
+    reopen."""
+    conversation.active = False
+    conversation.phase_submission = True
+    db.session.commit()
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/schedule'
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+    set_time = admin_client.put(endpoint, json={'scheduledAt': future, 'frozen': False})
+    frozen = admin_client.put(endpoint, json={'scheduledAt': future, 'frozen': True})
+
+    for response in (set_time, frozen):
+        assert response.status_code == 409
+        assert response.get_json()['error']['code'] == 'schedule_unavailable'
+    db.session.refresh(conversation)
+    assert conversation.scheduled_transition_at is None
+    assert conversation.scheduled_transition_target is None
+
+
+def test_schedule_api_cancel_on_an_archived_consultation_is_a_no_op(
+    admin_client, conversation,
+):
+    conversation.active = False
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/schedule',
+        json={'scheduledAt': None, 'frozen': False},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['changed'] is False
+    assert _schedule_cancels() == []
+
+
+def test_reopen_leaves_no_schedule_behind(admin_client, conversation):
+    """A schedule left on an archived consultation from before the rule (it could be set
+    then) is cleared by the reopen, so it never fires afterwards."""
+    _pending_schedule(conversation, active=False)
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/archive',
+        json={'archived': False},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['lifecycle']['conversation']['status'] == 'active'
+    assert response.get_json()['data']['lifecycle']['schedule']['scheduledAt'] is None
+    db.session.refresh(conversation)
+    assert conversation.active is True
+    assert conversation.scheduled_transition_at is None
+    assert conversation.scheduled_transition_target is None
+    assert len(_schedule_cancels()) == 1
 
 
 def test_largest_shift_is_the_largest_whatever_the_row_order(

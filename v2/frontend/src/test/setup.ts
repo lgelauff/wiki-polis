@@ -40,3 +40,10 @@ if (typeof globalThis.matchMedia !== 'function') {
     dispatchEvent: () => false,
   })) as typeof globalThis.matchMedia;
 }
+
+/** jsdom implements no scrolling either. The informed-voting deck scrolls the next card, or
+ *  the completion panel, into view after a vote; without this stub that throws from a
+ *  timer, outside any test. */
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => {};
+}

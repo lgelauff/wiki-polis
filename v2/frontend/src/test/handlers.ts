@@ -33,8 +33,8 @@ function statementWorkspaceFixture(
   return {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     statements: {
-      pending: [{id: 11, text: 'A participant proposal awaiting review.', moderation: 'pending', seed: false, featured: false, votes: {agree: 2, pass: 1, disagree: 3}, provenance: null}],
-      approved: [{id: 12, text: 'An approved seed statement.', moderation: 'approved', seed: true, featured: true, votes: {agree: 8, pass: 2, disagree: 1}, provenance: null}],
+      pending: [{id: 11, text: 'A participant proposal awaiting review.', moderation: 'pending', seed: false, meta: false, hasResponses: false, featured: false, votes: {agree: 2, pass: 1, disagree: 3}, provenance: null}],
+      approved: [{id: 12, text: 'An approved seed statement.', moderation: 'approved', seed: true, meta: false, hasResponses: false, featured: true, votes: {agree: 8, pass: 2, disagree: 1}, provenance: null}],
       hidden: [],
     },
     moderationPolicy: {mode, newStatements: mode === 'moderate' ? 'pending' : 'approved', available: true},
@@ -490,6 +490,7 @@ export const handlers = [
       viewer: {state: 'participant', pseudonym: 'quiet-otter'},
       spaceWarning: null,
       scheduledTransition: null,
+      cleanup: false,
       tabs: [
         {key: 'vote', label: 'Vote', dataHref: '/api/v1/conversations/community-strategy/explore'},
         {key: 'results', label: 'Intermediate results', dataHref: '/api/v1/conversations/community-strategy/intermediate-results'},
@@ -586,6 +587,7 @@ export const handlers = [
         resultsAvailable: true,
         openedAt: '2026-05-01T12:00:00Z',
         closedAt: '2026-07-01T12:00:00Z',
+        phases: [],
         context: {
           phase: 'Publish',
           status: 'final',

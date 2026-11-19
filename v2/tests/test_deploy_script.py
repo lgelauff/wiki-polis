@@ -45,6 +45,15 @@ def test_deploy_script_restarts_itself_once_when_the_checkout_changed_it():
     assert 'REEXEC_ARGS+=(--expect "$TARGET_REV")' in source
 
 
+def test_deploy_script_restores_only_the_generated_schema_before_checkout():
+    source = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    assert 'GENERATED_FILES="v2/frontend/src/api/schema.ts"' in source
+    assert 'git checkout -- "$path"' in source
+    assert source.index('git checkout -- "$path"') < source.index('git checkout --detach')
+    assert 'reset --hard' not in source
+    assert 'checkout -f' not in source
+
+
 def _run_deploy_with_account(tmp_path, account, *, allow_unknown=None):
     home = tmp_path / 'home'
     (home / 'wiki-polis').mkdir(parents=True)

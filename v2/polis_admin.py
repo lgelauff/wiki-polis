@@ -166,12 +166,28 @@ _STATEMENTS_SQL = """
       c.is_seed,
       COALESCE(vs.agree_count,    0) AS agree_count,
       COALESCE(vs.disagree_count, 0) AS disagree_count,
-      COALESCE(vs.pass_count,     0) AS pass_count
+      COALESCE(vs.pass_count,     0) AS pass_count,
+      c.is_meta,
+      EXISTS (
+        SELECT 1 FROM votes_latest_unique o
+        WHERE o.zid = c.zid AND o.tid = c.tid AND o.pid <> c.pid
+      ) AS has_responses
     FROM comments c
     JOIN z ON c.zid = z.zid
     LEFT JOIN vote_stats vs ON c.tid = vs.tid
     WHERE c.active = TRUE
     ORDER BY c.tid
+"""
+
+# The flags Polis's PUT /api/v3/comments overwrites. That endpoint requires
+# active, mod, is_meta and velocity together and stores the first three, so a
+# change to one of them must send the current value of the others (#415, #416).
+# No active filter: a statement deactivated upstream must stay deactivated.
+_STATEMENT_FLAGS_SQL = """
+    SELECT c.tid, c.active, c.mod, c.is_meta, c.is_seed
+    FROM comments c
+    JOIN zinvites z ON z.zid = c.zid
+    WHERE z.zinvite = %s AND c.tid = %s
 """
 
 _FEATURED_CANDIDATES_SQL = """
@@ -196,7 +212,8 @@ _FEATURED_CANDIDATES_SQL = """
     FROM comments c
     JOIN z ON c.zid = z.zid
     LEFT JOIN vote_stats vs ON c.tid = vs.tid
-    WHERE c.active = TRUE AND c.mod >= 0
+    -- A meta statement asks about the participant, not the topic: never featured (#415).
+    WHERE c.active = TRUE AND c.mod >= 0 AND c.is_meta = FALSE
     ORDER BY
       c.is_seed DESC,
       (COALESCE(vs.n_votes, 0) - COALESCE(vs.n_pass, 0) >= 3) DESC,
@@ -642,10 +659,35 @@ class PolisServerClient:
 
     # ── Statements ────────────────────────────────────────────────────────────
 
-    def moderate(self, conversation_id: str, tid: int, mod: int) -> None:
-        """Set mod value on a statement (1=approved, 0=pending, -1=hidden)."""
+    def get_statement_flags(self, zinvite: str, tid: int) -> dict | None:
+        """Return {active, mod, is_meta, is_seed} for one statement, or None.
+
+        None means the flags could not be read (no Postgres, a bad zinvite, a failed
+        query) or the statement does not exist. Callers that write must then refuse.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        rows = self._pg_query(_STATEMENT_FLAGS_SQL, (zinvite, int(tid)),
+                              'get_statement_flags')
+        if not rows:
+            return None
+        _tid, active, mod, is_meta, is_seed = rows[0]
+        return {'active': bool(active), 'mod': int(mod),
+                'is_meta': bool(is_meta), 'is_seed': bool(is_seed)}
+
+    def _put_statement(self, conversation_id: str, tid: int, *,
+                       mod: int, active: bool, is_meta: bool, action: str) -> None:
         sess, auth_headers = self._login()
-        headers = {**self._HEADERS, **auth_headers}
+        self._put_statement_with(
+            sess, {**self._HEADERS, **auth_headers}, conversation_id, tid,
+            mod=mod, active=active, is_meta=is_meta, action=action,
+        )
+
+    def _put_statement_with(
+        self, sess, headers: dict, conversation_id: str, tid: int, *,
+        mod: int, active: bool, is_meta: bool, action: str,
+    ) -> None:
+        """PUT mod, active and is_meta for one statement on a logged-in session."""
         try:
             resp = sess.put(
                 f'{self._base}/api/v3/comments',
@@ -653,8 +695,9 @@ class PolisServerClient:
                     'conversation_id': conversation_id,
                     'tid':             tid,
                     'mod':             mod,
-                    'active':          True,
-                    'is_meta':         False,
+                    'active':          active,
+                    'is_meta':         is_meta,
+                    # Required by Polis, but not stored (it updates active, mod, is_meta).
                     'velocity':        0.5,
                 },
                 headers=headers,
@@ -664,11 +707,41 @@ class PolisServerClient:
             raise PolisServerError(str(exc)) from exc
         if not resp.ok:
             raise PolisServerError(
-                f'Polis moderation failed (HTTP {resp.status_code}): {resp.text[:300]}'
+                f'Polis {action} failed (HTTP {resp.status_code}): {resp.text[:300]}'
             )
 
-    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> requests.Response:
-        """POST a single seed statement to Polis. Raises PolisServerError on failure."""
+    def _require_flags(self, conversation_id: str, tid: int) -> dict:
+        flags = self.get_statement_flags(conversation_id, tid)
+        if flags is None:
+            raise PolisServerError(
+                f'The current state of statement {tid} could not be read; nothing was changed.',
+                admin_message=POLIS_UNREACHABLE_MESSAGE,
+            )
+        return flags
+
+    def moderate(self, conversation_id: str, tid: int, mod: int) -> None:
+        """Set mod value on a statement (1=approved, 0=pending, -1=hidden).
+
+        Reads the statement's current active and is_meta first and sends them back
+        unchanged, so moderation never clears a meta mark or reactivates a statement
+        (#416). Refuses when they cannot be read.
+        """
+        flags = self._require_flags(conversation_id, tid)
+        self._put_statement(conversation_id, tid, mod=mod, active=flags['active'],
+                            is_meta=flags['is_meta'], action='moderation')
+
+    def set_meta(self, conversation_id: str, tid: int, is_meta: bool) -> None:
+        """Mark or unmark a statement as meta, keeping its mod and active values (#415)."""
+        flags = self._require_flags(conversation_id, tid)
+        self._put_statement(conversation_id, tid, mod=flags['mod'], active=flags['active'],
+                            is_meta=bool(is_meta), action='meta change')
+
+    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> int | None:
+        """POST a single seed statement to Polis and return its tid.
+
+        Raises PolisServerError when the statement was not created. A 2xx response
+        without a usable tid returns None: Polis has created the statement, so raising
+        would invite a retry that adds it a second time (#240)."""
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/comments',
@@ -690,49 +763,80 @@ class PolisServerClient:
                 f'Polis seed statement creation failed (HTTP {resp.status_code}): '
                 f'{resp.text[:300]}'
             )
-        return resp
+        try:
+            return int(resp.json()['tid'])
+        except (ValueError, TypeError, KeyError, AttributeError):
+            logger.warning(
+                'Seed statement in %s was created but Polis returned no usable tid '
+                '(HTTP %s); it cannot be approved here', conversation_id, resp.status_code,
+            )
+            return None
 
-    def add_seed(self, conversation_id: str, text: str) -> None:
-        """Add a seed statement via the Polis admin API, marked is_seed=True.
-        Raises PolisServerError on non-2xx response or network failure.
-        Does not require a tid in the response (fire-and-record semantics)."""
-        sess, auth_headers = self._login()
-        self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
+    def _approve_seed(self, sess, headers: dict, conversation_id: str, tid: int) -> bool:
+        """Approve an organizer seed explicitly (#240), so its state does not depend
+        on whether the Polis account happens to moderate this conversation.
+        Returns False, and logs, when the statement exists but approval failed."""
+        try:
+            # A seed that was just created is active and not meta, so those values
+            # are sent as they are; no flag read is needed for a new statement.
+            self._put_statement_with(sess, headers, conversation_id, tid, mod=1,
+                                     active=True, is_meta=False, action='moderation')
+        except PolisServerError:
+            logger.warning(
+                'Seed statement %s in %s was created but not approved',
+                tid, conversation_id, exc_info=True,
+            )
+            return False
+        return True
 
-    def bulk_add_seeds(
-        self, conversation_id: str, texts: list[str]
-    ) -> tuple[int, list[tuple[str, PolisServerError]]]:
-        """Add multiple seed statements with a single login.
+    def add_seed(self, conversation_id: str, text: str) -> tuple[int | None, bool]:
+        """Add an organizer seed statement (is_seed=True) and approve it.
 
-        Returns (successes, failures) where failures is a list of (text, exc)
-        pairs. Raises PolisServerError only if login itself fails.
+        Returns (tid, approved). Raises PolisServerError when the statement could
+        not be created; an approval failure after creation returns approved=False.
+        A statement created without a usable tid returns (None, False): it exists,
+        but cannot be approved without its id.
         """
         sess, auth_headers = self._login()
         headers = {**self._HEADERS, **auth_headers}
-        successes = 0
+        tid = self._post_seed(sess, headers, conversation_id, text)
+        if tid is None:
+            return None, False
+        return tid, self._approve_seed(sess, headers, conversation_id, tid)
+
+    def bulk_add_seeds(
+        self, conversation_id: str, texts: list[str]
+    ) -> tuple[int, list[tuple[str, PolisServerError]], int]:
+        """Add and approve multiple seed statements with a single login.
+
+        Returns (successes, failures, failed_approvals): successes counts created
+        statements, failures is a list of (text, exc) pairs for statements that
+        were not created, and failed_approvals counts created statements whose
+        approval failed. Raises PolisServerError only if login itself fails.
+        """
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
+        successes = failed_approvals = 0
         failures: list[tuple[str, PolisServerError]] = []
         for text in texts:
             try:
-                self._post_seed(sess, headers, conversation_id, text)
-                successes += 1
+                tid = self._post_seed(sess, headers, conversation_id, text)
             except (requests.RequestException, PolisServerError) as exc:
                 failures.append((text, PolisServerError(str(exc)) if not isinstance(exc, PolisServerError) else exc))
-        return successes, failures
+                continue
+            successes += 1
+            if tid is None or not self._approve_seed(sess, headers, conversation_id, tid):
+                failed_approvals += 1
+        return successes, failures, failed_approvals
 
     def add_seed_return_id(self, conversation_id: str, text: str) -> int:
         """Add a seed statement and return the Polis statement ID (tid).
         Raises PolisServerError if the response is not JSON or does not include a tid."""
         sess, auth_headers = self._login()
-        resp = self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
-        try:
-            tid = resp.json().get('tid')
-        except ValueError:
-            raise PolisServerError(
-                f'Polis returned non-JSON response: {resp.text[:100]}'
-            )
+        tid = self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
         if tid is None:
-            raise PolisServerError('Polis returned no tid for seed statement.')
-        return int(tid)
+            raise PolisServerError('Polis returned no usable tid for seed statement.')
+        return tid
 
     # ── Direct Postgres reads ─────────────────────────────────────────────────
 
@@ -793,6 +897,9 @@ class PolisServerClient:
                 'agree_count':    r[4],
                 'disagree_count': r[5],
                 'pass_count':     r[6],
+                'is_meta':        bool(r[7]),
+                # Someone other than the author has responded (seeds carry the author's pass).
+                'has_responses':  bool(r[8]),
             }
             if r[2] == 1:
                 approved.append(s)

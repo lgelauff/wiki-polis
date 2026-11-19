@@ -9,6 +9,10 @@ class UnknownParentStatement(ValueError):
     pass
 
 
+class MetaStatementNotRewordable(ValueError):
+    """A meta statement is the organizer's wording; no improvements (owner, 2026-09-24)."""
+
+
 class StatementPreparationUnavailable(RuntimeError):
     """The upstream session failed before a statement POST was attempted."""
 

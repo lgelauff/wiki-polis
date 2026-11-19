@@ -843,11 +843,12 @@ test('completes informed voting through the legacy workspace panel', async () =>
   expect(screen.getByText(/independent budgets/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
 
+  // The confirmation first; then the finished deck gives way to the completion panel.
+  expect(await screen.findByRole('alert')).toHaveTextContent('Agreed');
   expect(await screen.findByRole('heading', {
     name: "You've given your informed opinion.",
   })).toBeVisible();
   expect(screen.getByText(/responses are recorded under pseudonym/)).toHaveTextContent('quiet-otter');
-  expect(screen.getByRole('alert')).toHaveTextContent('Agreed');
 });
 
 test('routes preliminary results through the legacy workspace tab', async () => {
@@ -884,7 +885,7 @@ test('routes preliminary results through the legacy workspace tab', async () => 
         slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
         descriptionHtml: null, outroHtml: null,
         viewer: {state: 'participant', pseudonym: 'quiet-otter'},
-        spaceWarning: null, scheduledTransition: null,
+        spaceWarning: null, scheduledTransition: null, cleanup: false,
         tabs: [
           {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
           {key: 'p6-results', label: 'Preliminary results', dataHref: '/api/v1/conversations/community-strategy/results'},
@@ -978,7 +979,7 @@ test('renders preliminary results from the message catalogue, not from source li
         slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
         descriptionHtml: null, outroHtml: null,
         viewer: {state: 'participant', pseudonym: 'quiet-otter'},
-        spaceWarning: null, scheduledTransition: null,
+        spaceWarning: null, scheduledTransition: null, cleanup: false,
         tabs: [
           {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
           {key: 'p6-results', label: 'Preliminary results', dataHref: '/api/v1/conversations/community-strategy/results'},

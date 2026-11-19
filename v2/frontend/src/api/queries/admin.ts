@@ -382,6 +382,22 @@ export async function putAdminStatementModeration(
   ))).data;
 }
 
+export async function putAdminStatementMeta(
+  conversationId: number,
+  statementId: number,
+  body: components['schemas']['AdminStatementMetaRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/statements/{statementId}/meta',
+    {
+      params: {path: {conversationId, statementId}},
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export async function postAdminStatementImport(
   conversationId: number,
   body: components['schemas']['AdminStatementImportRequest'],

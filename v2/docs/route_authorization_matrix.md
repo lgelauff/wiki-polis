@@ -165,7 +165,7 @@ a username named there is a site admin regardless of the database, and the app c
 | `/api/v1/admin/conversations/<id>/termination` | GET | **global admin only** | `_admin_termination_api_payload` (app.py:3776) |
 | `/api/v1/admin/conversations/<id>/pause` | PUT | **global admin only** | `_set_admin_pause_api_payload` (app.py:4332) |
 | `/api/v1/admin/conversations/<id>/archive` | PUT | **global admin only** | `_set_admin_archive_api_payload` (app.py:4347) |
-| `/api/v1/admin/conversations/<id>/schedule` | PUT | **global admin only** | `_set_admin_schedule_api_payload` (app.py:4363) |
+| `/api/v1/admin/conversations/<id>/schedule` | PUT | conversation **organizer** or global admin | `_set_admin_schedule_api_payload` (app.py:4363) |
 | `/api/v1/admin/conversations/<id>/phases` | PUT | **global admin only** | `_set_admin_phases_api_payload` (app.py:4387) |
 | `/api/v1/admin/conversations/<id>/publication` | POST | **global admin only** | `_publish_admin_report_api_payload` (app.py:4407) |
 | `/api/v1/admin/conversations/<id>/phase` | PUT | conversation **organizer** or global admin | `_advance_admin_phase_api_payload` (app.py:4295) |

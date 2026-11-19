@@ -31,6 +31,8 @@ type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
 type Explore = components['schemas']['ExploreState'];
 type VoteChoice = components['schemas']['ExploreVoteRequest']['choice'];
 type ComposerMode = 'suggest' | 'new' | null;
+/** The most characters a statement may have; the server refuses a longer one. */
+const STATEMENT_MAX_CHARACTERS = 280;
 type InviteOnlyDetails = {
   title: string;
   slug?: string;
@@ -227,6 +229,11 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   const textRejected = mutation.error instanceof ApiContractError
     && (mutation.error.code === 'derivative_similarity_too_low'
       || mutation.error.code === 'statement_exists');
+  // Text over the limit is kept as typed, never cut (#558): the counter says how much to
+  // remove and Submit waits until it fits. The server's 1–280 check stays the backstop.
+  const countId = suggest ? 'composer-suggest-count' : 'composer-newstmt-count';
+  const overLimit = Math.max(0, text.length - STATEMENT_MAX_CHARACTERS);
+  const describedBy = [helperId, overLimit > 0 && countId, mutation.error && errorId].filter(Boolean).join(' ');
   return (
     <div id={suggest ? 'composer-suggest' : 'composer-newstmt'} className="v2-composer">
       <div className="v2-composer-header">
@@ -234,14 +241,14 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
           <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink></div>
         </div>
-        <span className="propose-charcount">{msg('conv-composer-charcount', text.length)}</span>
+        <span className="propose-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : msg('conv-composer-charcount', text.length)}</span>
       </div>
-      <textarea className="v2-composer-textarea" maxLength={280} aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={mutation.error ? `${helperId} ${errorId}` : helperId} aria-invalid={textRejected || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
+      <textarea className="v2-composer-textarea" aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={describedBy} aria-invalid={textRejected || overLimit > 0 || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
       <div className="v2-composer-footer">
         <span className="v2-composer-hint">{suggest ? msg('conv-suggest-hint') : msg('conv-newstmt-hint')}</span>
         <div className="v2-composer-btns">
           <button type="button" className="btn-small btn-muted" onClick={onCancel}>{msg('common-cancel')}</button>
-          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
+          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || overLimit > 0 || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
         </div>
       </div>
       {mutation.error && <p className="error" id={errorId} role="alert">{statementErrorCopy(msg, mutation.error)}</p>}
@@ -249,13 +256,15 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   );
 }
 
-function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining, votesUntilUnlock, onSuggest, onNext, onNew}: {
+function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining, votesUntilUnlock, canSuggest, onSuggest, onNext, onNew}: {
   active: boolean;
   allDone: boolean;
   thresholdUnlocked: boolean;
   quota: number;
   quotaRemaining: number;
   votesUntilUnlock: number;
+  /** False for a meta statement: it is the organizer's wording and cannot be reworded (#415). */
+  canSuggest: boolean;
   onSuggest: () => void;
   onNext: () => void;
   onNew: () => void;
@@ -271,11 +280,11 @@ function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining,
   return (
     <div className={`v2-triad${active && !allDone ? ' v2-triad--active' : ''}${allDone ? ' v2-triad--alldone' : ''}`} id="v2-triad">
       <div className="v2-triad-label" id="v2-triad-label" aria-live="polite">{allDone ? msg('conv-triad-alldone-label') : active ? msg('conv-triad-active-label') : msg('conv-triad-idle-label')}</div>
-      <div className="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
-        <button type="button" className="v2-option-card" id="triad-suggest" aria-disabled={disabled} tabIndex={0} onClick={() => !disabled && onSuggest()}>
+      <div className={`v2-triad-grid${canSuggest ? '' : ' v2-triad-grid--two'}`} role="group" aria-labelledby="v2-triad-label">
+        {canSuggest && <button type="button" className="v2-option-card" id="triad-suggest" aria-disabled={disabled} tabIndex={0} onClick={() => !disabled && onSuggest()}>
           <div className="v2-option-top"><span className="v2-option-glyph"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg></span></div>
           <div className="v2-option-bottom"><div className="v2-option-title">{msg('conv-triad-suggest-title')}</div><div className="v2-option-sub">{msg('conv-triad-suggest-sub')}</div><div className="v2-option-action">{msg('conv-triad-suggest-action')}</div></div>
-        </button>
+        </button>}
         <button type="button" className={`v2-option-card${active ? ' v2-option-card--primary' : ''}`} id="triad-next" aria-disabled={disabled} tabIndex={0} onClick={() => !disabled && onNext()}>
           <div className="v2-option-top"><span className="v2-option-glyph"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="M13 5l7 7-7 7" /></svg></span></div>
           <div className="v2-option-bottom"><div className="v2-option-title">{msg('conv-triad-next-title')}</div><div className="v2-option-sub">{msg('conv-triad-next-sub')}</div><div className="v2-option-action">{msg('conv-triad-next-action')}</div></div>
@@ -382,7 +391,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   );
   useEffect(() => {
     if (!receipt || composer || submitted) return;
-    document.getElementById('triad-suggest')?.focus();
+    (document.getElementById('triad-suggest') ?? document.getElementById('triad-next'))?.focus();
   }, [composer, receipt, submitted]);
   return (
     <div className="voting-col">
@@ -393,7 +402,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
           <div className={`statement-card${receipt ? ' statement-card--voted' : ''}`} id="statement-card">
             <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} csrfToken={csrfToken} corner />
             <div className="statement-card-header">
-              <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">{msg('conv-vote-statement-label')}</span></span>
+              <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">{data.currentStatement.isMeta ? msg('meta-statement-label') : msg('conv-vote-statement-label')}</span></span>
               <span className="stmt-meta-right" id="stmt-right-label">{msg('conv-vote-private')}</span>
               {receipt && (
                 <span className="voted-badge" data-type={receipt.choice === 'pass' ? 'neutral' : receipt.choice}>
@@ -402,13 +411,14 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
                 </span>
               )}
             </div>
+            {!receipt && data.currentStatement.isMeta && <p id="statement-meta-prompt" className="statement-meta-prompt">{msg('conv-vote-meta-prompt')}</p>}
             {!receipt ? <p id="statement-text" className="statement-text">{data.currentStatement.text}</p> : <p id="voted-stmt-text" className="voted-stmt-text">{data.currentStatement.text}</p>}
             {!receipt && <VoteChoices disabled={vote.isPending} onVote={castVote} />}
           </div>
         )}
 
         {!composer && !submitted && (
-          <OptionTriad active={receipt !== null || allDone} allDone={allDone} thresholdUnlocked={thresholdUnlocked} quota={data.newStatement.quota} quotaRemaining={data.newStatement.remaining} votesUntilUnlock={votesUntilUnlock} onSuggest={() => setComposer('suggest')} onNext={next} onNew={() => setComposer('new')} />
+          <OptionTriad active={receipt !== null || allDone} allDone={allDone} thresholdUnlocked={thresholdUnlocked} quota={data.newStatement.quota} quotaRemaining={data.newStatement.remaining} votesUntilUnlock={votesUntilUnlock} canSuggest={data.capabilities.suggestWording || allDone} onSuggest={() => setComposer('suggest')} onNext={next} onNew={() => setComposer('new')} />
         )}
         {composer && <Composer mode={composer} data={data} slug={slug} csrfToken={csrfToken} onCancel={() => setComposer(null)} onSubmitted={() => { setComposer(null); setSubmitted(true); }} />}
         {submitted && (
@@ -419,7 +429,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
         )}
         {allDone && (
           <div id="all-done-msg" className="all-done-msg">
-            <p className="all-done-label">{msg('conv-alldone-label')}</p>
+            <p className="all-done-label">{data.progress.total === 0 ? msg('conv-nostatements-label') : msg('conv-alldone-label')}</p>
             {data.newStatement.unlocked && <p className="all-done-sub">{msg('conv-alldone-sub')}</p>}
           </div>
         )}
@@ -491,7 +501,7 @@ function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken:
       {data.space === 'demo' && <div className="mode-lock mode-lock--demo" style={{marginBottom: '1rem'}}><span className="mode-lock-dot" aria-hidden="true" />{msg('conv-demo-mode-lock')}</div>}
       {data.descriptionHtml && <div className="intro-text" dangerouslySetInnerHTML={{__html: data.descriptionHtml}} />}
       {data.scheduledTransition && <div className="landing-section output-context"><p className="muted" style={{margin: 0}} dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition', escapeHtml(phaseLabel(msg, data.scheduledTransition.target, data.scheduledTransition.targetLabel)), scheduledTime(msg, dates.dateTime, data.scheduledTransition.at)))} /></div>}
-      {data.status === 'closed' ? <ClosedWorkspace data={data} /> : data.status === 'paused' ? <div className="landing-section"><p className="muted">{msg('conv-paused')}</p></div> : data.tabs.length === 0 ? <div className="landing-section"><p className="muted">{msg('conv-nothing-available')}</p></div> : (
+      {data.status === 'closed' ? <ClosedWorkspace data={data} /> : data.status === 'paused' ? <div className="landing-section"><p className="muted">{msg('conv-paused')}</p></div> : data.tabs.length === 0 ? <div className="landing-section"><p className="muted">{data.cleanup ? msg('conv-cleanup') : msg('conv-nothing-available')}</p></div> : (
         <>
           {data.tabs.length > 1 && <div className="tab-bar" role="tablist" onKeyDown={keyDown}>{data.tabs.map((tab, index) => <button key={tab.key} ref={(element) => { tabRefs.current[index] = element; }} id={`tab-btn-${tab.key}`} className={`tab-btn${activeTab === tab.key ? ' tab-btn--active' : ''}`} role="tab" data-tab={`tab-${tab.key}`} aria-controls={`tab-${tab.key}`} aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => setActiveTab(tab.key)}>{tabLabel(msg, tab.key, tab.label)}</button>)}</div>}
           {data.tabs.map((tab) => <div key={tab.key} id={`tab-${tab.key}`} className={`tab-panel${tab.key === 'arguments' ? ' arguments-tab' : ''}${activeTab === tab.key ? ' tab-panel--active' : ' tab-panel--hidden'}`} role="tabpanel" aria-labelledby={`tab-btn-${tab.key}`}>{activeTab === tab.key && (tab.key === 'vote' ? <ExplorePanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'results' ? <LegacyIntermediateResultsPanel slug={data.slug} /> : tab.key === 'arguments' ? <LegacyArgumentMappingPanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'informed-voting' ? <LegacyInformedVotingPanel workspace={data} csrfToken={csrfToken} /> : tab.key === 'p6-results' ? <LegacyPreliminaryResultsPanel slug={data.slug} /> : <div className="landing-section"><p className="muted">{tabLabel(msg, tab.key, tab.label)}</p></div>)}</div>)}

@@ -43,6 +43,7 @@ const workspace = {
   viewer: {state: 'participant', pseudonym: 'quiet-otter'},
   spaceWarning: null,
   scheduledTransition: null,
+  cleanup: false,
   tabs: [{key: 'vote', label: 'Vote', dataHref: EXPLORE_URL}],
   defaultTab: 'vote',
   reveal: null,

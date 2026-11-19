@@ -81,7 +81,7 @@ test('under qqx, nothing on the signed-in lane is English except the consultatio
   renderLane();
   await screen.findByRole('heading', {name: '(home-section-needs-attention)'});
 
-  const content = [...TITLES, 'quiet-otter', 'Aug 2026', '1 Oct 2026, 12:00'];
+  const content = [...TITLES, 'quiet-otter', 'Aug 2026', '1 Oct 2026, 12:00 UTC'];
   expect(untranslatedCopy([document.querySelector('.home-container'), document.getElementById('output-dialog')], content)).toEqual([]);
 });
 

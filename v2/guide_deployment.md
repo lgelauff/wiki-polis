@@ -197,6 +197,77 @@ curl -s -o /dev/null -w "%{http_code}" http://<private-ip>:8000/
 
 > **Postgres data directory permissions:** Docker runs postgres as an internal user, so `~/particiapp-data/postgresql-data/` will be owned by that user, not by you. If you ever need to delete it (e.g. to re-initialise the database), use `sudo rm -rf ~/particiapp-data/postgresql-data/`.
 
+### Polis server: our patched image (#594)
+
+The Polis server image from particiapp does not stamp `comments.modified` when a
+statement is hidden, approved or marked meta, so Polis math never sees those changes
+(#594). `v2/ops/polis-server/Dockerfile` builds the same image with that one line fixed
+(upstream `f79f992be`). It starts from the image by digest, not `:latest`, and the build
+fails if the line does not match.
+
+These steps run on the Cloud VPS, not on Toolforge: Polis lives there, in two stacks
+side by side. "Staging" is the stack `wiki-polis-dev` talks to (project
+`wiki-polis-staging`, ports 8010/8011); "production" is the one `wiki-polis` talks to
+(project `particiapp-docker`, 8000/8001). See `guide_runbook.md` → *Staging environment*.
+The app itself is deployed on Toolforge as usual, after these steps.
+
+Do staging first, check it, then production. Each stack keeps its own image line, so
+changing one never moves the other. On each environment, switch the image and run the
+one-time stamp (steps 1–4) **before** deploying the app with meta statements (#593):
+otherwise a meta mark made in between does not reach math until step 4.
+
+1. Check that the stack runs the image the Dockerfile starts from. This must print
+   `registry.gitlab.com/particiapp/polis/server@sha256:adf9b8b4…`; if it prints anything
+   else, stop: the switch would change more than one line.
+
+   ```bash
+   docker image inspect -f '{{json .RepoDigests}}' "$(docker inspect -f '{{.Image}}' wiki-polis-staging_polis-server_1)"
+   ```
+
+2. Build the image. Use the branch name until it is merged, `main` after:
+
+   ```bash
+   docker build -t wiki-polis/polis-server:fd440c3e-594 https://github.com/lgelauff/wiki-polis.git#main:v2/ops/polis-server
+   ```
+
+3. Point the stack at it and restart only the Polis server:
+
+   ```bash
+   sed -i 's#image: registry.gitlab.com/particiapp/polis/server:latest#image: wiki-polis/polis-server:fd440c3e-594#' ~/particiapp-docker-staging/docker-compose.yaml
+   ```
+
+   This must show the new image; if it still shows the old one, stop:
+
+   ```bash
+   grep -n 'polis/server\|polis-server:' ~/particiapp-docker-staging/docker-compose.yaml
+   ```
+
+   ```bash
+   docker-compose -p wiki-polis-staging -f ~/particiapp-docker-staging/docker-compose.yaml up -d polis-server
+   ```
+
+4. Stamp what was moderated before the fix, once. It stamps every statement in every
+   conversation that has not been deleted, closed and archived consultations included
+   (the app sets a Polis conversation inactive only on delete). Math rereads their
+   moderation within a minute or so, so hides and meta marks made before the fix reach
+   the results, closed ones included. That is intended.
+
+   ```bash
+   docker exec wiki-polis-staging_postgres_1 psql -U polis -d polis -c "UPDATE comments c SET modified = now_as_millis() FROM conversations v WHERE v.zid = c.zid AND v.is_active"
+   ```
+
+5. Check: on a consultation with votes, hide one statement and mark another meta. Within
+   a minute or so, with no new votes needed, both are out of the opinion groups.
+
+For production, the same steps with `particiapp-docker_polis-server_1`,
+`~/particiapp-docker/docker-compose.yaml`, project `particiapp-docker` and
+`particiapp-docker_postgres_1`. Then record it with `ops/capture_stack_overview.sh`.
+
+To undo: put the `image:` line back to the image the patch started from,
+`registry.gitlab.com/particiapp/polis/server@sha256:adf9b8b45e134ad4da3596cbdf1748cb3f9f0cbf88b6d77bef0fbee43c16c8e2`
+(not `:latest`, which could move), and run step 3's `up -d` again. The stamps already made
+are harmless.
+
 ### Security hardening (one-time, after stack is running)
 
 **Tighten `.env` permissions:**
@@ -593,6 +664,16 @@ step is non-fatal but loud — if `toolforge jobs load` fails, the script prints
 continues the web deploy, but scheduled phase transitions won't fire until the job is reloaded
 manually.
 
+The job keeps running during a deploy. Between the checkout and `flask db upgrade` the code
+expects a newer schema than the database has, so `process-phase-schedules` compares the
+database's Alembic revision with the code's head first: if the database is behind the code, it
+prints "Skipping: migrations pending" and exits 0 without touching any conversation. The first
+run after the migration fires whatever came due in the meantime. A database the code does not
+know (ahead of it, after a rollback) runs as before. A skipped run sends no failure email, so if
+a revision with a new migration was deployed without `--migrate`, or its migration failed,
+scheduled transitions stay silently paused until the database is at head: run
+`deploy.sh --migrate` again.
+
 The script also builds the React frontend on every deploy. When `npm` is available it builds
 directly; on a Toolforge bastion, where application runtimes are intentionally absent, it
 automatically opens an ephemeral `node20` runtime shell and builds there. Toolforge mounts the
@@ -819,6 +900,7 @@ export DATABASE_URL
 | `webservice restart` fails | Must run from `~`, not from inside the repo |
 | Frontend build dies with "JavaScript heap out of memory" in the `node20` shell pod | The default pod is too small for the SPA build; `deploy.sh` asks for `--mem 2Gi`. If a deploy stopped there, rerun the build by hand with the same flag, then `toolforge jobs load ~/wiki-polis/jobs.yaml` and restart the webservice |
 | A change to `deploy.sh` itself had no effect on the deploy that brought it | bash keeps reading the copy of the script it started with. `deploy.sh` now notices when the checkout changed it and restarts itself once (`DEPLOY_REEXEC=1`), pinned to the same revision with `--expect` |
+| `error: Your local changes to the following files would be overwritten by checkout: v2/frontend/src/api/schema.ts` | The frontend build regenerates that tracked file in place (`api:generate`). `deploy.sh` now restores it before switching revisions. Any other file named in that message is a local edit: commit, stash or discard it by hand, then deploy again |
 | No SQLite CLI on Toolforge | Use `python3 -c 'import sqlite3; ...'` if needed |
 | Replica DBs unavailable locally | `get_polis_stats()` already handles missing `POLIS_DATABASE_URL` gracefully |
 | "lseek: Illegal seek" in logs | uWSGI stdout rotation noise — safe to ignore |

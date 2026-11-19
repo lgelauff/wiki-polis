@@ -23,6 +23,9 @@ def build_statement_workspace(
             'text': str(row.get('txt') or ''),
             'moderation': status,
             'seed': bool(row.get('is_seed')),
+            'meta': bool(row.get('is_meta')),
+            # Someone other than its author has responded: a meta change then warns first.
+            'hasResponses': bool(row.get('has_responses')),
             'featured': tid in featured_tids,
             # Exact at any count: the one named exception to the reporting floor, because
             # moderators need the raw counts (owner, 2026-10-30, D6; reporting_rules).
@@ -126,10 +129,33 @@ class SeedStatementUpstreamFailed(RuntimeError):
         self.message = message
 
 
+class StatementMetaNotSeed(ValueError):
+    """Only an organizer-written seed statement can be meta (owner, 2026-09-24)."""
+
+
+class StatementMetaFeatured(ValueError):
+    """A featured statement is an opinion the informed round asks about; it cannot be meta."""
+
+
+class StatementMetaNeedsAcknowledgement(RuntimeError):
+    """The statement already has responses; the change is allowed once warned (2026-11-07)."""
+
+
+class StatementMetaUpstreamFailed(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class ModerationResult:
     statement_id: int
     status: str
+
+
+@dataclass(frozen=True)
+class MetaResult:
+    statement_id: int
+    meta: bool
+    changed: bool
 
 
 @dataclass(frozen=True)
@@ -212,21 +238,31 @@ class SeedStatementResult:
     statement_id: int | None
     derived_from_id: int | None
     provenance_recorded: bool | None
+    # None: not asked to be meta. False: added, but the meta mark failed.
+    meta_recorded: bool | None = None
 
 
 def add_seed_statement(
     *, conversation, text: str, derived_from_id: int | None,
-    sanitize, statement_text_map, add_seed, add_seed_return_id,
-    record_provenance, audit, max_characters: int,
+    sanitize, statement_text_map, add_seed,
+    record_provenance, audit, audit_approval, max_characters: int,
     upstream_errors: tuple[type[Exception], ...],
+    is_meta: bool = False, set_meta=None, audit_meta=None,
 ) -> SeedStatementResult:
-    clean = sanitize(text.strip())
-    if not clean or len(clean) > max_characters:
+    # The limit applies to what the organizer typed, as the counter beside the box counts
+    # it, not to the sanitized text: escaping turns one "&" into five characters, so
+    # measuring after it refused a statement the counter had accepted (#558). The bulk
+    # import below measures the raw text the same way.
+    raw = text.strip()
+    clean = sanitize(raw)
+    if not clean or len(raw) > max_characters:
         raise SeedStatementValidationFailed()
 
+    text_by_id: dict = {}
     try:
-        if derived_from_id is None:
-            add_seed(conversation.polis_id, clean)
+        if derived_from_id is None and not is_meta:
+            statement_id, approved = add_seed(conversation.polis_id, clean)
+            audit_approval(statement_id=statement_id, approved=approved)
             audit(statement_id=None, derived_from_id=None)
             return SeedStatementResult(
                 statement_id=None,
@@ -234,10 +270,11 @@ def add_seed_statement(
                 provenance_recorded=None,
             )
 
-        text_by_id = statement_text_map(conversation.polis_id)
-        if derived_from_id not in text_by_id:
-            raise SeedStatementParentNotFound(derived_from_id)
-        statement_id = add_seed_return_id(conversation.polis_id, clean)
+        if derived_from_id is not None:
+            text_by_id = statement_text_map(conversation.polis_id)
+            if derived_from_id not in text_by_id:
+                raise SeedStatementParentNotFound(derived_from_id)
+        statement_id, approved = add_seed(conversation.polis_id, clean)
     except SeedStatementParentNotFound:
         raise
     except upstream_errors as exc:
@@ -245,18 +282,39 @@ def add_seed_statement(
             getattr(exc, 'admin_message', 'The voting service is unavailable.'),
         ) from exc
 
-    provenance = record_provenance(
-        conversation.id,
-        statement_id,
-        derived_from_id,
-        parent_text=text_by_id[derived_from_id],
-        new_text=clean,
-    )
+    audit_approval(statement_id=statement_id, approved=approved)
+    # Created, but Polis gave no id (#240): there is nothing to link the correction to.
+    # The request still succeeds, since failing it would invite a duplicate on retry.
+    provenance = None
+    if derived_from_id is not None and statement_id is not None:
+        provenance = record_provenance(
+            conversation.id,
+            statement_id,
+            derived_from_id,
+            parent_text=text_by_id[derived_from_id],
+            new_text=clean,
+        )
     audit(statement_id=statement_id, derived_from_id=derived_from_id)
+
+    meta_recorded = None
+    if is_meta and statement_id is None:
+        # Created without a usable id (#240): there is no statement to mark.
+        meta_recorded = False
+    elif is_meta:
+        # Polis takes is_meta only on its update call, so this is a second write. When it
+        # fails the seed exists unmarked, and the receipt says so (no silent half-state).
+        # It runs after the approval, and set_meta keeps the mod it reads back.
+        try:
+            set_meta(conversation.polis_id, statement_id, True)
+            meta_recorded = True
+            audit_meta(statement_id)
+        except upstream_errors:
+            meta_recorded = False
     return SeedStatementResult(
         statement_id=statement_id,
         derived_from_id=derived_from_id,
-        provenance_recorded=provenance is not None,
+        provenance_recorded=None if derived_from_id is None else provenance is not None,
+        meta_recorded=meta_recorded,
     )
 
 
@@ -310,10 +368,12 @@ def import_seed_statements(
     }
     pending = [text for text in normalized if text.casefold() not in existing]
     skipped_existing = len(normalized) - len(pending)
-    imported = failed = 0
+    imported = failed = failed_approval = 0
     if pending:
         try:
-            imported, failures = bulk_add_seeds(conversation.polis_id, pending)
+            imported, failures, failed_approval = bulk_add_seeds(
+                conversation.polis_id, pending,
+            )
         except upstream_errors as exc:
             raise SeedImportUpstreamFailed(
                 getattr(exc, 'admin_message', 'The voting service is unavailable.'),
@@ -333,6 +393,7 @@ def import_seed_statements(
             skipped_existing=skipped_existing,
             skipped_duplicate_input=skipped_duplicate_input,
             failed_upstream=failed,
+            failed_approval=failed_approval,
         )
     return SeedImportResult(
         imported=imported,
@@ -356,3 +417,29 @@ def moderate_statement(
         raise StatementModerationUpstreamFailed() from exc
     audit(statement_id, _MOD_BY_STATUS[status])
     return ModerationResult(statement_id=statement_id, status=status)
+
+
+def set_statement_meta(
+    *, conversation, statement_id: int, row: dict, is_meta: bool,
+    is_featured: bool, acknowledge_responses: bool, set_meta_upstream,
+    audit, upstream_errors: tuple[type[Exception], ...],
+) -> MetaResult:
+    """Mark or unmark a seed statement as meta (#415).
+
+    Seeds only; never a featured statement; a statement others have responded to
+    changes only once the caller has shown the warning (acknowledge_responses).
+    """
+    if not row.get('is_seed'):
+        raise StatementMetaNotSeed()
+    if bool(row.get('is_meta')) == is_meta:
+        return MetaResult(statement_id=statement_id, meta=is_meta, changed=False)
+    if is_meta and is_featured:
+        raise StatementMetaFeatured()
+    if row.get('has_responses') and not acknowledge_responses:
+        raise StatementMetaNeedsAcknowledgement()
+    try:
+        set_meta_upstream(conversation.polis_id, statement_id, is_meta)
+    except upstream_errors as exc:
+        raise StatementMetaUpstreamFailed() from exc
+    audit(statement_id, is_meta, bool(row.get('has_responses')))
+    return MetaResult(statement_id=statement_id, meta=is_meta, changed=True)

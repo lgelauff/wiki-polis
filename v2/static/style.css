@@ -308,7 +308,7 @@ header {
 .content-flag {
   display: inline-block;
   position: relative;
-  margin-left: 6px;
+  margin-inline-start: 6px;
   font-size: 12px;
 }
 
@@ -316,7 +316,7 @@ header {
   position: absolute;
   top: 14px;
   right: 16px;
-  margin-left: 0;
+  margin-inline-start: 0;
   z-index: 5;
 }
 
@@ -345,6 +345,31 @@ header {
 
 .content-flag-trigger:hover {
   background: var(--hairline);
+}
+
+/* The label as a tooltip on keyboard focus and after a tap (#254), above the trigger so it
+   stays clear of the panel; it sides with the panel so it stays on screen too. */
+.content-flag-trigger--tip::after {
+  content: attr(aria-label);
+  position: absolute;
+  z-index: 21;
+  bottom: calc(100% + 4px);
+  right: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: var(--content-flag-width, 220px);
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.content-flag--opens-right .content-flag-trigger--tip::after {
+  right: auto;
+  left: 0;
 }
 
 .content-flag summary::-webkit-details-marker {
@@ -1200,6 +1225,14 @@ h3.conv-card-title-wrap {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
+}
+/* A meta statement has no "Suggest different wording" card (#415). */
+.v2-triad-grid--two { grid-template-columns: repeat(2, 1fr); }
+
+.statement-meta-prompt {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 0 8px;
 }
 
 .v2-option-card {
@@ -2352,6 +2385,9 @@ a { color: var(--pass); }
   padding: 4px;
   border-radius: 10px;
   width: fit-content;
+  /* At phone width the tabs wrap instead of widening the page (#254). */
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .tab-btn {
@@ -2615,36 +2651,6 @@ a { color: var(--pass); }
 .contribute-wrapper[data-state="composing"] .contribute-composer   { display: block; }
 .contribute-wrapper[data-state="submitted"] .contribute-submitted  { display: flex; }
 .contribute-wrapper[data-state="skipped"]   .contribute-skipped    { display: flex; }
-
-/* Idle dashed button */
-.contribute-affordance {
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 14px;
-  border-radius: 9px;
-  font-family: var(--sans);
-  font-size: 13.5px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color .12s, background .12s;
-  margin-bottom: 8px;
-}
-
-.contribute-affordance--pro {
-  background: rgba(31,138,91,0.05);
-  border: 1.5px dashed rgba(31,138,91,0.45);
-  color: var(--agree);
-}
-.contribute-affordance--pro:hover { background: rgba(31,138,91,0.1); }
-
-.contribute-affordance--con {
-  background: rgba(196,74,74,0.05);
-  border: 1.5px dashed rgba(196,74,74,0.45);
-  color: var(--disagree);
-}
-.contribute-affordance--con:hover { background: rgba(196,74,74,0.1); }
 
 .contribute-glyph {
   width: 20px;
@@ -3198,11 +3204,30 @@ a { color: var(--pass); }
 
 /* Mobile: stack columns vertically */
 @media (max-width: 640px) {
+  /* minmax(0, …) and min-width: 0 let a track shrink below its content's min-content
+     width; with a bare 1fr the three vote buttons pushed the card past a 375px screen
+     and clipped Disagree (#355). */
+  .p6-card {
+    padding: 20px 16px;
+  }
   .p6-card-inner {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .p6-statement-col {
+    min-width: 0;
+  }
+  .p6-card .p6-vote-row {
+    gap: 6px;
+  }
+  .p6-card .vote-choice {
+    min-width: 0;
+    gap: 6px;
+    padding: 12px 4px;
   }
   .p6-args-panel {
     order: 1;  /* arguments follow statement on mobile — read statement first, then consider arguments */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-width: 0;
   }
 }
 
@@ -3620,7 +3645,8 @@ a { color: var(--pass); }
   position: relative;
   border: 1px solid var(--hairline);
   border-radius: 14px;
-  overflow: hidden;
+  /* Clip sideways only: a flag panel opened on the last argument may hang below the card (#254). */
+  overflow-x: clip;
   background: var(--surface);
   box-shadow: 0 1px 2px rgba(0,0,0,.02), 0 14px 36px -22px rgba(0,0,0,.10);
   margin-bottom: 1rem;
@@ -3633,6 +3659,8 @@ a { color: var(--pass); }
   padding: 18px 22px;
   background: var(--surface2);
   border-bottom: 1px solid var(--hairline);
+  /* The panel no longer clips its corners vertically: round its first and last bands. */
+  border-radius: 13px 13px 0 0;
   align-items: flex-start;
   flex-wrap: wrap;
 }
@@ -3740,38 +3768,36 @@ a { color: var(--pass); }
   align-items: center;
   gap: 9px;
 }
-.at-contribute--idle {
-  border: 1.5px dashed var(--hairline);
-  color: var(--muted);
-  cursor: pointer;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  font-family: var(--sans);
-}
-.at-contribute--idle:hover { border-color: var(--muted); color: var(--body); }
+/* Idle: "Add …" and "Nothing to add" are two equal secondary buttons, stacked (#461). */
+.contribute-wrapper[data-state="idle"] { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.at-contribute--idle,
 .at-direct-skip {
-  align-items: center;
-  min-height: 32px;
-  margin: -6px 0 12px 1px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 14px;
+  /* Full --pass, not a tint: the edge is what says "button", so it needs 3:1 against the
+     fill and the page (WCAG 1.4.11); the .4 tint it had was about 1.75:1. */
+  border: 1px solid var(--pass);
+  border-radius: 8px;
+  background: var(--surface);
   color: var(--pass);
   font-family: var(--sans);
-  font-size: 12.5px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
   cursor: pointer;
 }
-.at-direct-skip:hover { color: var(--blue-dark); text-decoration: underline; text-underline-offset: 3px; }
-.at-direct-skip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
+.at-contribute--idle:hover,
+.at-direct-skip:hover:not(:disabled) { background: rgba(61,109,186,.06); }
+.at-contribute--idle:focus-visible,
+.at-direct-skip:focus-visible { outline: 2px solid var(--pass); outline-offset: 2px; }
 .at-direct-skip:disabled {
   color: var(--muted);
+  border-color: var(--hairline);
   cursor: wait;
-  text-decoration: none;
 }
 .at-contribute--done {
   border: 1.5px solid var(--ink);
@@ -3887,6 +3913,7 @@ a { color: var(--pass); }
   padding: 14px 20px;
   background: var(--surface2);
   border-top: 1px solid var(--hairline);
+  border-radius: 0 0 13px 13px;
 }
 .at-navbtn {
   display: inline-flex;
@@ -3907,7 +3934,10 @@ a { color: var(--pass); }
 
 /* Progress circles */
 .at-circles { display: flex; align-items: center; gap: 10px; }
-.at-circle   { width: 34px; height: 34px; cursor: pointer; flex-shrink: 0; overflow: visible; }
+.at-circle   { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; flex-shrink: 0; }
+.at-circle svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* What the circle fills mean (#464): one line under the navigation footer, on its background. */
+.at-circles-legend { padding: 0 20px 12px; background: var(--surface2); text-align: center; font-size: 12px; color: var(--muted); }
 .at-circle-label { font-family: var(--mono); font-size: 11px; font-weight: 700; }
 
 /* All-complete interlude */
@@ -3939,6 +3969,7 @@ a { color: var(--pass); }
 .at-panel--done:not(.at-panel--expanded) .at-head,
 .at-panel--done:not(.at-panel--expanded) .at-cols,
 .at-panel--done:not(.at-panel--expanded) .at-nav,
+.at-panel--done:not(.at-panel--expanded) .at-circles-legend,
 .at-panel--done:not(.at-panel--expanded) .content-flag--corner { display: none; }
 .at-panel--done:not(.at-panel--expanded) { padding: 0; border: none; box-shadow: none; background: none; }
 
@@ -3950,6 +3981,11 @@ a { color: var(--pass); }
   .at-rule  { display: none; }
   .at-col + .at-col { border-top: 1px solid var(--hairline); }
   .at-navbtn { padding: 8px 12px; font-size: 12px; }
+  /* Narrower than these rows, the card pushed the page sideways (#254): the statement
+     column may shrink, and the circles take their own row above Previous and Next. */
+  .at-head-main { min-width: 0; }
+  .at-nav { flex-wrap: wrap; }
+  .at-circles { order: -1; flex: 1 0 100%; justify-content: center; flex-wrap: wrap; }
 }
 
 /* ── Identity-reveal timeline (#70) ───────────────────────────────────────── */
@@ -4713,6 +4749,7 @@ body[data-demo] {
    lands on a conversation whose space (demo/real) they didn't explicitly choose. */
 .space-warn {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 1rem;
@@ -4721,21 +4758,24 @@ body[data-demo] {
   font-size: 14px;
   line-height: 1.5;
 }
-.space-warn a { font-weight: 600; white-space: nowrap; }
+/* At 320 px the text and the button do not fit side by side: the text takes the row and
+   the button wraps below it, and a long link breaks rather than widening the page. */
+.space-warn > span { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.space-warn a { font-weight: 600; }
 .space-warn--real {
   border: 1px solid #e6c07a;
-  border-left: 3px solid var(--spot);
+  border-inline-start: 3px solid var(--spot);
   background: rgba(245, 158, 11, 0.08);
   color: var(--ink);
 }
 .space-warn--demo {
   border: 1px solid #b5d4f4;
-  border-left: 3px solid var(--blue-dark);
+  border-inline-start: 3px solid var(--blue-dark);
   background: #eaf1fb;
   color: var(--blue-dark);
 }
 .space-warn-ok {
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
   align-self: center;
   padding: 5px 14px;

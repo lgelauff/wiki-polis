@@ -34,6 +34,7 @@ const workspace: Workspace = {
   viewer: {state: 'participant', pseudonym: 'quiet-otter'},
   spaceWarning: 'real',
   scheduledTransition: {at: '2026-08-02T09:30:00Z', target: 'argument_mapping', targetLabel: 'Arguments'},
+  cleanup: false,
   tabs: [{key: 'vote', label: 'Vote', dataHref: '/api/v1/conversations/community-strategy/explore'}],
   defaultTab: 'vote',
   reveal: null,
@@ -120,7 +121,7 @@ test('renders the voting workspace from the catalogue English', async () => {
   expect(warning).toHaveTextContent('These are active consultation processes with real responses.');
   // A sentence whose two values are an interface label and a <time> element.
   expect(document.querySelector('.output-context p')?.textContent)
-    .toBe('Next: Arguments on 2 Aug 2026, 09:30.');
+    .toBe('Next: Arguments on 2 Aug 2026, 09:30 UTC.');
   expect(document.querySelector('.output-context time'))
     .toHaveAttribute('title', 'Shown in your local timezone');
   // The document title is an interface frame around an untranslated content value.
@@ -188,7 +189,7 @@ test('renders workspace text from the catalogue, not from source literals', asyn
   expect(within(screen.getByRole('alert')).getByText('CATALOGUE LEAD.').tagName).toBe('STRONG');
   expect(document.querySelector('.output-context em')?.textContent).toBe('Arguments');
   expect(document.querySelector('.output-context p')?.textContent)
-    .toBe('Then Arguments at 2 Aug 2026, 09:30, catalogue-side.');
+    .toBe('Then Arguments at 2 Aug 2026, 09:30 UTC, catalogue-side.');
   expect(document.title).toBe('Workspace for Community strategy');
   expect(screen.queryByRole('button', {name: 'Agree'})).not.toBeInTheDocument();
   expect(screen.queryByText('Unlocks after 1 more response')).not.toBeInTheDocument();
@@ -257,6 +258,34 @@ test.each([
     expect(document.body).not.toHaveTextContent(SERVER_ENGLISH);
   },
 );
+
+test('a statement over 280 characters is kept in full and waits at Submit until it fits', async () => {
+  serve(workspace, {
+    ...explore,
+    progress: {completed: 12, total: 12, remaining: 0, allDone: true},
+    newStatement: {unlocked: true, unlockAfter: 4, quota: 3, used: 0, remaining: 3},
+  });
+  renderWorkspace('qqx');
+  fireEvent.click(await screen.findByRole('button', {name: /conv-triad-newstmt-title/}, {timeout: 10_000}));
+  const field = document.querySelector<HTMLTextAreaElement>('.v2-composer-textarea')!;
+  const submit = screen.getByRole('button', {name: '(conv-composer-submit)'});
+
+  // Catches the browser cutting pasted text silently (#558, seen live: statements ended
+  // mid-word): a `maxlength` drops the rest before the counter or the server can see it.
+  expect(field).not.toHaveAttribute('maxlength');
+  const over = 'x'.repeat(292);
+  fireEvent.change(field, {target: {value: over}});
+  expect(field).toHaveValue(over);
+  expect(submit).toBeDisabled();
+  expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(document.getElementById('composer-newstmt-count')).toHaveTextContent('(conv-composer-over-limit: 12)');
+  expect(field.getAttribute('aria-describedby')?.split(' ')).toEqual(['composer-newstmt-helper', 'composer-newstmt-count']);
+
+  fireEvent.change(field, {target: {value: over.slice(12)}});
+  expect(submit).toBeEnabled();
+  expect(field).not.toHaveAttribute('aria-invalid');
+  expect(field.getAttribute('aria-describedby')).toBe('composer-newstmt-helper');
+});
 
 test.each([
   ['derivative_similarity_too_low', 409, 'true'],
@@ -336,4 +365,69 @@ test('a revoked voucher reads as access withdrawn', async () => {
 
   expect(await screen.findByRole('heading', {name: testMessages['forbidden-lost-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
   expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
+});
+
+test('the cleanup pause has its own line, not the not-started one (#343)', async () => {
+  serve({...workspace, scheduledTransition: null, tabs: [], defaultTab: null, cleanup: true});
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-cleanup']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-nothing-available']!)).toBeNull();
+});
+
+test('an open consultation with no tab and no cleanup keeps the not-started line', async () => {
+  serve({...workspace, scheduledTransition: null, tabs: [], defaultTab: null, cleanup: false});
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-nothing-available']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-cleanup']!)).toBeNull();
+});
+
+test('a conversation with no statements does not read as all done (#454)', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: null,
+    progress: {completed: 0, total: 0, remaining: 0, allDone: true},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-nostatements-label']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-alldone-label']!)).toBeNull();
+});
+
+test('a participant who has answered every statement still reads as all done', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: null,
+    progress: {completed: 12, total: 12, remaining: 0, allDone: true},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByText(testMessages['conv-alldone-label']!, {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['conv-nostatements-label']!)).toBeNull();
+});
+
+test('a meta statement is labelled, asks about the participant, and offers no rewording', async () => {
+  serve(workspace, {
+    ...explore,
+    currentStatement: {id: 1, text: 'I would stand as a candidate.', isMeta: true, isSeed: true},
+    capabilities: {...explore.capabilities, suggestWording: false},
+  } as Explore);
+  renderWorkspace();
+
+  expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
+  expect(document.querySelector('.stmt-meta-label')?.textContent).toBe(testMessages['meta-statement-label']);
+  expect(screen.getByText(testMessages['conv-vote-meta-prompt']!)).toBeVisible();
+  expect(document.querySelector('#triad-suggest')).toBeNull();
+  expect(document.querySelector('#triad-next')).not.toBeNull();
+});
+
+test('an ordinary statement keeps its label and the rewording option', async () => {
+  serve(workspace);
+  renderWorkspace();
+
+  expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
+  expect(document.querySelector('.stmt-meta-label')?.textContent).toBe(testMessages['conv-vote-statement-label']);
+  expect(screen.queryByText(testMessages['conv-vote-meta-prompt']!)).toBeNull();
+  expect(document.querySelector('#triad-suggest')).not.toBeNull();
 });

@@ -868,6 +868,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/statements/{statementId}/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark or unmark a seed statement as a meta statement */
+        put: operations["putAdminStatementMeta"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
         parameters: {
             query?: never;
@@ -1336,15 +1356,34 @@ export interface components {
                 };
             };
         };
+        AdminStatementMetaRequest: {
+            meta: boolean;
+            /** @default false */
+            acknowledgeResponses: boolean;
+        };
+        AdminStatementMetaResponse: {
+            data: {
+                statementId: number;
+                meta: boolean;
+                changed: boolean;
+                links: {
+                    statements: string;
+                };
+            };
+        };
         AdminSeedStatementRequest: {
             text: string;
             derivedFromId: number | null;
+            /** @default false */
+            isMeta: boolean;
         };
         AdminSeedStatementResponse: {
             data: {
                 statementId: number | null;
                 derivedFromId: number | null;
                 provenanceRecorded: boolean | null;
+                /** @description null: not asked to be meta; false: added, but not marked meta. */
+                metaRecorded: boolean | null;
                 links: {
                     statements: string;
                 };
@@ -1530,6 +1569,10 @@ export interface components {
             /** @enum {string} */
             moderation: "approved" | "pending" | "hidden";
             seed: boolean;
+            /** @description A meta statement asks about the participant, not the topic (#415). */
+            meta: boolean;
+            /** @description Someone other than its author has responded; a meta change then needs acknowledgeResponses. */
+            hasResponses: boolean;
             featured: boolean;
             votes: {
                 agree: number;
@@ -2271,6 +2314,8 @@ export interface components {
             /** @enum {string|null} */
             spaceWarning: "real" | "demo" | null;
             scheduledTransition: components["schemas"]["ScheduledTransition"] | null;
+            /** @description True while an open consultation is in the Cleanup phase (the phase_cleanup stage after arguments, not the report-pending cleanup window), a quiet pause in which participants have nothing to do. */
+            cleanup: boolean;
             tabs: components["schemas"]["ConversationWorkspaceTab"][];
             /** @enum {string|null} */
             defaultTab: "vote" | "results" | "arguments" | "informed-voting" | "p6-results" | null;
@@ -2610,11 +2655,15 @@ export interface components {
             openedAt: string;
             /** Format: date-time */
             closedAt: string | null;
+            /** @description One row per phase on the consultation's route, in route order. Preparation and the phases the route skips are left out. The dates come from the audit log (#599). */
+            phases: components["schemas"]["ResultsReportPhase"][];
             context: {
                 phase: string;
                 /** @enum {string} */
                 status: "provisional" | "final";
                 method: string;
+                /** @description Site-admin preview only: the rounds whose results the preview shows, as phase identifiers, in phase order. Empty without results. */
+                sources?: ("submission" | "argument_mapping" | "informed_voting")[];
             };
             participation: {
                 initialRound: number | null;
@@ -2627,6 +2676,11 @@ export interface components {
                 personalLens: boolean;
                 /** @description Fewest responses a tally needs to be shown, for the "fewer than" text of a tally with belowFloor. */
                 responseFloor: number;
+                /**
+                 * @description Site-admin preview only. Whether the results include the informed opinion round: included; pending (not held yet; the results are the Explore round's so far); skipped (the process does not hold it, or closed without it).
+                 * @enum {string}
+                 */
+                informedRound?: "included" | "pending" | "skipped";
             };
             moderation: {
                 excludedStatements: number;
@@ -2642,6 +2696,22 @@ export interface components {
             };
             links: components["schemas"]["ResultsLinks"];
         };
+        ResultsReportPhase: {
+            /** @enum {string} */
+            key: "submission" | "featured_selection" | "argument_mapping" | "cleanup" | "informed_voting" | "public_results";
+            /** @enum {string} */
+            state: "not_started" | "running" | "ended";
+            /**
+             * Format: date-time
+             * @description Null when the phase has not started, or when its start was not recorded.
+             */
+            startedAt: string | null;
+            /**
+             * Format: date-time
+             * @description Null when the phase has not ended, or when its end was not recorded.
+             */
+            endedAt: string | null;
+        };
         ResultsStatement: {
             featuredStatementId: number;
             statement: string;
@@ -2655,6 +2725,11 @@ export interface components {
             viewerGroupChoice: "agree" | "pass" | "disagree" | null;
             viewerMatchesGroup: boolean | null;
             personalDelta: components["schemas"]["PersonalDelta"] | null;
+            /** @description Site-admin preview only, once the Arguments phase is over: the visible arguments with the most support on each side (at most 3), most supported first. Text only: no author and no counts. */
+            arguments?: {
+                for: string[];
+                against: string[];
+            };
         };
         PersonalDelta: {
             /** @enum {string} */
@@ -4550,7 +4625,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Participation missing or flags closed */
+            /** @description Participation missing, flags closed, or the argument is your own */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4704,7 +4779,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Quota, derivative similarity, identical statement already in the conversation, idempotency conflict, or unknown outcome */
+            /** @description Quota, derivative similarity, identical statement already in the conversation, a meta statement as parent (meta_not_rewordable), idempotency conflict, or unknown outcome */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5761,6 +5836,87 @@ export interface operations {
             };
         };
     };
+    putAdminStatementMeta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStatementMetaRequest"];
+            };
+        };
+        responses: {
+            /** @description Meta receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStatementMetaResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not a seed statement, a featured statement, or responses not acknowledged */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement service unavailable; nothing was changed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     putAdminStatementModeration: {
         parameters: {
             query?: never;
@@ -5996,7 +6152,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Command outcome unknown */
+            /** @description Command outcome unknown, or the statement is a meta statement (meta_not_featurable) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6420,7 +6576,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Archive receipt and refreshed lifecycle */
+            /** @description Archive receipt and refreshed lifecycle; archiving or reopening cancels any pending phase schedule */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6509,7 +6665,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Global admin permission required */
+            /** @description Organizer permission required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6518,7 +6674,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The current transition cannot be scheduled */
+            /** @description The current transition cannot be scheduled, or the consultation is archived; reported before a past date-time. Cancelling (null) is always accepted */
             409: {
                 headers: {
                     [name: string]: unknown;

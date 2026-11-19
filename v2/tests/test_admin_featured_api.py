@@ -96,7 +96,7 @@ def test_scoped_moderator_selects_verified_statement_idempotently(
     endpoint = (
         f'/api/v1/admin/conversations/{conversation.id}/featured-statements/12'
     )
-    with patch('app._statement_text_map', return_value={12: 'Verified text'}):
+    with patch('app._statement_text_and_meta', return_value=({12: 'Verified text'}, set())):
         first = client.put(endpoint, json={'source': 'system'})
         replay = client.put(endpoint, json={'source': 'system'})
 
@@ -119,14 +119,14 @@ def test_select_rejects_unknown_statement_and_rolls_back_failed_live_sync(
     endpoint = (
         f'/api/v1/admin/conversations/{conversation.id}/featured-statements/12'
     )
-    with patch('app._statement_text_map', return_value={}):
+    with patch('app._statement_text_and_meta', return_value=({}, set())):
         unknown = admin_client.put(endpoint, json={'source': 'manual'})
 
     conversation.phase_informed_voting = True
     conversation.phase6_polis_conversation_id = 'phase6round'
     db.session.commit()
     with (
-        patch('app._statement_text_map', return_value={12: 'Verified text'}),
+        patch('app._statement_text_and_meta', return_value=({12: 'Verified text'}, set())),
         patch('app._sync_phase6_featured', return_value=(False, 'sync offline')),
     ):
         failed = admin_client.put(endpoint, json={'source': 'manual'})

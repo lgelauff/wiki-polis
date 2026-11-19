@@ -623,7 +623,7 @@
           "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation or target not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-          "409": {"description": "Participation missing or flags closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Participation missing, flags closed, or the argument is your own", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "502": {"description": "Statement validation service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
@@ -736,7 +736,7 @@
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "409": {
-            "description": "Quota, derivative similarity, identical statement already in the conversation, idempotency conflict, or unknown outcome",
+            "description": "Quota, derivative similarity, identical statement already in the conversation, a meta statement as parent (meta_not_rewordable), idempotency conflict, or unknown outcome",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "502": {
@@ -1027,6 +1027,21 @@
         "503": {"description": "Current state could not be verified or saved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/statements/{statementId}/meta": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "statementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 0}}
+      ],
+      "put": {"operationId": "putAdminStatementMeta", "summary": "Mark or unmark a seed statement as a meta statement", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementMetaRequest"}}}}, "responses": {
+        "200": {"description": "Meta receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementMetaResponse"}}}},
+        "400": {"description": "Invalid request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation or statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Not a seed statement, a featured statement, or responses not acknowledged", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Statement service unavailable; nothing was changed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
       "parameters": [
         {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
@@ -1070,7 +1085,7 @@
         "200": {"description": "Selection receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedSelectionResponse"}}}},
         "400": {"description": "Invalid selection source", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "404": {"description": "Statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "409": {"description": "Command outcome unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Command outcome unknown, or the statement is a meta statement (meta_not_featurable)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "502": {"description": "Live round synchronization failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "503": {"description": "Statement verification unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
@@ -1150,7 +1165,7 @@
     "/admin/conversations/{conversationId}/archive": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {"operationId": "putAdminConversationArchive", "summary": "Set reversible archive state without publishing", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveRequest"}}}}, "responses": {
-        "200": {"description": "Archive receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveResponse"}}}},
+        "200": {"description": "Archive receipt and refreshed lifecycle; archiving or reopening cancels any pending phase schedule", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveResponse"}}}},
         "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
@@ -1163,8 +1178,8 @@
         "200": {"description": "Schedule receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminScheduleResponse"}}}},
         "400": {"description": "Invalid or past date-time", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "401": {"description": "Sign-in required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "409": {"description": "The current transition cannot be scheduled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "The current transition cannot be scheduled, or the consultation is archived; reported before a past date-time. Cancelling (null) is always accepted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
     "/admin/conversations/{conversationId}/publication": {
@@ -1223,8 +1238,10 @@
       "AdminStatementModerationPolicyResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["mode", "changed", "reconciledStatements", "workspace"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["moderate", "auto_approve"]}, "changed": {"type": "boolean"}, "reconciledStatements": {"type": "integer", "minimum": 0}, "workspace": {"$ref": "#/components/schemas/AdminStatementWorkspace"}}}}},
       "AdminStatementModerationRequest": {"type": "object", "required": ["status"], "additionalProperties": false, "properties": {"status": {"type": "string", "enum": ["approved", "pending", "hidden"]}}},
       "AdminStatementModerationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "status", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "status": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
-      "AdminSeedStatementRequest": {"type": "object", "required": ["text", "derivedFromId"], "additionalProperties": false, "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 280}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}}},
-      "AdminSeedStatementResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "derivedFromId", "provenanceRecorded", "links"], "additionalProperties": false, "properties": {"statementId": {"type": ["integer", "null"], "minimum": 0}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "provenanceRecorded": {"type": ["boolean", "null"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
+      "AdminStatementMetaRequest": {"type": "object", "required": ["meta"], "additionalProperties": false, "properties": {"meta": {"type": "boolean"}, "acknowledgeResponses": {"type": "boolean", "default": false}}},
+      "AdminStatementMetaResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "meta", "changed", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "meta": {"type": "boolean"}, "changed": {"type": "boolean"}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
+      "AdminSeedStatementRequest": {"type": "object", "required": ["text", "derivedFromId"], "additionalProperties": false, "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 280}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "isMeta": {"type": "boolean", "default": false}}},
+      "AdminSeedStatementResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "derivedFromId", "provenanceRecorded", "metaRecorded", "links"], "additionalProperties": false, "properties": {"statementId": {"type": ["integer", "null"], "minimum": 0}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "provenanceRecorded": {"type": ["boolean", "null"]}, "metaRecorded": {"type": ["boolean", "null"], "description": "null: not asked to be meta; false: added, but not marked meta."}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
       "AdminStatementImportRequest": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 280}}}},
       "AdminStatementImportResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["outcome", "links"], "additionalProperties": false, "properties": {
         "outcome": {"type": "object", "required": ["imported", "skippedExisting", "skippedDuplicateInput", "failedUpstream"], "additionalProperties": false, "properties": {"imported": {"type": "integer", "minimum": 0}, "skippedExisting": {"type": "integer", "minimum": 0}, "skippedDuplicateInput": {"type": "integer", "minimum": 0}, "failedUpstream": {"type": "integer", "minimum": 0}}},
@@ -1265,8 +1282,11 @@
         "capabilities": {"type": "object", "required": ["moderate", "seed"], "additionalProperties": false, "properties": {"moderate": {"type": "boolean"}, "seed": {"type": "boolean"}}},
         "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
       }},
-      "AdminStatement": {"type": "object", "required": ["id", "text", "moderation", "seed", "featured", "votes", "provenance"], "additionalProperties": false, "properties": {
-        "id": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "moderation": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "seed": {"type": "boolean"}, "featured": {"type": "boolean"},
+      "AdminStatement": {"type": "object", "required": ["id", "text", "moderation", "seed", "meta", "hasResponses", "featured", "votes", "provenance"], "additionalProperties": false, "properties": {
+        "id": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "moderation": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "seed": {"type": "boolean"},
+        "meta": {"type": "boolean", "description": "A meta statement asks about the participant, not the topic (#415)."},
+        "hasResponses": {"type": "boolean", "description": "Someone other than its author has responded; a meta change then needs acknowledgeResponses."},
+        "featured": {"type": "boolean"},
         "votes": {"type": "object", "required": ["agree", "pass", "disagree"], "additionalProperties": false, "properties": {"agree": {"type": "integer", "minimum": 0}, "pass": {"type": "integer", "minimum": 0}, "disagree": {"type": "integer", "minimum": 0}}},
         "provenance": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["derivedFromId", "scores"], "additionalProperties": false, "properties": {"derivedFromId": {"type": "integer", "minimum": 0}, "scores": {"type": "array", "items": {"type": "object", "required": ["model", "value"], "additionalProperties": false, "properties": {"model": {"type": "string"}, "value": {"type": "number", "minimum": 0, "maximum": 1}}}}}}]}
       }},
@@ -1966,7 +1986,7 @@
       },
       "ConversationWorkspace": {
         "type": "object",
-        "required": ["slug", "title", "space", "status", "descriptionHtml", "outroHtml", "viewer", "spaceWarning", "scheduledTransition", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
+        "required": ["slug", "title", "space", "status", "descriptionHtml", "outroHtml", "viewer", "spaceWarning", "scheduledTransition", "cleanup", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string", "minLength": 1},
@@ -1983,6 +2003,7 @@
               {"type": "null"}
             ]
           },
+          "cleanup": {"type": "boolean", "description": "True while an open consultation is in the Cleanup phase (the phase_cleanup stage after arguments, not the report-pending cleanup window), a quiet pause in which participants have nothing to do."},
           "tabs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationWorkspaceTab"}},
           "defaultTab": {
             "type": ["string", "null"],
@@ -2587,7 +2608,7 @@
       },
       "ResultsReport": {
         "type": "object",
-        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
+        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "phases", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string"},
@@ -2596,6 +2617,11 @@
           "resultsAvailable": {"type": "boolean"},
           "openedAt": {"type": "string", "format": "date-time"},
           "closedAt": {"type": ["string", "null"], "format": "date-time"},
+          "phases": {
+            "type": "array",
+            "description": "One row per phase on the consultation's route, in route order. Preparation and the phases the route skips are left out. The dates come from the audit log (#599).",
+            "items": {"$ref": "#/components/schemas/ResultsReportPhase"}
+          },
           "context": {
             "type": "object",
             "required": ["phase", "status", "method"],
@@ -2603,7 +2629,8 @@
             "properties": {
               "phase": {"type": "string"},
               "status": {"type": "string", "enum": ["provisional", "final"]},
-              "method": {"type": "string"}
+              "method": {"type": "string"},
+              "sources": {"type": "array", "items": {"type": "string", "enum": ["submission", "argument_mapping", "informed_voting"]}, "description": "Site-admin preview only: the rounds whose results the preview shows, as phase identifiers, in phase order. Empty without results."}
             }
           },
           "participation": {
@@ -2624,7 +2651,8 @@
               "detailedCounts": {"type": "boolean"},
               "opinionGroups": {"type": "boolean"},
               "personalLens": {"type": "boolean"},
-              "responseFloor": {"type": "integer", "minimum": 1, "description": "Fewest responses a tally needs to be shown, for the \"fewer than\" text of a tally with belowFloor."}
+              "responseFloor": {"type": "integer", "minimum": 1, "description": "Fewest responses a tally needs to be shown, for the \"fewer than\" text of a tally with belowFloor."},
+              "informedRound": {"type": "string", "enum": ["included", "pending", "skipped"], "description": "Site-admin preview only. Whether the results include the informed opinion round: included; pending (not held yet; the results are the Explore round's so far); skipped (the process does not hold it, or closed without it)."}
             }
           },
           "moderation": {
@@ -2651,6 +2679,17 @@
           "links": {"$ref": "#/components/schemas/ResultsLinks"}
         }
       },
+      "ResultsReportPhase": {
+        "type": "object",
+        "required": ["key", "state", "startedAt", "endedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string", "enum": ["submission", "featured_selection", "argument_mapping", "cleanup", "informed_voting", "public_results"]},
+          "state": {"type": "string", "enum": ["not_started", "running", "ended"]},
+          "startedAt": {"type": ["string", "null"], "format": "date-time", "description": "Null when the phase has not started, or when its start was not recorded."},
+          "endedAt": {"type": ["string", "null"], "format": "date-time", "description": "Null when the phase has not ended, or when its end was not recorded."}
+        }
+      },
       "ResultsStatement": {
         "type": "object",
         "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice", "viewerGroupChoice", "viewerMatchesGroup", "personalDelta"],
@@ -2664,7 +2703,17 @@
           "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
           "viewerGroupChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
           "viewerMatchesGroup": {"type": ["boolean", "null"]},
-          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]}
+          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]},
+          "arguments": {
+            "type": "object",
+            "required": ["for", "against"],
+            "additionalProperties": false,
+            "description": "Site-admin preview only, once the Arguments phase is over: the visible arguments with the most support on each side (at most 3), most supported first. Text only: no author and no counts.",
+            "properties": {
+              "for": {"type": "array", "items": {"type": "string"}},
+              "against": {"type": "array", "items": {"type": "string"}}
+            }
+          }
         }
       },
       "PersonalDelta": {

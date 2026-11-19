@@ -43,7 +43,8 @@ def _side_projection(item: dict, side: str, pseudonym: str,
                 'importanceVoteCount': len(argument.votes),
                 'capabilities': {
                     'prioritize': prioritization_available and not argument.hidden,
-                    'flag': not argument.hidden and not can_moderate,
+                    'flag': (not argument.hidden
+                             and argument.proposer_pseudonym != pseudonym),
                     'moderate': can_moderate,
                 },
             }
