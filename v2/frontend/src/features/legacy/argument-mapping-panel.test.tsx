@@ -401,6 +401,26 @@ test('each progress circle is a button that names its state and marks the shown 
   expect(shown.map((circle) => circle.getAttribute('aria-current'))).toEqual([null, 'step', null]);
 });
 
+test('switching statements keeps keyboard focus in the statement now shown', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Each panel has its own circles and Previous/Next, and switching hides the panel that
+  // holds the pressed control, so without a move focus falls to the page body.
+  const circle = within(within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'})).getAllByRole('button')[1]!;
+  circle.focus();
+  fireEvent.click(circle);
+  await waitFor(() => expect(document.getElementById('fs-9')!.contains(document.activeElement)).toBe(true));
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement).toHaveAttribute('aria-current', 'step');
+
+  const next = within(document.getElementById('fs-9')!).getByRole('button', {name: 'Next statement'});
+  next.focus();
+  fireEvent.click(next);
+  await waitFor(() => expect(document.getElementById('fs-10')!.contains(document.activeElement)).toBe(true));
+});
+
 /** The colour tokens the circles paint with, as style.css's :root defines them. jsdom applies
  *  no stylesheet and vite will not serve style.css as text to the tests, so they are copied;
  *  v2/tests/test_argument_controls_css.py checks the copy still matches style.css. */

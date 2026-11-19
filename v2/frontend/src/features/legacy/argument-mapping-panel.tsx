@@ -265,6 +265,18 @@ function FeaturedPanel({mapping, slug, csrfToken, card, index, currentIndex, set
   const con = card.sides.con.prioritization;
   const sideDone = (sideName: SideName) => card.contributionsComplete || card.sides[sideName].contribution.status !== 'pending';
   // One message per combination, so the marks and separator stay inside translatable text.
+  // Each panel draws its own navigation, so switching hides the panel that holds the
+  // pressed control and focus would drop to the page body (#461). Move it to the same
+  // control in the panel now shown, or to that panel itself when the control is disabled.
+  function go(target: number, control: 'circle' | 'prev' | 'next') {
+    setIndex(target);
+    globalThis.requestAnimationFrame(() => {
+      const next = mapping.featuredStatements[target];
+      const panel = next ? document.getElementById(`fs-${next.id}`) : null;
+      const selector = control === 'circle' ? `.at-circle:nth-of-type(${target + 1})` : `.at-navbtn--${control}:not(:disabled)`;
+      (panel?.querySelector<HTMLElement>(selector) ?? panel)?.focus();
+    });
+  }
   const stepOneSub = sideDone('pro')
     ? (sideDone('con') ? msg('conv-arg-step1-sub-both') : msg('conv-arg-step1-sub-for'))
     : (sideDone('con') ? msg('conv-arg-step1-sub-against') : msg('conv-arg-step1-sub-none'));
@@ -284,9 +296,9 @@ function FeaturedPanel({mapping, slug, csrfToken, card, index, currentIndex, set
       </div>
       <div className="at-cols"><ArgumentColumn mapping={mapping} slug={slug} csrfToken={csrfToken} card={card} side="pro" /><div className="at-rule" aria-hidden="true" /><ArgumentColumn mapping={mapping} slug={slug} csrfToken={csrfToken} card={card} side="con" /></div>
       <div className="at-nav">
-        <button className="at-navbtn at-navbtn--prev" type="button" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => setIndex(index - 1)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
-        <div className="at-circles" role="group" aria-label={msg('conv-arg-progress-aria')}>{mapping.featuredStatements.map((item, circleIndex) => <Circle key={item.id} state={panelState(item)} number={circleIndex + 1} current={circleIndex === index} onClick={() => setIndex(circleIndex)} />)}</div>
-        <button className="at-navbtn at-navbtn--next" type="button" disabled={index === mapping.featuredStatements.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => setIndex(index + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
+        <button className="at-navbtn at-navbtn--prev" type="button" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => go(index - 1, 'prev')}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+        <div className="at-circles" role="group" aria-label={msg('conv-arg-progress-aria')}>{mapping.featuredStatements.map((item, circleIndex) => <Circle key={item.id} state={panelState(item)} number={circleIndex + 1} current={circleIndex === index} onClick={() => go(circleIndex, 'circle')} />)}</div>
+        <button className="at-navbtn at-navbtn--next" type="button" disabled={index === mapping.featuredStatements.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => go(index + 1, 'next')}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
       </div>
       <p className="at-circles-legend">{msg('conv-circle-legend')}</p>
     </div>
