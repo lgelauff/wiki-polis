@@ -464,6 +464,9 @@ def test_single_seed_created_without_an_id_succeeds_and_audits_a_failed_approval
         )
 
     assert plain.status_code == 201
+    # A plain seed links to nothing, so there is no link to report missing: the page
+    # must show the ordinary toast, not flash-seed-added-no-link.
+    assert plain.get_json()['data']['provenanceRecorded'] is None
     assert corrected.status_code == 201
     assert corrected.get_json()['data']['statementId'] is None
     assert corrected.get_json()['data']['provenanceRecorded'] is False

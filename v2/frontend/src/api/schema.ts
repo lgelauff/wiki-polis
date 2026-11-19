@@ -4582,7 +4582,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Participation missing or flags closed */
+            /** @description Participation missing, flags closed, or the argument is your own */
             409: {
                 headers: {
                     [name: string]: unknown;
