@@ -330,12 +330,97 @@ titles, because "20 years of discussion links … would then point at the new
 policy" — the provenance problem recognised, and routed around rather than
 solved.
 
-**The summary that matters for tool design:** nlwiki formalises the *decision*
-and loses the *trace*; the ArbCom-election family keeps the trace and leaves the
-decision to judgement; the resysop consultation did neither. A consultation tool
-should take nlwiki's freeze-and-threshold and ACERULES' ledger.
+**What happened when it was used on a contested question.** February 2025: an
+amendment to the biographies-of-living-persons guideline on pronouns and former
+names — a topic the community had been deadlocked on for years — ran under this
+procedure. Result: **54 for, 40 against, 57.4%**, passed on a 55% threshold, with
+one vote struck because the account had two edits before the poll opened. Three
+votes the other way would have failed it.
 
-## 11. Limitations
+It was then challenged. An objection was filed inside the seven-day window
+alleging that the coordinator had influenced the vote by deleting a comment on
+the discussion page. The coordinator — who was the subject of the objection —
+referred it to the Arbitration Committee, noting that `WP:Stemprocedure` "gives
+no further direction about how such an objection should be handled, as the
+Arbitration Committee itself concluded in 2016". ArbCom accepted, and said
+plainly that handling vote disputes "is not explicitly listed as a task of the
+Arbitration Committee", and that the procedure "does not say how to act on an
+objection"; it took the case as "other" business, called the deletion
+"particularly clumsy" but immaterial, and upheld the result.
+
+**The cautionary reading.** A mechanical threshold makes an outcome *decidable*
+without making it *accepted*: 57.4% on a question people care about is a
+three-vote margin, and the procedure that produced it had no legitimate path for
+reviewing a challenge to it. That is the mechanism behind "people are usually
+unhappy with the results" — the arithmetic is clean, the legitimacy is not, and
+the dispute lands on whoever happened to run the poll.
+
+**The summary that matters for tool design:** nlwiki formalises the *decision*
+and loses both the *trace* and the *review path*; the ArbCom-election family
+keeps the trace and leaves the decision to judgement; the resysop consultation
+did neither. What transfers from nlwiki is narrow and procedural — **freeze and
+deduplicate the options before opening, and state any threshold in advance** —
+not majority rule as the decision rule, and not a threshold without a named
+reviewer.
+
+
+## 11. Design doctrine: standardised preparation, explicit non-decision
+
+The two reception cases and the nlwiki comparison converge on one product
+definition: **a standardised preparation instrument that does not decide.** That
+is not a disclaimer to print at the bottom of a page — it has to be true of the
+data model, or the instrument inherits the legitimacy problem it was meant to
+avoid.
+
+**Four tests of a genuine non-decision.**
+
+1. **No terminal field.** Nothing in the schema or export says *passed*,
+   *rejected*, *winner*, or *quorum met*. Support is a ratio with its
+   denominator attached; the outcome belongs to a venue that is not this tool.
+2. **No de facto threshold.** No ranking of statements by support, no "top
+   proposals", no single blended number. The enwiki resysop case shows how
+   quickly a de facto ~60% line is inferred from prose (§5 F6); a tool must not
+   manufacture one by layout.
+3. **The handover demands a second act.** The export is a ledger the receiving
+   venue must cite and reason over: statement, wording, deduplicated counts,
+   cluster split, arguments, dissent, and a stable ID per statement. A closer
+   who uses it has to write their own reasoning; the record cannot stand in for
+   the decision.
+4. **A fixed statement of what it is not**, identical in every consultation:
+   not a vote, not a quorum, not binding, and — the one people forget — *not a
+   mandate to skip the decision*.
+
+**What standardisation is for.** Not uniformity of outcome, uniformity of three
+artefacts: the statement schema (one claim, attributable proposer, duplicate
+check before opening), the phase sequence (respond → argue → informed response),
+and the export format (the ledger, with stable IDs). Everything else — question,
+eligibility window, participants, licence of the text — varies per consultation.
+Standardise the format and let the authority stay absent. A standardised
+*procedure* would be a decision system by another name, which is how nlwiki's
+threshold arrived and what it now cannot review (§10).
+
+**The success criterion follows from the definition.** If Proto prepares rather
+than decides, "did the community accept the result" is the wrong measure — there
+is no result to accept. The measurable ones are:
+
+- **Use**: did the deciding venue cite the record, and in what terms?
+- **Reasoning**: did the close engage with the fault lines the record surfaced,
+  or with the loudest thread (the resysop case gives instances of both)?
+- **Survival**: is the resulting policy text traceable, item by item, to the
+  statements that produced it — the property `WP:ACERULES` maintains by hand
+  (§8) and that a ledger can produce automatically?
+- **Preparation quality**: duplicate rate before opening, share of participants
+  who answered the comprehension question, opinion change between round one and
+  the informed round.
+
+**The failure modes this framing invites**, in order of likelihood: an organiser
+presenting the output as a mandate; a venue citing "the consultation" without
+reading it; and the consultation being used to close a question rather than open
+one. The countermeasures are structural, not rhetorical — publish the decision
+as still open, require the venue's own reasoning to be recorded, and instrument
+citation rather than agreement.
+
+## 12. Limitations
 
 - Endorsement lists are self-selected and incomplete; several signers endorsed
   competing statements, and 11 appear on both sides of one statement.
