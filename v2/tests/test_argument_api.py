@@ -383,6 +383,24 @@ def test_content_flag_api_creates_and_deduplicates_argument_flag(
     assert AuditEvent.query.filter_by(operation='content_flag.create').count() == 1
 
 
+def test_content_flag_api_refuses_a_flag_on_your_own_argument(
+    auth_client, participant,
+):
+    """#347: the flag control is hidden on your own argument; the endpoint refuses it too."""
+    _conversation, participation, _featured, arguments = _argument_fixture(participant)
+    arguments[1].proposer_pseudonym = participation.pseudonym
+    db.session.commit()
+
+    response = auth_client.post(
+        '/api/v1/conversations/argument-api/flags',
+        json={'contentType': 'argument', 'targetId': arguments[1].id, 'category': 'off_topic'},
+    )
+
+    assert response.status_code == 409
+    assert ContentFlag.query.count() == 0
+    assert AuditEvent.query.filter_by(operation='content_flag.create').count() == 0
+
+
 def test_content_flag_api_requires_explanation_for_other(
     auth_client, participant,
 ):

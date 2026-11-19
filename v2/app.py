@@ -3678,7 +3678,7 @@ def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
     content_type = body['contentType']
     target_id = body['targetId']
     if content_type == 'argument':
-        (
+        argument = (
             Argument.query.join(FeaturedStatement)
             .filter(
                 Argument.id == target_id,
@@ -3686,6 +3686,11 @@ def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
                 Argument.hidden.is_(False),
             ).first_or_404()
         )
+        # The workspace offers no flag on your own argument (#347); refuse it here too,
+        # so the rule does not rest on the interface alone.
+        if (argument.proposer_pseudonym is not None
+                and argument.proposer_pseudonym == participation.pseudonym):
+            abort(409, description='You cannot flag your own argument.')
     else:
         try:
             statement_exists = target_id in _statement_text_map(conv.polis_id)
