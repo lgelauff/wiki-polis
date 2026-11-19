@@ -100,7 +100,13 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
   }, [mutation.data, mutation.reset]);
   return (
     <details ref={detailsRef} className={`content-flag${corner ? ' content-flag--corner' : ''}${place.opensRight ? ' content-flag--opens-right' : ''}`} style={place.width === undefined ? undefined : {'--content-flag-width': `${place.width}px`} as CSSProperties} onToggle={(event) => setOpen(event.currentTarget.open)} onKeyDown={(event) => {
-      if (event.key !== 'Escape' || !event.currentTarget.open) return;
+      if (event.key !== 'Escape') return;
+      // With the panel closed, Escape still dismisses the keyboard-focus tooltip without
+      // moving focus (WCAG 1.4.13: content shown on focus can be dismissed).
+      if (!event.currentTarget.open) {
+        setTip(null);
+        return;
+      }
       event.currentTarget.open = false;
       triggerRef.current?.focus();
     }}>

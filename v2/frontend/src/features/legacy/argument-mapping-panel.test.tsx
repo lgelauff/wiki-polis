@@ -349,6 +349,13 @@ test("the flag's label shows as a tooltip after a tap and on keyboard focus, sid
   await waitFor(() => expect(tipShown()).toBe(true));
   fireEvent.blur(trigger);
   await waitFor(() => expect(tipShown()).toBe(false));
+
+  // Escape dismisses it while focus stays, with the panel closed (WCAG 1.4.13).
+  fireEvent.focus(trigger);
+  await waitFor(() => expect(tipShown()).toBe(true));
+  fireEvent.keyDown(trigger, {key: 'Escape'});
+  await waitFor(() => expect(tipShown()).toBe(false));
+  expect(flag.open).toBe(false);
 });
 
 test('an argument over the limit is kept in full and waits at Submit until it fits', async () => {
