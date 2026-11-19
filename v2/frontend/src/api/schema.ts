@@ -2271,6 +2271,8 @@ export interface components {
             /** @enum {string|null} */
             spaceWarning: "real" | "demo" | null;
             scheduledTransition: components["schemas"]["ScheduledTransition"] | null;
+            /** @description True while an open consultation is in the Cleanup phase (the phase_cleanup stage after arguments, not the report-pending cleanup window), a quiet pause in which participants have nothing to do. */
+            cleanup: boolean;
             tabs: components["schemas"]["ConversationWorkspaceTab"][];
             /** @enum {string|null} */
             defaultTab: "vote" | "results" | "arguments" | "informed-voting" | "p6-results" | null;
@@ -2610,11 +2612,15 @@ export interface components {
             openedAt: string;
             /** Format: date-time */
             closedAt: string | null;
+            /** @description One row per phase on the consultation's route, in route order. Preparation and the phases the route skips are left out. The dates come from the audit log (#599). */
+            phases: components["schemas"]["ResultsReportPhase"][];
             context: {
                 phase: string;
                 /** @enum {string} */
                 status: "provisional" | "final";
                 method: string;
+                /** @description Site-admin preview only: the rounds whose results the preview shows, as phase identifiers, in phase order. Empty without results. */
+                sources?: ("submission" | "argument_mapping" | "informed_voting")[];
             };
             participation: {
                 initialRound: number | null;
@@ -2627,6 +2633,11 @@ export interface components {
                 personalLens: boolean;
                 /** @description Fewest responses a tally needs to be shown, for the "fewer than" text of a tally with belowFloor. */
                 responseFloor: number;
+                /**
+                 * @description Site-admin preview only. Whether the results include the informed opinion round: included; pending (not held yet; the results are the Explore round's so far); skipped (the process does not hold it, or closed without it).
+                 * @enum {string}
+                 */
+                informedRound?: "included" | "pending" | "skipped";
             };
             moderation: {
                 excludedStatements: number;
@@ -2642,6 +2653,22 @@ export interface components {
             };
             links: components["schemas"]["ResultsLinks"];
         };
+        ResultsReportPhase: {
+            /** @enum {string} */
+            key: "submission" | "featured_selection" | "argument_mapping" | "cleanup" | "informed_voting" | "public_results";
+            /** @enum {string} */
+            state: "not_started" | "running" | "ended";
+            /**
+             * Format: date-time
+             * @description Null when the phase has not started, or when its start was not recorded.
+             */
+            startedAt: string | null;
+            /**
+             * Format: date-time
+             * @description Null when the phase has not ended, or when its end was not recorded.
+             */
+            endedAt: string | null;
+        };
         ResultsStatement: {
             featuredStatementId: number;
             statement: string;
@@ -2655,6 +2682,11 @@ export interface components {
             viewerGroupChoice: "agree" | "pass" | "disagree" | null;
             viewerMatchesGroup: boolean | null;
             personalDelta: components["schemas"]["PersonalDelta"] | null;
+            /** @description Site-admin preview only, once the Arguments phase is over: the visible arguments with the most support on each side (at most 3), most supported first. Text only: no author and no counts. */
+            arguments?: {
+                for: string[];
+                against: string[];
+            };
         };
         PersonalDelta: {
             /** @enum {string} */
@@ -4550,7 +4582,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Participation missing or flags closed */
+            /** @description Participation missing, flags closed, or the argument is your own */
             409: {
                 headers: {
                     [name: string]: unknown;

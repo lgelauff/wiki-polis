@@ -235,21 +235,38 @@ def test_row_keys_the_report_reads_are_keys_the_producer_emits():
 
     v2 = pathlib.Path(__file__).resolve().parent.parent
 
-    # Producer: the keys of the dict literal appended inside _build_phase6_results.
+    # Producers: the keys of the dict literals inside each row builder (the informed round's
+    # and, before it, the Explore round's, #598), plus the keys _attach_report_arguments
+    # sets on every row afterwards.
     producer = ast.parse((v2 / 'app.py').read_text(encoding='utf-8'))
-    emitted: set[str] = set()
-    for node in ast.walk(producer):
-        if isinstance(node, ast.FunctionDef) and node.name == '_build_phase6_results':
-            for inner in ast.walk(node):
-                if isinstance(inner, ast.Dict):
-                    emitted |= {
-                        k.value for k in inner.keys
-                        if isinstance(k, ast.Constant) and isinstance(k.value, str)
-                    }
-    assert 'my_p6_vote' in emitted, (
-        'guard is looking in the wrong place: _build_phase6_results no longer emits a dict '
-        'literal containing my_p6_vote'
+    functions = {
+        node.name: node for node in ast.walk(producer) if isinstance(node, ast.FunctionDef)
+    }
+
+    def dict_keys(name):
+        return {
+            k.value
+            for inner in ast.walk(functions[name]) if isinstance(inner, ast.Dict)
+            for k in inner.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)
+        }
+
+    attached = {
+        inner.slice.value
+        for inner in ast.walk(functions['_attach_report_arguments'])
+        if isinstance(inner, ast.Subscript) and isinstance(inner.ctx, ast.Store)
+        and isinstance(inner.slice, ast.Constant)
+    }
+    assert 'arguments' in attached, (
+        'guard is looking in the wrong place: _attach_report_arguments no longer sets '
+        "row['arguments']"
     )
+    builders = {name: dict_keys(name) | attached
+                for name in ('_build_phase6_results', '_build_explore_results')}
+    for name, emitted in builders.items():
+        assert 'my_p6_vote' in emitted, (
+            f'guard is looking in the wrong place: {name} no longer emits a dict '
+            'literal containing my_p6_vote'
+        )
 
     # Consumer: every row.get('...') in build_results_report.
     consumer = ast.parse((v2 / 'services' / 'results_report.py').read_text(encoding='utf-8'))
@@ -262,11 +279,12 @@ def test_row_keys_the_report_reads_are_keys_the_producer_emits():
             read.add(node.args[0].value)
     assert read, 'guard found no row.get(...) call sites in results_report.py'
 
-    missing = sorted(read - emitted)
-    assert not missing, (
-        'results_report reads row keys that _build_phase6_results does not emit — '
-        f'viewerChoice and friends will silently be None: {missing}'
-    )
+    for name, emitted in builders.items():
+        missing = sorted(read - emitted)
+        assert not missing, (
+            f'results_report reads row keys that {name} does not emit — '
+            f'viewerChoice and friends will silently be None: {missing}'
+        )
 
 
 def test_preliminary_results_exposes_only_the_informed_round_publicly(
@@ -547,6 +565,7 @@ def test_preliminary_results_order_does_not_depend_on_cross_round_shift(
         about_link='/about',
         identity_reveal_link=None,
         full_view=False,
+        phases=[],
     )
 
     # Identical informed tallies must not let different P2→P6 shifts choose which

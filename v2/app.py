@@ -67,6 +67,7 @@ from services.identity_reveal import (
 )
 from services.informed_voting import build_informed_voting_state
 from services import reporting_rules
+from services.phase_timeline import PHASE_OPERATIONS, build_phase_timeline
 from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
@@ -1143,20 +1144,140 @@ def _build_phase6_results(
     }
 
 
-def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
-    """Build the current moderation filter for Phase 6 report surfaces.
+def _build_explore_results(conv, results_filter: 'Phase6ResultsFilter | None' = None) -> dict | None:
+    """The report's results before the informed opinion round (#598).
 
-    Hidden Phase 6 statements are sourced from the Polis stats DB when available.
+    Same shape as ``_build_phase6_results``, from the Explore round alone: the confirmed
+    featured statements with their Explore counts ('p2', exact and unfloored, like the
+    Phase 6 builder's; services.results_report applies the reporting rules), no 'p6'.
+    ``results_filter`` holds the Explore round's exclusions. Returns None without
+    confirmed featured statements.
+    """
+    filt = results_filter or Phase6ResultsFilter.empty()
+    confirmed = [
+        fs for fs in FeaturedStatement.query.filter_by(
+            conversation_id=conv.id, confirmed_by_admin=True,
+        ).order_by(FeaturedStatement.id).all()
+        if fs.polis_statement_id is not None
+        and fs.polis_statement_id not in filt.excluded_tids
+        and fs.statement_text
+    ]
+    if not confirmed:
+        return None
+    zinvite = conv.polis_id
+    tids = [fs.polis_statement_id for fs in confirmed]
+    excluded_pids = list(filt.excluded_pids)
+    client = _polis_server_client()
+
+    def _fetch_explore_aggregate():
+        counts = client.get_phase6_vote_counts(zinvite, tids, excluded_pids)
+        total = (client.get_phase6_participant_count(zinvite, excluded_pids)
+                 if counts is not None else None)
+        return {'counts': counts, 'total': total}
+
+    agg = _phase6_agg_cached(
+        ('explore', zinvite, tuple(sorted(tids)), tuple(sorted(excluded_pids))),
+        _fetch_explore_aggregate,
+        cacheable=lambda v: v['counts'] is not None,
+    )
+    counts = agg['counts']
+    empty = {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0}
+    return {
+        'statements': [{
+            'text': fs.statement_text,
+            'fs_id': fs.id,
+            'p2': dict(counts.get(fs.polis_statement_id, empty)) if counts is not None else None,
+            'p6': None,
+            'shift': None,
+            'my_p2_vote': None,
+            'my_p6_vote': None,
+            'my_group_votes': None,
+        } for fs in confirmed],
+        'p6_participants': None,
+        'p2_participants': agg['total'],
+        'matched_participants': None,
+        'personal_lens_available': False,
+        'filter': filt,
+        'source_divergence': None,
+        'is_preliminary': bool(conv.active),
+        'clusters': None,
+        'pg_available': counts is not None,
+        'informed_round': False,
+    }
+
+
+_REPORT_ARGUMENTS_PER_SIDE = 3
+
+
+def _attach_report_arguments(results: dict | None) -> None:
+    """Add each report row's arguments: the visible ones with the most support per side.
+
+    Ranked as the informed opinion cards rank them (support, then age). Only the text
+    leaves here: no author, and no support counts.
+    """
+    if not results or not results.get('statements'):
+        return
+    fs_ids = [row['fs_id'] for row in results['statements']]
+    arguments = (
+        Argument.query
+        .filter(Argument.featured_statement_id.in_(fs_ids), Argument.hidden.is_(False))
+        .options(joinedload(Argument.votes))
+        .all()
+    )
+    ranked = sorted(arguments, key=lambda argument: (-len(argument.votes), argument.id))
+    for row in results['statements']:
+        sides = {'pro': [], 'con': []}
+        for argument in ranked:
+            side = sides.get(argument.side)
+            if (argument.featured_statement_id == row['fs_id'] and side is not None
+                    and len(side) < _REPORT_ARGUMENTS_PER_SIDE):
+                side.append(argument.body)
+        row['arguments'] = sides
+
+
+def _phase_ended(conv, key: str) -> bool:
+    """True once phase ``key`` of the process's route is over: the process has moved to a
+    later phase with that phase's own flag off, or it has closed."""
+    keys = [stage['key'] for stage in _phase_sequence_for(conv)]
+    if key not in keys:
+        return False
+    if conv.closed_at:
+        return True
+    flag = _PHASE_BY_KEY[key]['flag']
+    return not getattr(conv, flag) and _current_stage_index(conv) > keys.index(key)
+
+
+def _build_preview_results(conv, results_filter: 'Phase6ResultsFilter') -> dict | None:
+    """The site-admin preview's results so far (#598). Preview only: the public results
+    route has no audience gate for this yet (#568), so it never calls this.
+
+    The informed opinion round once it has results; before that, the Explore round's
+    tallies, but only once Explore is over. Arguments only once the Arguments phase is
+    over. ``results_filter`` is the live Phase 6 filter; the Explore round's own hidden
+    statements are read for the fallback.
+    """
+    results = _build_phase6_results(conv, participation=None, results_filter=results_filter)
+    if results is None and _phase_ended(conv, 'submission'):
+        results = _build_explore_results(conv, _hidden_statements_filter(conv, conv.polis_id))
+    if _phase_ended(conv, 'argument_mapping'):
+        _attach_report_arguments(results)
+    return results
+
+
+def _hidden_statements_filter(conv, zinvite: str | None) -> Phase6ResultsFilter:
+    """The moderation filter for one Polis round: its hidden statements (mod=-1).
+
+    Hidden statements are sourced from the Polis stats DB when available.
     Participant exclusions are reserved for #60; the field is intentionally present
     in snapshots now so final reports do not need another schema change later.
     """
     excluded_tids: set[int] = set()
-    if conv.phase6_polis_conversation_id:
+    if zinvite:
         try:
-            rows = _polis_server_client().get_statements(conv.phase6_polis_conversation_id)
+            rows = _polis_server_client().get_statements(zinvite)
         except Exception:
             current_app.logger.exception(
-                'Could not build Phase 6 report filter for %s', conv.slug)
+                'Could not build the report filter for %s', conv.slug)
             rows = None
         if rows:
             _, _, hidden = rows
@@ -1166,6 +1287,11 @@ def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
             }
     return Phase6ResultsFilter(excluded_tids=frozenset(excluded_tids),
                                excluded_pids=frozenset())
+
+
+def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
+    """Build the current moderation filter for Phase 6 report surfaces."""
+    return _hidden_statements_filter(conv, conv.phase6_polis_conversation_id)
 
 
 def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
@@ -3329,6 +3455,25 @@ def _informed_round_open(conv: Conversation) -> bool:
     return bool(conv.phase_informed_voting and not conv.closed_at)
 
 
+def _report_phase_timeline(conv: Conversation) -> list[dict]:
+    """The report's Process timeline (#599): each route phase's dates, from the audit log."""
+    events = (
+        db.session.query(
+            AuditEvent.ts, AuditEvent.operation, AuditEvent.target_id, AuditEvent.detail,
+        )
+        .filter(
+            AuditEvent.conversation_id == conv.id,
+            AuditEvent.operation.in_(PHASE_OPERATIONS),
+            AuditEvent.outcome == 'ok',
+        )
+        .order_by(AuditEvent.ts, AuditEvent.id)
+        .all()
+    )
+    return build_phase_timeline(
+        conversation=conv, route=_phase_sequence_for(conv), events=events,
+    )
+
+
 def _results_report_api_payload(slug: str) -> dict:
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
@@ -3377,6 +3522,7 @@ def _results_report_api_payload(slug: str) -> dict:
         # counts, groups); everyone else the public one (owner, 2026-10-31). No one gets a
         # personalised view of someone else's.
         full_view=participation is not None or _can_organize(conv, participant),
+        phases=_report_phase_timeline(conv),
     )
 
 
@@ -3532,7 +3678,7 @@ def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
     content_type = body['contentType']
     target_id = body['targetId']
     if content_type == 'argument':
-        (
+        argument = (
             Argument.query.join(FeaturedStatement)
             .filter(
                 Argument.id == target_id,
@@ -3540,6 +3686,11 @@ def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
                 Argument.hidden.is_(False),
             ).first_or_404()
         )
+        # The workspace offers no flag on your own argument (#347); refuse it here too,
+        # so the rule does not rest on the interface alone.
+        if (argument.proposer_pseudonym is not None
+                and argument.proposer_pseudonym == participation.pseudonym):
+            abort(409, description='You cannot flag your own argument.')
     else:
         try:
             statement_exists = target_id in _statement_text_map(conv.polis_id)
@@ -4531,13 +4682,23 @@ def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
         sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
         statement_text_map=_statement_text_map,
         add_seed=_polis_server_client().add_seed,
-        add_seed_return_id=_polis_server_client().add_seed_return_id,
         record_provenance=record_statement_provenance,
         audit=lambda statement_id, derived_from_id: record_audit(
             'statement.seed', conv_id=conv.id,
             **({'target_type': 'statement', 'target_id': statement_id,
                 'derived_from': derived_from_id}
                if statement_id is not None else {}),
+        ),
+        # #240: organizer seeds are approved explicitly, whatever the conversation's
+        # policy; the decision is audited like a participant statement's. `decision` is
+        # the decision sent; outcome='failed' means Polis did not apply it (still pending).
+        # statement_id is None when Polis created the seed but returned no id: the
+        # row then records a failed approval with no target, and the request succeeds.
+        audit_approval=lambda statement_id, approved: record_audit(
+            'statement.creation_moderation', conv_id=conv.id,
+            **({'target_type': 'statement', 'target_id': statement_id}
+               if statement_id is not None else {}),
+            outcome='ok' if approved else 'failed', decision=1, source='seed',
         ),
         max_characters=MAX_TEXT_CHARS,
         upstream_errors=(PolisServerError, PolisParticipantError),
@@ -5008,9 +5169,7 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if conv.closed_at:
         raise ReportPublished(_path_conversation(conv.slug, page='report'))
-    results = _build_phase6_results(
-        conv, participation=None, results_filter=_current_phase6_results_filter(conv),
-    )
+    results = _build_preview_results(conv, _current_phase6_results_filter(conv))
     if results:
         # The builder orders an open process's rows by id; the report orders them by shift.
         _sort_by_shift(results['statements'])
@@ -5032,7 +5191,9 @@ def _admin_report_preview_api_payload(conv_id: int) -> dict:
         about_link=_path_conversation(conv.slug, page='about'),
         identity_reveal_link=None,
         full_view=True,
+        phases=_report_phase_timeline(conv),
         preview=True,
+        informed_in_route=_route_has_phase(conv, 'informed_voting'),
     )
     # Ids and enums only (record_audit's privacy contract).
     record_audit(
@@ -5740,7 +5901,19 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
     statement text, vote values, usernames, xid, or any PII. The row is not redaction-filtered;
     this contract is the control (enforced by tests).
     """
-    actor = getattr(g.get('participant'), 'id', None)
+    participant = g.get('participant')
+    if participant is None and has_request_context():
+        # An ADMIN_USERS admin passes _is_global_admin without g.participant ever being
+        # loaded (#309), so resolve it here rather than record a NULL actor. A failed
+        # lookup must not break the caller. It runs in a savepoint, so a failure rolls back
+        # the lookup alone, not changes the caller has not committed yet.
+        try:
+            with db.session.begin_nested():
+                participant = _current_participant()
+        except Exception:
+            participant = None
+            current_app.logger.exception('audit actor lookup failed: %s', operation)
+    actor = getattr(participant, 'id', None)
     if actor is None and has_request_context() and session.get('username'):
         # Authenticated admin with no Participant row (env-listed ADMIN_USERS superadmin).
         # Mark the row so a NULL actor is explained, not ambiguous — without storing the
@@ -6221,6 +6394,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     csrf.init_app(app)
     limiter.init_app(app)
 
+    def _alembic_revisions():
+        """(Alembic config, the database's revision, the checked-out code's head revision)."""
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        alembic_cfg = app.extensions['migrate'].migrate.get_config()
+        with db.engine.connect() as _conn:
+            current_rev = MigrationContext.configure(_conn).get_current_revision()
+        head_rev = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+        return alembic_cfg, current_rev, head_rev
+
     @app.cli.command('init-db')
     def init_db_cmd():
         """Initialise or migrate the database. Idempotent.
@@ -6232,14 +6415,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         import sqlalchemy as _sa
         from flask_migrate import upgrade as _upgrade
         from alembic import command as _alembic_cmd
-        from alembic.runtime.migration import MigrationContext
-        from alembic.script import ScriptDirectory
-        migrate_ext = app.extensions.get('migrate')
-        alembic_cfg = migrate_ext.migrate.get_config()
         inspector = _sa.inspect(db.engine)
-        with db.engine.connect() as _conn:
-            current_rev = MigrationContext.configure(_conn).get_current_revision()
-        head_rev = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+        alembic_cfg, current_rev, head_rev = _alembic_revisions()
         if current_rev == head_rev:
             click.echo('Database already at head revision.')
         elif 'participants' not in inspector.get_table_names():
@@ -6322,6 +6499,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():
         """Fire due scheduled active-to-passive phase transitions."""
+        # A deploy checks out the new code minutes before it runs `flask db upgrade` (#456).
+        # A run in that gap would query columns the database does not have yet; the next
+        # run after the migration fires whatever is due, so skip without failing the job.
+        # Only a database *behind* the code skips: one ahead of it (a rollback) or at a
+        # revision the code does not know runs as it did before.
+        alembic_cfg, current_rev, head_rev = _alembic_revisions()
+        if current_rev is not None and current_rev != head_rev:
+            from alembic.script import ScriptDirectory
+            script = ScriptDirectory.from_config(alembic_cfg)
+            if current_rev in {rev.revision for rev in script.iterate_revisions(head_rev, 'base')}:
+                click.echo(f'Skipping: migrations pending (database at {current_rev}, '
+                           f'code expects {head_rev}).')
+                return
         result = _process_due_scheduled_transitions()
         click.echo(
             'Scheduled transitions: '

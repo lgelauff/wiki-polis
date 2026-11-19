@@ -623,7 +623,7 @@
           "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation or target not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-          "409": {"description": "Participation missing or flags closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Participation missing, flags closed, or the argument is your own", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "502": {"description": "Statement validation service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
@@ -1966,7 +1966,7 @@
       },
       "ConversationWorkspace": {
         "type": "object",
-        "required": ["slug", "title", "space", "status", "descriptionHtml", "outroHtml", "viewer", "spaceWarning", "scheduledTransition", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
+        "required": ["slug", "title", "space", "status", "descriptionHtml", "outroHtml", "viewer", "spaceWarning", "scheduledTransition", "cleanup", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string", "minLength": 1},
@@ -1983,6 +1983,7 @@
               {"type": "null"}
             ]
           },
+          "cleanup": {"type": "boolean", "description": "True while an open consultation is in the Cleanup phase (the phase_cleanup stage after arguments, not the report-pending cleanup window), a quiet pause in which participants have nothing to do."},
           "tabs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationWorkspaceTab"}},
           "defaultTab": {
             "type": ["string", "null"],
@@ -2587,7 +2588,7 @@
       },
       "ResultsReport": {
         "type": "object",
-        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
+        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "phases", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string"},
@@ -2596,6 +2597,11 @@
           "resultsAvailable": {"type": "boolean"},
           "openedAt": {"type": "string", "format": "date-time"},
           "closedAt": {"type": ["string", "null"], "format": "date-time"},
+          "phases": {
+            "type": "array",
+            "description": "One row per phase on the consultation's route, in route order. Preparation and the phases the route skips are left out. The dates come from the audit log (#599).",
+            "items": {"$ref": "#/components/schemas/ResultsReportPhase"}
+          },
           "context": {
             "type": "object",
             "required": ["phase", "status", "method"],
@@ -2603,7 +2609,8 @@
             "properties": {
               "phase": {"type": "string"},
               "status": {"type": "string", "enum": ["provisional", "final"]},
-              "method": {"type": "string"}
+              "method": {"type": "string"},
+              "sources": {"type": "array", "items": {"type": "string", "enum": ["submission", "argument_mapping", "informed_voting"]}, "description": "Site-admin preview only: the rounds whose results the preview shows, as phase identifiers, in phase order. Empty without results."}
             }
           },
           "participation": {
@@ -2624,7 +2631,8 @@
               "detailedCounts": {"type": "boolean"},
               "opinionGroups": {"type": "boolean"},
               "personalLens": {"type": "boolean"},
-              "responseFloor": {"type": "integer", "minimum": 1, "description": "Fewest responses a tally needs to be shown, for the \"fewer than\" text of a tally with belowFloor."}
+              "responseFloor": {"type": "integer", "minimum": 1, "description": "Fewest responses a tally needs to be shown, for the \"fewer than\" text of a tally with belowFloor."},
+              "informedRound": {"type": "string", "enum": ["included", "pending", "skipped"], "description": "Site-admin preview only. Whether the results include the informed opinion round: included; pending (not held yet; the results are the Explore round's so far); skipped (the process does not hold it, or closed without it)."}
             }
           },
           "moderation": {
@@ -2651,6 +2659,17 @@
           "links": {"$ref": "#/components/schemas/ResultsLinks"}
         }
       },
+      "ResultsReportPhase": {
+        "type": "object",
+        "required": ["key", "state", "startedAt", "endedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string", "enum": ["submission", "featured_selection", "argument_mapping", "cleanup", "informed_voting", "public_results"]},
+          "state": {"type": "string", "enum": ["not_started", "running", "ended"]},
+          "startedAt": {"type": ["string", "null"], "format": "date-time", "description": "Null when the phase has not started, or when its start was not recorded."},
+          "endedAt": {"type": ["string", "null"], "format": "date-time", "description": "Null when the phase has not ended, or when its end was not recorded."}
+        }
+      },
       "ResultsStatement": {
         "type": "object",
         "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice", "viewerGroupChoice", "viewerMatchesGroup", "personalDelta"],
@@ -2664,7 +2683,17 @@
           "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
           "viewerGroupChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]},
           "viewerMatchesGroup": {"type": ["boolean", "null"]},
-          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]}
+          "personalDelta": {"oneOf": [{"$ref": "#/components/schemas/PersonalDelta"}, {"type": "null"}]},
+          "arguments": {
+            "type": "object",
+            "required": ["for", "against"],
+            "additionalProperties": false,
+            "description": "Site-admin preview only, once the Arguments phase is over: the visible arguments with the most support on each side (at most 3), most supported first. Text only: no author and no counts.",
+            "properties": {
+              "for": {"type": "array", "items": {"type": "string"}},
+              "against": {"type": "array", "items": {"type": "string"}}
+            }
+          }
         }
       },
       "PersonalDelta": {

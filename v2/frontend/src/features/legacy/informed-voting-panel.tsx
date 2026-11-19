@@ -35,6 +35,13 @@ function recordedLabel(msg: Message, choice: Choice): string {
       : msg('conv-p6-voted-pass');
 }
 
+/** A card the participant can still answer. A card without vote controls (`canVote` false:
+ *  its phase-6 statement does not exist yet) can never be answered, so no seek may stop on
+ *  it and it does not count towards completion (#319). */
+function stillToAnswer(card: Card, answered: Set<number>): boolean {
+  return card.canVote && !answered.has(card.featuredStatementId);
+}
+
 function ArgumentSide({side, items}: {
   side: 'pro' | 'con';
   items: Card['arguments']['for'];
@@ -63,14 +70,12 @@ function Completion({workspace}: {workspace: Workspace}) {
   const deliberationOpen = workspace.tabs.some((tab) => tab.key === 'vote' || tab.key === 'arguments');
   return (
     <div className="p6-done">
-      <h2 className="p6-done-heading">{msg('conv-p6-done-heading')}</h2>
-      {deliberationOpen ? (
-        <p className="p6-done-text">{msg('conv-p6-done-open')}</p>
-      ) : workspace.status === 'open' ? (
-        <p className="p6-done-text">{msg('conv-p6-done-willpublish')}</p>
-      ) : (
-        <p className="p6-done-text">{msg('conv-p6-done-closed')} <InternalLink href={workspace.links.results}>{msg('conv-read-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
-      )}
+      {/* Focusable so that finishing the deck can move focus here: the vote button that
+          had it is gone with the deck. */}
+      <h2 className="p6-done-heading" tabIndex={-1}>{msg('conv-p6-done-heading')}</h2>
+      {/* The tabs, and so this panel, exist only while the consultation is open; a closed
+          one renders ClosedWorkspace instead (#402). */}
+      <p className="p6-done-text">{deliberationOpen ? msg('conv-p6-done-open') : msg('conv-p6-done-willpublish')}</p>
       {workspace.reveal?.state === 'open' ? (
         <p className="p6-done-reveal p6-done-reveal--open">{withNodes(msg('conv-p6-reveal-recorded', nodeSlot(0)), <strong>{workspace.viewer.pseudonym}</strong>)} {withNodes(msg('conv-p6-reveal-open', nodeSlot(0)), <InternalLink href={`/c/${workspace.slug}/reveal`}>{msg('conv-p6-reveal-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink>)}</p>
       ) : workspace.reveal?.state !== 'revealed' && workspace.reveal?.state !== 'expired' ? (
@@ -87,11 +92,13 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   const msg = useMessage();
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const queryClient = useQueryClient();
-  // Open on the first card still to answer, so a participant who comes back mid-deck is
-  // not put back on a card they already answered (#317). With every card answered this
-  // falls back to the first; the completion panel is what shows then.
-  const [currentIndex, setCurrentIndex] = useState(
-    () => Math.max(0, data.cards.findIndex((card) => !card.voted)),
+  // The current card is held by its id, not its position: a refetch can add, remove or
+  // reorder cards, and a position then points at a different card (#319). Open on the
+  // first card still to answer, so a participant who comes back mid-deck is not put back
+  // on a card they already answered (#317). With every card answered this is null; the
+  // completion panel is what shows then.
+  const [currentId, setCurrentId] = useState<number | null>(
+    () => data.cards.find((card) => card.canVote && !card.voted)?.featuredStatementId ?? null,
   );
   const [votes, setVotes] = useState<Record<number, Choice>>({});
   // Seed from the server, not from an empty set. The API already reports which cards
@@ -104,22 +111,73 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
   // Likewise: a deck the participant already finished should open on its completion
-  // panel rather than on card 1 of 3 with no sign anything happened.
-  const [done, setDone] = useState(() => data.cards.length > 0 && data.cards.every((card) => card.voted));
+  // panel rather than on card 1 of 3 with no sign anything happened. Worked out from the
+  // deck on every render, not stored, so a refetch that brings a newly votable card
+  // (a statement initialised mid-round) shows that card again.
+  const done = data.cards.some((card) => card.canVote) && data.cards.every((card) => (
+    !card.canVote || card.voted || terminalIds.has(card.featuredStatementId)
+  ));
+  // True only in the pause after the last answer, so its confirmation is seen before the
+  // deck gives way to the completion panel.
+  const [finishing, setFinishing] = useState(false);
   const advanceTimer = useRef<number | null>(null);
-  const current = data.cards[currentIndex];
+  const firstOpenId = data.cards.find((card) => (
+    card.canVote && !card.voted && !terminalIds.has(card.featuredStatementId)
+  ))?.featuredStatementId ?? null;
+  // A finished deck that a refetch reopens (a statement initialised mid-round) goes to the
+  // card that reopened it, not to whichever card was current when it finished (#319).
+  // Adjusted during render, as React advises for state derived from a change in props.
+  const [wasDone, setWasDone] = useState(done);
+  if (wasDone !== done) {
+    setWasDone(done);
+    if (!done && firstOpenId !== null) setCurrentId(firstOpenId);
+  }
+  // A current card the deck no longer holds (a statement unfeatured mid-session) gives way
+  // to the first card still to answer, then to the first card: never to no card at all,
+  // which would hide the navigation too (#319).
+  const held = data.cards.findIndex((card) => card.featuredStatementId === currentId);
+  const index = held >= 0 ? held : Math.max(0, data.cards.findIndex((card) => card.featuredStatementId === firstOpenId));
+  // Navigation and its counter go over the cards that can be answered, the same cards the
+  // progress counts, so "2 of 3" never disagrees with the progress beside it. A card without
+  // vote controls is skipped, as every other seek skips it. A deck with no such card at all
+  // falls back to every card, so it can still be read.
+  const anyVotable = data.cards.some((card) => card.canVote);
+  const reachable = data.cards.flatMap((card, position) => (!anyVotable || card.canVote ? [position] : []));
+  const prevPosition = reachable.filter((position) => position < index).at(-1);
+  const nextPosition = reachable.find((position) => position > index);
+  const countOf = (position: number) => Math.max(1, reachable.filter((at) => at <= position).length);
 
   useEffect(() => () => {
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
   }, []);
 
-  function showCard(index: number) {
-    setCurrentIndex(index);
+  function showCard(id: number, moveFocus = true) {
+    setCurrentId(id);
     globalThis.requestAnimationFrame(() => {
-      const card = document.querySelector<HTMLElement>(`.p6-card[data-fs-id="${data.cards[index]?.featuredStatementId}"]`);
+      const card = document.querySelector<HTMLElement>(`.p6-card[data-fs-id="${id}"]`);
       card?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
-      card?.querySelector<HTMLElement>('[data-focus-anchor]')?.focus({preventScroll: true});
+      if (moveFocus) card?.querySelector<HTMLElement>('[data-focus-anchor]')?.focus({preventScroll: true});
     });
+  }
+
+  /** Whether focus is still where the vote on card `id` left it: on that card, or nowhere
+   *  (the page body). The pause before an advance is long enough for a participant to move
+   *  focus elsewhere, and the advance must not take it back from them. */
+  function focusStayedOn(id: number): boolean {
+    const active = document.activeElement;
+    return !active || active === document.body
+      || active.closest(`.p6-card[data-fs-id="${id}"]`) !== null;
+  }
+
+  /** Previous or Next during the pause after a vote. The participant has chosen a card, so
+   *  a pending advance must not take them away from it. The pause before the completion
+   *  panel is left running: the deck is answered, and it gives way whichever card is shown. */
+  function navigate(id: number) {
+    if (!finishing && advanceTimer.current !== null) {
+      globalThis.clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    showCard(id);
   }
 
   const vote = useMutation({
@@ -127,6 +185,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       putInformedVote(workspace.slug, card.featuredStatementId, {choice}, csrfToken)
     ),
     onSuccess: (receipt) => {
+      if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
       const nextTerminal = new Set(terminalIds).add(receipt.featuredStatementId);
       setVotes((existing) => ({...existing, [receipt.featuredStatementId]: receipt.choice}));
       setTerminalIds(nextTerminal);
@@ -141,21 +200,36 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
         const cards = deck.cards.map((card) => (
           card.featuredStatementId === receipt.featuredStatementId ? {...card, voted: true} : card
         ));
-        const completed = cards.filter((card) => card.voted).length;
+        // Counted as the server counts: only the cards that can be answered.
+        const votable = cards.filter((card) => card.canVote);
+        const completed = votable.filter((card) => card.voted).length;
         return {...deck, cards, progress: {
-          ...deck.progress, completed, remaining: cards.length - completed,
-          allDone: completed === cards.length,
+          ...deck.progress, completed, total: votable.length, remaining: votable.length - completed,
+          allDone: votable.length > 0 && completed === votable.length,
         }};
       });
       void queryClient.invalidateQueries({queryKey});
-      if (nextTerminal.size === data.cards.length) setDone(true);
-      const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
-      const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
-      if (wrapped >= 0) {
-        advanceTimer.current = globalThis.setTimeout(() => showCard(wrapped), 400);
+      const from = receipt.featuredStatementId;
+      const at = data.cards.findIndex((card) => card.featuredStatementId === from);
+      const forward = data.cards.find((card, position) => position > at && stillToAnswer(card, nextTerminal));
+      const wrapped = forward ?? data.cards.find((card) => stillToAnswer(card, nextTerminal));
+      if (wrapped) {
+        const target = wrapped.featuredStatementId;
+        advanceTimer.current = globalThis.setTimeout(() => showCard(target, focusStayedOn(from)), 400);
       } else {
+        // The last answer: the deck gives way to the completion panel, after the same pause
+        // as an advance so the confirmation badge is seen first.
+        setFinishing(true);
         advanceTimer.current = globalThis.setTimeout(() => {
-          document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
+          // The cards go with the deck, so focus on any of them (the answered card, or one
+          // Previous or Next showed during the pause) follows to the completion heading.
+          const active = document.activeElement;
+          const moveFocus = focusStayedOn(from) || active?.closest('.p6-card') != null;
+          setFinishing(false);
+          globalThis.requestAnimationFrame(() => {
+            document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
+            if (moveFocus) document.querySelector<HTMLElement>('.p6-done-heading')?.focus({preventScroll: true});
+          });
         }, 400);
       }
     },
@@ -167,18 +241,20 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
 
   if (data.cards.length === 0) return <div className="landing-section"><p className="muted">{msg('conv-p6-none')}</p></div>;
 
+  // A finished deck shows only its completion panel: card 1 with live vote buttons above
+  // "You've given your informed opinion" invited overwriting a recorded vote (#319).
   return <>
-    {data.cards.map((card, index) => {
+    {(!done || finishing) && data.cards.map((card, position) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
       // Answered in an earlier visit: the server says there is a vote, but the read
       // contract cannot say which (#327). Distinct from `selected`, which is this
       // session's own choice and does carry a value.
       const answeredEarlier = !selected && !error && terminalIds.has(card.featuredStatementId);
-      return <div className={`p6-card${index !== currentIndex ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
+      return <div className={`p6-card${position !== index ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
         <div tabIndex={-1} data-focus-anchor className="sr-only" />
         <div className="p6-card-header">
-          <span className="stmt-meta-left"><span className="stmt-dot" />{msg('conv-p6-label')} · {msg('conv-of', index + 1, data.cards.length)}</span>
+          <span className="stmt-meta-left"><span className="stmt-dot" />{msg('conv-p6-label')} · {msg('conv-of', countOf(position), reachable.length)}</span>
           {/* Error branch first. `selected` survives a failed re-vote, so testing it
               first makes the error unreachable once a card has been voted — and a
               rejected re-vote (a 409 on a paused round, which is the state the repair
@@ -213,12 +289,12 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={currentIndex === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(currentIndex - 1)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
-          <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', currentIndex + 1, data.cards.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={currentIndex === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(currentIndex + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={prevPosition === undefined} aria-label={msg('conv-nav-prev-aria')} onClick={() => { if (prevPosition !== undefined) navigate(data.cards[prevPosition]!.featuredStatementId); }}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+          <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', countOf(index), reachable.length)}</span>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={nextPosition === undefined} aria-label={msg('conv-nav-next-aria')} onClick={() => { if (nextPosition !== undefined) navigate(data.cards[nextPosition]!.featuredStatementId); }}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
         </div>
       </div>;
     })}
-    {done && <Completion workspace={workspace} />}
+    {done && !finishing && <Completion workspace={workspace} />}
   </>;
 }

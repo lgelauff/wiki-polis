@@ -2,7 +2,7 @@ import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {App} from '../../app';
@@ -211,7 +211,7 @@ test('progress circles and flag icons have readable names', async () => {
   // Catches a circle naming the wrong state (qqx cannot see this: the state is the choice of
   // message, not a parameter), and an internal id leaking into a flag's name.
   const circles = within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'});
-  expect(within(circles).getAllByRole('img').map((circle) => circle.getAttribute('aria-label')))
+  expect(within(circles).getAllByRole('button').map((circle) => circle.getAttribute('aria-label')))
     .toEqual(['Statement 1: in progress', 'Statement 2: arguments still to add', 'Statement 3: complete']);
   const first = document.getElementById('fs-8')!;
   expect(first.querySelector('.content-flag--corner summary')).toHaveAttribute('aria-label', 'Flag this statement for moderator review');
@@ -229,7 +229,6 @@ test('the argument box names the character limit it enforces', async () => {
   for (const [side, key] of [['pro', 'conv-arg-placeholder-for'], ['con', 'conv-arg-placeholder-against']] as const) {
     const box = document.querySelector<HTMLTextAreaElement>(`#fs-9 .contribute-wrapper[data-side="${side}"] textarea`)!;
     expect(box).toHaveAttribute('placeholder', `(${key}: ${ARGUMENT_MAX_CHARACTERS})`);
-    expect(box.maxLength).toBe(ARGUMENT_MAX_CHARACTERS);
   }
 });
 
@@ -277,5 +276,203 @@ test("an argument's flag panel opens toward the room it has, and narrows when it
     expect(flag.style.getPropertyValue('--content-flag-width')).toBe('');
   } finally {
     Reflect.deleteProperty(document.documentElement, 'clientWidth');
+  }
+});
+
+const argumentFlag = () => document.querySelector<HTMLDetailsElement>('[data-arg-id="92"] details.content-flag')!;
+
+test('Escape closes the flag panel and puts focus back on its trigger (#254)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  const flag = argumentFlag();
+  flag.open = true;
+  const box = within(flag).getByRole('textbox');
+  box.focus();
+  fireEvent.keyDown(box, {key: 'Escape'});
+  expect(flag.open).toBe(false);
+  expect(document.activeElement).toBe(flag.querySelector('summary'));
+});
+
+test('after Send, focus is on the trigger and the thanks lands in a live region that was already there (#254)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  const flag = argumentFlag();
+  flag.open = true;
+  // A region added together with its text is often not read out: it must exist, empty, first.
+  const region = within(flag).getByRole('status');
+  expect(region).toBeEmptyDOMElement();
+  const send = within(flag).getByRole('button');
+  send.focus();
+  fireEvent.submit(flag.querySelector('form')!);
+  await waitFor(() => expect(region).not.toBeEmptyDOMElement());
+  expect(within(flag).getByRole('status')).toBe(region);
+  expect(document.activeElement).toBe(flag.querySelector('summary'));
+});
+
+test("the flag's label shows as a tooltip after a tap and on keyboard focus, sided like the panel (#254)", async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(BODIES[1]!);
+
+  // jsdom has no layout: the trigger near the left of a clipping card, as on a phone.
+  const statementPanel = document.getElementById('fs-8')!;
+  statementPanel.style.overflowX = 'clip';
+  statementPanel.getBoundingClientRect = () => DOMRect.fromRect({x: 10, y: 0, width: 300, height: 600});
+  const flag = argumentFlag();
+  flag.getBoundingClientRect = () => DOMRect.fromRect({x: 100, y: 0, width: 22, height: 22});
+  const trigger = flag.querySelector('summary')!;
+  const tipShown = () => trigger.classList.contains('content-flag-trigger--tip');
+
+  // A mouse has `title`; no extra tooltip.
+  fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+  expect(tipShown()).toBe(false);
+
+  // A tap shows it, on the side with room, and does not stop the tap from opening the panel.
+  fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+  await waitFor(() => expect(tipShown()).toBe(true));
+  expect(flag).toHaveClass('content-flag--opens-right');
+  fireEvent.click(trigger);
+  await waitFor(() => expect(flag.open).toBe(true));
+  // ...and it goes away by itself.
+  await waitFor(() => expect(tipShown()).toBe(false), {timeout: 3000});
+
+  // Keyboard focus shows it until focus leaves. jsdom neither focuses a <summary> nor knows
+  // which focus is from the keyboard, so it is told the focus is :focus-visible.
+  flag.open = false;
+  const matches = trigger.matches.bind(trigger);
+  vi.spyOn(trigger, 'matches').mockImplementation((selector) => selector === ':focus-visible' || matches(selector));
+  fireEvent.focus(trigger);
+  await waitFor(() => expect(tipShown()).toBe(true));
+  fireEvent.blur(trigger);
+  await waitFor(() => expect(tipShown()).toBe(false));
+
+  // Escape dismisses it while focus stays, with the panel closed (WCAG 1.4.13).
+  fireEvent.focus(trigger);
+  await waitFor(() => expect(tipShown()).toBe(true));
+  fireEvent.keyDown(trigger, {key: 'Escape'});
+  await waitFor(() => expect(tipShown()).toBe(false));
+  expect(flag.open).toBe(false);
+});
+
+test('an argument over the limit is kept in full and waits at Submit until it fits', async () => {
+  serve(mapping());
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the browser cutting pasted text silently (#558): a `maxlength` drops the rest
+  // before the counter or the server can see it.
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  const box = wrapper.querySelector('textarea')!;
+  const submit = wrapper.querySelector<HTMLButtonElement>('.contribute-submit-btn')!;
+  expect(box).not.toHaveAttribute('maxlength');
+  const over = 'x'.repeat(ARGUMENT_MAX_CHARACTERS + 3);
+  fireEvent.change(box, {target: {value: over}});
+  expect(box).toHaveValue(over);
+  expect(submit).toBeDisabled();
+  expect(box).toHaveAttribute('aria-invalid', 'true');
+  const count = wrapper.querySelector('.contribute-charcount')!;
+  expect(count).toHaveTextContent('(conv-composer-over-limit: 3)');
+  expect(box.getAttribute('aria-describedby')).toBe(count.id);
+
+  fireEvent.change(box, {target: {value: over.slice(3)}});
+  expect(submit).toBeEnabled();
+  expect(box).not.toHaveAttribute('aria-invalid');
+});
+
+test('each progress circle is a button that names its state and marks the shown statement', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches a circle that is an image with a click handler (no keyboard, announced as a
+  // picture), the drawing read out on top of the name, and the shown statement not marked.
+  const circles = within(within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'})).getAllByRole('button');
+  expect(circles).toHaveLength(3);
+  for (const circle of circles) {
+    expect(circle.tagName).toBe('BUTTON');
+    expect(circle).toHaveAttribute('type', 'button');
+    expect(circle).not.toHaveAttribute('tabindex');
+    expect(circle.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  }
+  expect(circles.map((circle) => circle.getAttribute('aria-current'))).toEqual(['step', null, null]);
+
+  fireEvent.click(circles[1]!);
+  expect(document.getElementById('fs-9')).not.toHaveClass('arg-block--hidden');
+  expect(document.getElementById('fs-8')).toHaveClass('arg-block--hidden');
+  const shown = within(within(document.getElementById('fs-9')!).getByRole('group', {name: 'Statement progress'})).getAllByRole('button');
+  expect(shown.map((circle) => circle.getAttribute('aria-current'))).toEqual([null, 'step', null]);
+});
+
+test('switching statements keeps keyboard focus in the statement now shown', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Each panel has its own circles and Previous/Next, and switching hides the panel that
+  // holds the pressed control, so without a move focus falls to the page body.
+  const circle = within(within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'})).getAllByRole('button')[1]!;
+  circle.focus();
+  fireEvent.click(circle);
+  await waitFor(() => expect(document.getElementById('fs-9')!.contains(document.activeElement)).toBe(true));
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement).toHaveAttribute('aria-current', 'step');
+
+  const next = within(document.getElementById('fs-9')!).getByRole('button', {name: 'Next statement'});
+  next.focus();
+  fireEvent.click(next);
+  await waitFor(() => expect(document.getElementById('fs-10')!.contains(document.activeElement)).toBe(true));
+});
+
+/** The colour tokens the circles paint with, as style.css's :root defines them. jsdom applies
+ *  no stylesheet and vite will not serve style.css as text to the tests, so they are copied;
+ *  v2/tests/test_argument_controls_css.py checks the copy still matches style.css. */
+const TOKENS: Record<string, string> = {
+  '--ink': '#0c0c0e', '--surface': '#ffffff', '--pass': '#3d6dba', '--spot': '#b45309', '--blue-dark': '#2a4f8a',
+};
+
+function resolve(paint: string | null): string {
+  if (!paint) throw new Error('no paint');
+  const variable = /^var\((--[\w-]+)/.exec(paint)?.[1];
+  const value = variable ? TOKENS[variable] : paint;
+  if (!value) throw new Error(`no token for ${paint}`);
+  return value;
+}
+
+function contrast(first: string, second: string): number {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => {
+      const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
+      return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
+test('the number in each progress circle meets text contrast against what is behind it', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the number on a filled circle drawn in a colour close to the fill (it was
+  // --blue-dark on --spot, 1.6:1). Statement 1 is half filled, 2 empty, 3 filled. On the
+  // half fill the number straddles both colours, so it needs a halo it can stand on.
+  const circles = document.querySelectorAll('#fs-8 .at-circles .at-circle');
+  for (const circle of circles) {
+    const text = circle.querySelector('text')!;
+    const half = circle.querySelector('path') !== null;
+    const backing = half ? text.getAttribute('stroke') : circle.querySelector('circle')!.getAttribute('fill');
+    expect(contrast(resolve(text.getAttribute('fill')), resolve(backing))).toBeGreaterThanOrEqual(4.5);
+    if (half) {
+      // The halo is drawn under the number and wide enough to stand on.
+      expect(text).toHaveAttribute('paint-order', 'stroke');
+      expect(Number(text.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(2);
+    }
   }
 });

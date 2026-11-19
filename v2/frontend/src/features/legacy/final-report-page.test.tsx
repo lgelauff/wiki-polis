@@ -7,6 +7,7 @@ import {expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {FinalReportLegacyPage} from './final-report-page';
+import {formatDate} from '../../i18n/dates';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -22,6 +23,12 @@ const reportFixture: components['schemas']['ResultsReport'] = {
   resultsAvailable: true,
   openedAt: '2026-05-01T12:00:00Z',
   closedAt: '2026-07-01T12:00:00Z',
+  phases: [
+    {key: 'submission', state: 'ended', startedAt: '2026-05-02T09:00:00Z', endedAt: '2026-05-20T09:00:00Z'},
+    {key: 'featured_selection', state: 'ended', startedAt: null, endedAt: null},
+    {key: 'argument_mapping', state: 'running', startedAt: '2026-06-01T09:00:00Z', endedAt: null},
+    {key: 'public_results', state: 'not_started', startedAt: null, endedAt: null},
+  ],
   // Deliberately unlike the catalogue's English, so a page echoing the server shows the marker.
   context: {phase: 'SERVER ENGLISH', status: 'final', method: 'SERVER ENGLISH'},
   participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
@@ -214,6 +221,121 @@ test('the published report carries no preview banner', async () => {
   expect(document.querySelector('.report-badge--preview')).toBeNull();
 });
 
+test('the process timeline has one row per phase the server sends, with its dates or state (#599)', async () => {
+  // Catalogue text unlike the English, so each row is shown to come from the right key.
+  server.use(
+    http.get(
+      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+      () => HttpResponse.json({
+        ...testMessages,
+        'report-process-dates': 'FROM $1 TO $2',
+        'report-process-running-since': 'RUNNING SINCE $1',
+        'report-process-dates-tbd': 'UNDATED',
+        'report-process-not-started': 'NOT STARTED',
+      }),
+    ),
+  );
+
+  const {container} = renderReport();
+
+  expect(await screen.findByText('NOT STARTED', {}, {timeout: 5000})).toBeVisible();
+  const rows = [...container.querySelectorAll('.report-timeline-item')].map((row) => [
+    row.querySelector('.report-timeline-label')?.textContent,
+    row.querySelector('.report-timeline-value')?.textContent,
+  ]);
+  // Opened, then the phases in the server's (the route's) order, then closed. A phase the
+  // route skips is not in the payload, so it gets no row.
+  expect(rows).toHaveLength(6);
+  expect(rows.slice(1, -1)).toEqual([
+    [testMessages['phase-label-submission'], `FROM ${formatDate('en', '2026-05-02T09:00:00Z')} TO ${formatDate('en', '2026-05-20T09:00:00Z')}`],
+    [testMessages['phase-label-featured_selection'], 'UNDATED'],
+    [testMessages['phase-label-argument_mapping'], `RUNNING SINCE ${formatDate('en', '2026-06-01T09:00:00Z')}`],
+    [testMessages['phase-label-public_results'], 'NOT STARTED'],
+  ]);
+});
+
+test('a report from a server that sends no phases still shows its timeline (#599)', async () => {
+  // A new bundle can reach the browser before the backend that sends `phases` restarts.
+  const {phases: _omitted, ...older} = reportFixture;
+  const {container} = renderReport(older as components['schemas']['ResultsReport']);
+
+  expect(await screen.findByText(testMessages['report-process-opened']!, {}, {timeout: 5000})).toBeVisible();
+  expect(container.querySelectorAll('.report-timeline-item')).toHaveLength(2);
+});
+
 function stripTags(html: string) {
   return html.replace(/<[^>]+>/g, '');
 }
+
+/** A preview before the informed opinion round (#598): Explore tallies and arguments only. */
+const exploreOnlyFixture: components['schemas']['ResultsReport'] = {
+  ...previewFixture,
+  context: {...previewFixture.context, sources: ['submission', 'argument_mapping']},
+  participation: {initialRound: 25, informedRound: null, matchedRounds: null},
+  dataAvailability: {...previewFixture.dataAvailability, opinionGroups: false, informedRound: 'pending'},
+  statements: [{
+    ...reportFixture.statements[0]!,
+    informed: null,
+    agreementShift: null,
+    arguments: {for: ['Shared costs are lower.'], against: []},
+  }],
+  opinionGroups: [],
+};
+
+test('a preview before the informed round shows the Explore round and the arguments', async () => {
+  renderReport(exploreOnlyFixture);
+
+  expect(await screen.findByRole('heading', {name: testMessages['report-argmap-heading']!}, {timeout: 5000})).toBeVisible();
+  // The Explore tallies and the participant-written argument reach the page.
+  expect(document.querySelector('.report-stmt-row .p6-vote-bar')).not.toBeNull();
+  expect(screen.getByText('Shared costs are lower.')).toBeVisible();
+  expect(document.querySelector('.p6-args-side--pro')).not.toBeNull();
+  expect(document.querySelector('.p6-args-side--con')).toBeNull();
+  expect(screen.queryByText(testMessages['report-argmap-placeholder']!)).toBeNull();
+  // No informed-round table; its sections say the round has not happened.
+  expect(screen.queryByRole('table')).toBeNull();
+  expect(screen.getAllByText(testMessages['report-informed-pending']!)).toHaveLength(2);
+  // The reading guide names the rounds used, not Publish, and the Explore-round method.
+  const guide = screen.getByRole('heading', {name: testMessages['output-howto-heading']!}).closest('.output-context')!;
+  expect(guide).toHaveTextContent(testMessages['phase-label-submission']!);
+  expect(guide).toHaveTextContent(testMessages['phase-label-argument_mapping']!);
+  expect(guide).not.toHaveTextContent(testMessages['output-report-phase']!);
+  expect(guide).toHaveTextContent(testMessages['report-method-preview-explore']!);
+  expect(guide).not.toHaveTextContent(testMessages['report-method-preview']!);
+});
+
+// Which method line a preview shows, by the rounds it uses (#598). Markers in place of the
+// catalogue's English, so the test checks the key chosen and not its wording.
+for (const [name, sources, informed, key] of [
+  ['informed round results', ['submission', 'argument_mapping', 'informed_voting'], 'included', 'report-method-preview'],
+  ['Explore and arguments, informed round to come', ['submission', 'argument_mapping'], 'pending', 'report-method-preview-explore'],
+  ['Explore only while the Arguments phase runs', ['submission'], 'pending', 'report-method-preview-partial'],
+  ['Explore and arguments, no informed round in the process', ['submission', 'argument_mapping'], 'skipped', 'report-method-preview-partial'],
+  ['Explore only, no informed round in the process', ['submission'], 'skipped', 'report-method-preview-partial'],
+] as const) {
+  test(`a preview's method line follows its sources: ${name}`, async () => {
+    const keys = ['report-method-preview', 'report-method-preview-explore', 'report-method-preview-partial'] as const;
+    server.use(http.get(
+      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+      () => HttpResponse.json({...testMessages, ...Object.fromEntries(keys.map((each) => [each, `METHOD ${each}`]))}),
+    ));
+    renderReport({
+      ...exploreOnlyFixture,
+      context: {...exploreOnlyFixture.context, sources: [...sources]},
+      dataAvailability: {...exploreOnlyFixture.dataAvailability, informedRound: informed},
+    });
+
+    const heading = await screen.findByRole('heading', {name: testMessages['output-howto-heading']!}, {timeout: 5000});
+    const shown = [...heading.closest('.output-context')!.textContent!.matchAll(/METHOD ([a-z-]+)/g)].map((match) => match[1]);
+    expect(shown).toEqual([key]);
+  });
+}
+
+test('a report whose process has no informed round leaves its sections out', async () => {
+  renderReport({...exploreOnlyFixture, dataAvailability: {...exploreOnlyFixture.dataAvailability, informedRound: 'skipped'}});
+
+  expect(await screen.findByRole('heading', {name: testMessages['report-argmap-heading']!}, {timeout: 5000})).toBeVisible();
+  expect(screen.queryByText(testMessages['report-informed-pending']!)).toBeNull();
+  expect(screen.queryByRole('heading', {name: testMessages['report-matched-heading']!})).toBeNull();
+  expect(screen.queryByText(testMessages['report-participation-both']!)).toBeNull();
+});
