@@ -674,9 +674,12 @@ class PolisServerClient:
                 f'Polis moderation failed (HTTP {resp.status_code}): {resp.text[:300]}'
             )
 
-    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> int:
+    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> int | None:
         """POST a single seed statement to Polis and return its tid.
-        Raises PolisServerError on failure, or when the response carries no tid."""
+
+        Raises PolisServerError when the statement was not created. A 2xx response
+        without a usable tid returns None: Polis has created the statement, so raising
+        would invite a retry that adds it a second time (#240)."""
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/comments',
@@ -699,12 +702,13 @@ class PolisServerClient:
                 f'{resp.text[:300]}'
             )
         try:
-            tid = int(resp.json()['tid'])
+            return int(resp.json()['tid'])
         except (ValueError, TypeError, KeyError, AttributeError):
-            raise PolisServerError(
-                f'Polis returned no usable tid for seed statement: {resp.text[:100]}'
+            logger.warning(
+                'Seed statement in %s was created but Polis returned no usable tid '
+                '(HTTP %s); it cannot be approved here', conversation_id, resp.status_code,
             )
-        return tid
+            return None
 
     def _approve_seed(self, sess, headers: dict, conversation_id: str, tid: int) -> bool:
         """Approve an organizer seed explicitly (#240), so its state does not depend
@@ -720,15 +724,19 @@ class PolisServerClient:
             return False
         return True
 
-    def add_seed(self, conversation_id: str, text: str) -> tuple[int, bool]:
+    def add_seed(self, conversation_id: str, text: str) -> tuple[int | None, bool]:
         """Add an organizer seed statement (is_seed=True) and approve it.
 
         Returns (tid, approved). Raises PolisServerError when the statement could
         not be created; an approval failure after creation returns approved=False.
+        A statement created without a usable tid returns (None, False): it exists,
+        but cannot be approved without its id.
         """
         sess, auth_headers = self._login()
         headers = {**self._HEADERS, **auth_headers}
         tid = self._post_seed(sess, headers, conversation_id, text)
+        if tid is None:
+            return None, False
         return tid, self._approve_seed(sess, headers, conversation_id, tid)
 
     def bulk_add_seeds(
@@ -752,7 +760,7 @@ class PolisServerClient:
                 failures.append((text, PolisServerError(str(exc)) if not isinstance(exc, PolisServerError) else exc))
                 continue
             successes += 1
-            if not self._approve_seed(sess, headers, conversation_id, tid):
+            if tid is None or not self._approve_seed(sess, headers, conversation_id, tid):
                 failed_approvals += 1
         return successes, failures, failed_approvals
 
@@ -760,7 +768,10 @@ class PolisServerClient:
         """Add a seed statement and return the Polis statement ID (tid).
         Raises PolisServerError if the response is not JSON or does not include a tid."""
         sess, auth_headers = self._login()
-        return self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
+        tid = self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
+        if tid is None:
+            raise PolisServerError('Polis returned no usable tid for seed statement.')
+        return tid
 
     # ── Direct Postgres reads ─────────────────────────────────────────────────
 

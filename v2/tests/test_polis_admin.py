@@ -442,7 +442,10 @@ def test_bulk_seed_import_counts_approval_failures_apart_from_creation_failures(
     assert _approval_puts(sess) == [(5, 1), (7, 1)]
 
 
-def test_bulk_seed_import_counts_a_statement_without_a_usable_tid_as_failed():
+def test_bulk_seed_import_counts_a_statement_without_a_usable_tid_as_created_unapproved():
+    """A 2xx without a usable tid means Polis created the statement: counting it as a
+    creation failure invited a re-import of a statement that exists. It is counted as
+    created, with its approval failed, since it cannot be approved without its id."""
     client = _server_client()
     login_patch, sess = _mock_login(client)
     sess.post.side_effect = [_mock_ok({}), _mock_ok(['x']), _mock_ok({'tid': 8})]
@@ -453,9 +456,21 @@ def test_bulk_seed_import_counts_a_statement_without_a_usable_tid_as_failed():
             'abc123', ['First', 'Second', 'Third'],
         )
 
-    assert (successes, failed_approvals) == (1, 0)
-    assert [text for text, _exc in failures] == ['First', 'Second']
+    assert (successes, failures, failed_approvals) == (3, [], 2)
     assert _approval_puts(sess) == [(8, 1)]
+
+
+def test_add_seed_without_a_usable_tid_succeeds_unapproved_rather_than_raising():
+    """#240: raising here, after Polis created the statement, made a retry add it twice."""
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.return_value = _mock_ok({})
+
+    with login_patch:
+        assert client.add_seed('abc123', 'A seed statement') == (None, False)
+
+    sess.post.assert_called_once()
+    sess.put.assert_not_called()
 
 
 def test_add_seed_return_id_leaves_moderation_to_its_caller():

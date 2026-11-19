@@ -441,6 +441,41 @@ def test_single_seed_audits_its_explicit_approval(admin_client, conversation):
     ]
 
 
+def test_single_seed_created_without_an_id_succeeds_and_audits_a_failed_approval(
+    admin_client, conversation,
+):
+    """#240: Polis created the seed but gave no id. The request succeeds (a failure
+    would invite a duplicate on retry), the approval is audited as failed with no
+    target, and no provenance is linked to an unknown statement."""
+    server, _participant = _upstream()
+    server.add_seed.side_effect = [(None, False), (None, False)]
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app._statement_text_map', return_value={12: 'Approved seed'}),
+        patch('app.record_statement_provenance', return_value=object()) as provenance,
+    ):
+        plain = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': 'Plain seed', 'derivedFromId': None},
+        )
+        corrected = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': 'Corrected seed', 'derivedFromId': 12},
+        )
+
+    assert plain.status_code == 201
+    assert corrected.status_code == 201
+    assert corrected.get_json()['data']['statementId'] is None
+    assert corrected.get_json()['data']['provenanceRecorded'] is False
+    provenance.assert_not_called()
+    events = AuditEvent.query.filter_by(
+        operation='statement.creation_moderation', conversation_id=conversation.id,
+    ).all()
+    assert [(e.target_type, e.target_id, e.outcome) for e in events] == [
+        (None, None, 'failed'), (None, None, 'failed'),
+    ]
+
+
 def test_seed_import_audits_approval_failures_separately(admin_client, conversation):
     server, participant = _upstream()
     server.bulk_add_seeds.return_value = (2, [], 1)

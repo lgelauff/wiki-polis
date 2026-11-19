@@ -252,7 +252,9 @@ def add_seed_statement(
         ) from exc
 
     audit_approval(statement_id=statement_id, approved=approved)
-    provenance = record_provenance(
+    # Created, but Polis gave no id (#240): there is nothing to link the correction to.
+    # The request still succeeds, since failing it would invite a duplicate on retry.
+    provenance = None if statement_id is None else record_provenance(
         conversation.id,
         statement_id,
         derived_from_id,
