@@ -250,16 +250,3 @@ test('the seed form can add a meta statement, and says when the mark failed', as
   ]));
   expect(await screen.findByText(m('flash-seed-added-meta-failed', 42))).toBeVisible();
 });
-
-test('from the 4th meta statement on, the list warns once', async () => {
-  serveWorkspace({approved: [11, 12, 13].map((id) => seedRow(id, {meta: true}))});
-  const {unmount} = renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
-  await screen.findByText('Statement text 12.', {}, {timeout: 10_000});
-  expect(screen.queryByText(/meta statements: each one/)).toBeNull();
-  unmount();
-
-  serveWorkspace({approved: [11, 12, 13, 14].map((id) => seedRow(id, {meta: true}))});
-  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
-  expect(await screen.findByText('4 meta statements: each one asks every participant for one more response.',
-    {}, {timeout: 10_000})).toBeVisible();
-});

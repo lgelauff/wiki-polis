@@ -399,9 +399,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   );
 
   const shown = new Set(rows.map((row) => row.id));
-  // Each meta statement asks every participant for one more response: said from the 4th on.
-  const metaCount = [...data.statements.approved, ...data.statements.pending]
-    .filter((row) => row.meta).length;
   const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
 
   return (
@@ -453,8 +450,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             />
           </label>
         </div>
-
-        {metaCount >= 4 && <p className="admin-status">{msg('stmts-meta-warn-count', metaCount)}</p>}
 
         {rows.length ? (
           <ul className="admin-rows" ref={listRef}>

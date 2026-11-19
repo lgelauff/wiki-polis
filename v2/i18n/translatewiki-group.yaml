@@ -538,7 +538,6 @@ TAGS:
     - stmts-import-too-long
     - stmts-meta-mark
     - stmts-meta-unmark
-    - stmts-meta-warn-count
     - stmts-meta-warn-responses
     - stmts-modsettings-heading
     - stmts-pending-empty

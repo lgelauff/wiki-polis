@@ -763,7 +763,6 @@
     "stmts-seed-corrects-not-found": "Statement #$1 was not found in this consultation — fix the “corrects” number and try again. Nothing was added.",
     "stmts-seed-meta-label": "Meta statement: asks about the participant, not about the topic",
     "stmts-seed-submit": "Add seed statement",
-    "stmts-meta-warn-count": "{{PLURAL:$1|$1 meta statement|$1 meta statements}}: each one asks every participant for one more response.",
     "stmts-meta-warn-responses": "Statement $1 already has responses, given before this change.",
     "stmts-meta-unmark": "Unmark as meta",
     "stmts-meta-mark": "Mark as meta",
