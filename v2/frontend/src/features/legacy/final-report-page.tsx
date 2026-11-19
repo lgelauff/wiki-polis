@@ -20,6 +20,20 @@ function informedRound(report: Report): InformedRound {
   return report.dataAvailability.informedRound ?? 'included';
 }
 
+/** The method line of a site admin's preview, chosen from the rounds the preview uses
+ *  (`context.sources`), so it never names a round the page does not show (#598). The
+ *  Explore wording fits only the case it describes: Explore tallies and arguments, with the
+ *  informed opinion round still to come. Any other mix, such as a running Arguments phase
+ *  (no arguments yet) or a process without an informed round, gets the general line. */
+function previewMethod(msg: Message, report: Report): string {
+  const sources = report.context.sources;
+  const informed = informedRound(report);
+  if (sources === undefined) return informed === 'included' ? msg('report-method-preview') : msg('report-method-preview-explore');
+  if (sources.includes('informed_voting')) return msg('report-method-preview');
+  if (sources.includes('submission') && sources.includes('argument_mapping') && informed === 'pending') return msg('report-method-preview-explore');
+  return msg('report-method-preview-partial');
+}
+
 const NO_ARGUMENTS = {for: [], against: []};
 
 function truncated(value: string, length: number) {
@@ -282,7 +296,6 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
   const locale = useLocale();
   // A preview is made from the rounds held so far, not in the Publish step (#598).
   const sources = (report.context.sources ?? []).map((phase) => phaseLabel(msg, phase));
-  const informedIncluded = informedRound(report) === 'included';
   return <LegacyShell {...shellTitle} headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
@@ -311,7 +324,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
             : <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>}
           <div><dt>{msg('output-status-label')}</dt><dd>{msg(preview ? 'report-status-preview' : 'report-status-final')}</dd></div>
           <div><dt>{msg('output-method-label')}</dt><dd>{preview
-            ? (informedIncluded ? msg('report-method-preview') : msg('report-method-preview-explore'))
+            ? previewMethod(msg, report)
             : outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>

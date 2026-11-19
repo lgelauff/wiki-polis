@@ -295,6 +295,33 @@ test('a preview before the informed round shows the Explore round and the argume
   expect(guide).not.toHaveTextContent(testMessages['report-method-preview']!);
 });
 
+// Which method line a preview shows, by the rounds it uses (#598). Markers in place of the
+// catalogue's English, so the test checks the key chosen and not its wording.
+for (const [name, sources, informed, key] of [
+  ['informed round results', ['submission', 'argument_mapping', 'informed_voting'], 'included', 'report-method-preview'],
+  ['Explore and arguments, informed round to come', ['submission', 'argument_mapping'], 'pending', 'report-method-preview-explore'],
+  ['Explore only while the Arguments phase runs', ['submission'], 'pending', 'report-method-preview-partial'],
+  ['Explore and arguments, no informed round in the process', ['submission', 'argument_mapping'], 'skipped', 'report-method-preview-partial'],
+  ['Explore only, no informed round in the process', ['submission'], 'skipped', 'report-method-preview-partial'],
+] as const) {
+  test(`a preview's method line follows its sources: ${name}`, async () => {
+    const keys = ['report-method-preview', 'report-method-preview-explore', 'report-method-preview-partial'] as const;
+    server.use(http.get(
+      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+      () => HttpResponse.json({...testMessages, ...Object.fromEntries(keys.map((each) => [each, `METHOD ${each}`]))}),
+    ));
+    renderReport({
+      ...exploreOnlyFixture,
+      context: {...exploreOnlyFixture.context, sources: [...sources]},
+      dataAvailability: {...exploreOnlyFixture.dataAvailability, informedRound: informed},
+    });
+
+    const heading = await screen.findByRole('heading', {name: testMessages['output-howto-heading']!}, {timeout: 5000});
+    const shown = [...heading.closest('.output-context')!.textContent!.matchAll(/METHOD ([a-z-]+)/g)].map((match) => match[1]);
+    expect(shown).toEqual([key]);
+  });
+}
+
 test('a report whose process has no informed round leaves its sections out', async () => {
   renderReport({...exploreOnlyFixture, dataAvailability: {...exploreOnlyFixture.dataAvailability, informedRound: 'skipped'}});
 
