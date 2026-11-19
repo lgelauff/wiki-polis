@@ -81,7 +81,8 @@ function ProcessTimeline({report}: {report: Report}) {
         <span className="report-timeline-label">{msg('report-process-opened')}</span>
         <span className="report-timeline-value">{dates.date(report.openedAt)}</span>
       </div>
-      {report.phases.map((phase) => {
+      {/* A bundle newer than the server (served before a backend restart) gets no phases. */}
+      {(report.phases ?? []).map((phase) => {
         // A phase reached before phase changes were recorded has no dates (#599).
         const undated = phase.state === 'ended' && !(phase.startedAt && phase.endedAt);
         const value = phase.state === 'not_started' ? msg('report-process-not-started')

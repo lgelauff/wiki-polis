@@ -104,6 +104,22 @@ def test_advanced_set_archive_reopen_and_close():
     }
 
 
+def test_a_paused_consultation_keeps_its_phase_running():
+    """A pause is reversible and leaves the phase flag on: the timeline does not end the
+    phase. The pause's own audit row is not a phase change."""
+    events = [
+        _advance(0, 'preparation', 'submission'),
+        (_at(3), 'conversation.pause', None, {'paused': True}),
+    ]
+    conversation = _conv(on=['submission'])
+    conversation.paused = True
+    rows = build_phase_timeline(conversation=conversation, route=_route(), events=events)
+
+    assert _by_key(rows)['submission'] == {
+        'key': 'submission', 'state': 'running', 'startedAt': _iso(0), 'endedAt': None,
+    }
+
+
 def test_an_archived_phase_is_not_running():
     rows = build_phase_timeline(
         conversation=_conv(on=['submission'], active=False),

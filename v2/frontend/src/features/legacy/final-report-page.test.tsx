@@ -254,6 +254,15 @@ test('the process timeline has one row per phase the server sends, with its date
   ]);
 });
 
+test('a report from a server that sends no phases still shows its timeline (#599)', async () => {
+  // A new bundle can reach the browser before the backend that sends `phases` restarts.
+  const {phases: _omitted, ...older} = reportFixture;
+  const {container} = renderReport(older as components['schemas']['ResultsReport']);
+
+  expect(await screen.findByText(testMessages['report-process-opened']!, {}, {timeout: 5000})).toBeVisible();
+  expect(container.querySelectorAll('.report-timeline-item')).toHaveLength(2);
+});
+
 function stripTags(html: string) {
   return html.replace(/<[^>]+>/g, '');
 }
