@@ -91,7 +91,7 @@ def test_the_largest_seed_import_still_fits_under_the_limit(admin_client, conver
     assert len(body) < LIMIT // 50  # about 34 kB: the cap is far above it
     server = MagicMock()
     server.get_statements.return_value = ([], [], [])
-    server.bulk_add_seeds.return_value = (MAX_ROWS, [])
+    server.bulk_add_seeds.return_value = (MAX_ROWS, [], 0)
     participant = MagicMock()
     participant.get_settings.return_value = {'strict_moderation': True}
     participant.get_statements.return_value = ([], [], [])
