@@ -4741,6 +4741,7 @@ body[data-demo] {
    lands on a conversation whose space (demo/real) they didn't explicitly choose. */
 .space-warn {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 1rem;
@@ -4749,21 +4750,24 @@ body[data-demo] {
   font-size: 14px;
   line-height: 1.5;
 }
-.space-warn a { font-weight: 600; white-space: nowrap; }
+/* At 320 px the text and the button do not fit side by side: the text takes the row and
+   the button wraps below it, and a long link breaks rather than widening the page. */
+.space-warn > span { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.space-warn a { font-weight: 600; }
 .space-warn--real {
   border: 1px solid #e6c07a;
-  border-left: 3px solid var(--spot);
+  border-inline-start: 3px solid var(--spot);
   background: rgba(245, 158, 11, 0.08);
   color: var(--ink);
 }
 .space-warn--demo {
   border: 1px solid #b5d4f4;
-  border-left: 3px solid var(--blue-dark);
+  border-inline-start: 3px solid var(--blue-dark);
   background: #eaf1fb;
   color: var(--blue-dark);
 }
 .space-warn-ok {
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
   align-self: center;
   padding: 5px 14px;
