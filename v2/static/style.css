@@ -3770,7 +3770,9 @@ a { color: var(--pass); }
   min-height: 40px;
   margin: 0;
   padding: 8px 14px;
-  border: 1px solid rgba(61,109,186,.4);
+  /* Full --pass, not a tint: the edge is what says "button", so it needs 3:1 against the
+     fill and the page (WCAG 1.4.11); the .4 tint it had was about 1.75:1. */
+  border: 1px solid var(--pass);
   border-radius: 8px;
   background: var(--surface);
   color: var(--pass);
