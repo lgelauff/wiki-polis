@@ -390,6 +390,36 @@ avoid.
    not a vote, not a quorum, not binding, and — the one people forget — *not a
    mandate to skip the decision*.
 
+**What is actually being prepared: the draft, not the decision.** The consumer
+of this instrument is primarily an *author* — a drafter, working group or
+WikiProject writing the text — and only secondarily the venue that later decides
+on it. That distinction changes the artefact. What a drafter needs is not a
+ranking of proposals but a **drafting brief**:
+
+1. **The core that can be written as the spine** — statements with broad support
+   across clusters, with their exact wording.
+2. **The fault lines, one per drafting decision** — where the room split, with
+   the strongest argument on each side and the sub-question the text has to
+   answer (carve-out, exception, explicit silence).
+3. **The rejected framings, marked as deliberately excluded** — so the next
+   drafter does not re-litigate what was considered and dropped.
+4. **Wording warnings** — where two formulations of one idea split the room,
+   that is evidence the wording is doing work the idea is not; the brief says so
+   and quotes both.
+5. **A dissent register** — who disagreed, with links to their argument, for the
+   draft's talk page and for the eventual close.
+
+This is also why the non-decision claim is easy to keep here: at the point Proto
+runs, **no text exists yet**, so there is nothing to overturn, no threshold to
+litigate and no quorum to meet. The drafting itself stays on-wiki — edits,
+diffs, attribution, CC BY-SA — and the consultation's only lasting output is
+material the drafter may cite or ignore, in public.
+
+**Lifecycle this implies:** prepare (consultation) → draft (on-wiki authoring,
+brief in hand) → optionally consult again on the draft → decide in the existing
+venue → codify with the ledger. Proto owns the first and last steps and touches
+neither of the middle two.
+
 **What standardisation is for.** Not uniformity of outcome, uniformity of three
 artefacts: the statement schema (one claim, attributable proposer, duplicate
 check before opening), the phase sequence (respond → argue → informed response),
@@ -404,6 +434,9 @@ than decides, "did the community accept the result" is the wrong measure — the
 is no result to accept. The measurable ones are:
 
 - **Use**: did the deciding venue cite the record, and in what terms?
+- **Absorption**: does the next draft answer the fault lines the record
+  surfaced — one drafting decision per line — and can each paragraph be traced
+  to a statement or an argument?
 - **Reasoning**: did the close engage with the fault lines the record surfaced,
   or with the loudest thread (the resysop case gives instances of both)?
 - **Survival**: is the resulting policy text traceable, item by item, to the
