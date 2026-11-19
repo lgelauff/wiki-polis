@@ -169,6 +169,17 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       || active.closest(`.p6-card[data-fs-id="${id}"]`) !== null;
   }
 
+  /** Previous or Next during the pause after a vote. The participant has chosen a card, so
+   *  a pending advance must not take them away from it. The pause before the completion
+   *  panel is left running: the deck is answered, and it gives way whichever card is shown. */
+  function navigate(id: number) {
+    if (!finishing && advanceTimer.current !== null) {
+      globalThis.clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    showCard(id);
+  }
+
   const vote = useMutation({
     mutationFn: ({card, choice}: {card: Card; choice: Choice}) => (
       putInformedVote(workspace.slug, card.featuredStatementId, {choice}, csrfToken)
@@ -210,7 +221,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
         // as an advance so the confirmation badge is seen first.
         setFinishing(true);
         advanceTimer.current = globalThis.setTimeout(() => {
-          const moveFocus = focusStayedOn(from);
+          // The cards go with the deck, so focus on any of them (the answered card, or one
+          // Previous or Next showed during the pause) follows to the completion heading.
+          const active = document.activeElement;
+          const moveFocus = focusStayedOn(from) || active?.closest('.p6-card') != null;
           setFinishing(false);
           globalThis.requestAnimationFrame(() => {
             document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
@@ -275,9 +289,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={prevPosition === undefined} aria-label={msg('conv-nav-prev-aria')} onClick={() => { if (prevPosition !== undefined) showCard(data.cards[prevPosition]!.featuredStatementId); }}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={prevPosition === undefined} aria-label={msg('conv-nav-prev-aria')} onClick={() => { if (prevPosition !== undefined) navigate(data.cards[prevPosition]!.featuredStatementId); }}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
           <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', countOf(index), reachable.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={nextPosition === undefined} aria-label={msg('conv-nav-next-aria')} onClick={() => { if (nextPosition !== undefined) showCard(data.cards[nextPosition]!.featuredStatementId); }}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={nextPosition === undefined} aria-label={msg('conv-nav-next-aria')} onClick={() => { if (nextPosition !== undefined) navigate(data.cards[nextPosition]!.featuredStatementId); }}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
         </div>
       </div>;
     })}

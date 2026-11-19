@@ -328,6 +328,39 @@ for (const [name, cards, next] of [
   });
 }
 
+test('Previous during the pause stays on the chosen card, focus inside the shown card', async () => {
+  server.use(acceptVote(31));
+  renderPanel(workspace(), [answered, unanswered, later]);
+  await screen.findByText(STATEMENT);
+
+  fireEvent.click(cardButton(31, 'Agree'));
+  expect(await screen.findByText('Agreed')).toBeVisible();
+  // Within the 400 ms pause before the advance to card 34.
+  fireEvent.click(cardButton(31, 'Previous statement'));
+  await waitFor(() => expect(shown()).toEqual([32]));
+  // Past the moment the cancelled advance would have fired.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(shown()).toEqual([32]);
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement!.closest('.p6-card')).toBe(panel()!.querySelector('.p6-card[data-fs-id="32"]'));
+});
+
+test('Previous during the pause after the last answer keeps focus when the deck gives way', async () => {
+  server.use(acceptVote(31));
+  renderPanel(workspace(), [answered, unanswered, {...later, voted: true}]);
+  await screen.findByText(STATEMENT);
+
+  fireEvent.click(cardButton(31, 'Agree'));
+  expect(await screen.findByText('Agreed')).toBeVisible();
+  fireEvent.click(cardButton(31, 'Previous statement'));
+  await waitFor(() => expect(shown()).toEqual([32]));
+  await waitFor(() => expect(document.activeElement!.closest('.p6-card')).toBe(panel()!.querySelector('.p6-card[data-fs-id="32"]')));
+  // The deck is answered, so it still gives way to the completion panel, and focus,
+  // which was on a card that went with the deck, follows to its heading.
+  const heading = await screen.findByRole('heading', {name: "You've given your informed opinion."});
+  await waitFor(() => expect(heading).toHaveFocus());
+});
+
 test('a finished deck shows a card again when a refetch makes one votable', async () => {
   // A statement initialised after the participant finished: its card becomes votable.
   let reads = 0;
