@@ -220,8 +220,13 @@ def add_seed_statement(
     record_provenance, audit, audit_approval, max_characters: int,
     upstream_errors: tuple[type[Exception], ...],
 ) -> SeedStatementResult:
-    clean = sanitize(text.strip())
-    if not clean or len(clean) > max_characters:
+    # The limit applies to what the organizer typed, as the counter beside the box counts
+    # it, not to the sanitized text: escaping turns one "&" into five characters, so
+    # measuring after it refused a statement the counter had accepted (#558). The bulk
+    # import below measures the raw text the same way.
+    raw = text.strip()
+    clean = sanitize(raw)
+    if not clean or len(raw) > max_characters:
         raise SeedStatementValidationFailed()
 
     try:

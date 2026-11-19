@@ -384,6 +384,33 @@ def test_single_seed_supports_plain_and_correction_provenance(
     ).count() == 2
 
 
+def test_single_seed_limit_counts_the_typed_text_not_its_escaped_form(
+    admin_client, conversation,
+):
+    """#558: the 280-character limit applies to what the organizer typed, as the
+    client counter counts it. Escaping turns "&" into "&amp;", so measuring after it
+    refused a statement the counter allowed."""
+    server, _participant = _upstream()
+    server.add_seed.return_value = (42, True)
+    accepted = ['&' * 280, '<' * 280, 'Tom & Jerry ' * 23, '\U0001F600' * 280]
+    with patch('app._polis_server_client', return_value=server):
+        responses = [
+            admin_client.post(
+                f'/api/v1/admin/conversations/{conversation.id}/statements',
+                json={'text': text, 'derivedFromId': None},
+            )
+            for text in accepted
+        ]
+        too_long = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': '&' * 281, 'derivedFromId': None},
+        )
+
+    assert [response.status_code for response in responses] == [201] * len(accepted)
+    assert too_long.status_code == 400
+    assert server.add_seed.call_count == len(accepted)
+
+
 def test_single_seed_audits_its_explicit_approval(admin_client, conversation):
     """#240: each organizer seed records its approval decision, ids and enums only."""
     server, _participant = _upstream()
