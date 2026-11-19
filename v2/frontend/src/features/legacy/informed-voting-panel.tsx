@@ -137,18 +137,36 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   // which would hide the navigation too (#319).
   const held = data.cards.findIndex((card) => card.featuredStatementId === currentId);
   const index = held >= 0 ? held : Math.max(0, data.cards.findIndex((card) => card.featuredStatementId === firstOpenId));
+  // Navigation and its counter go over the cards that can be answered, the same cards the
+  // progress counts, so "2 of 3" never disagrees with the progress beside it. A card without
+  // vote controls is skipped, as every other seek skips it. A deck with no such card at all
+  // falls back to every card, so it can still be read.
+  const anyVotable = data.cards.some((card) => card.canVote);
+  const reachable = data.cards.flatMap((card, position) => (!anyVotable || card.canVote ? [position] : []));
+  const prevPosition = reachable.filter((position) => position < index).at(-1);
+  const nextPosition = reachable.find((position) => position > index);
+  const countOf = (position: number) => Math.max(1, reachable.filter((at) => at <= position).length);
 
   useEffect(() => () => {
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
   }, []);
 
-  function showCard(id: number) {
+  function showCard(id: number, moveFocus = true) {
     setCurrentId(id);
     globalThis.requestAnimationFrame(() => {
       const card = document.querySelector<HTMLElement>(`.p6-card[data-fs-id="${id}"]`);
       card?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
-      card?.querySelector<HTMLElement>('[data-focus-anchor]')?.focus({preventScroll: true});
+      if (moveFocus) card?.querySelector<HTMLElement>('[data-focus-anchor]')?.focus({preventScroll: true});
     });
+  }
+
+  /** Whether focus is still where the vote on card `id` left it: on that card, or nowhere
+   *  (the page body). The pause before an advance is long enough for a participant to move
+   *  focus elsewhere, and the advance must not take it back from them. */
+  function focusStayedOn(id: number): boolean {
+    const active = document.activeElement;
+    return !active || active === document.body
+      || active.closest(`.p6-card[data-fs-id="${id}"]`) !== null;
   }
 
   const vote = useMutation({
@@ -186,16 +204,17 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       const wrapped = forward ?? data.cards.find((card) => stillToAnswer(card, nextTerminal));
       if (wrapped) {
         const target = wrapped.featuredStatementId;
-        advanceTimer.current = globalThis.setTimeout(() => showCard(target), 400);
+        advanceTimer.current = globalThis.setTimeout(() => showCard(target, focusStayedOn(from)), 400);
       } else {
         // The last answer: the deck gives way to the completion panel, after the same pause
         // as an advance so the confirmation badge is seen first.
         setFinishing(true);
         advanceTimer.current = globalThis.setTimeout(() => {
+          const moveFocus = focusStayedOn(from);
           setFinishing(false);
           globalThis.requestAnimationFrame(() => {
             document.querySelector<HTMLElement>('.p6-done')?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
-            document.querySelector<HTMLElement>('.p6-done-heading')?.focus({preventScroll: true});
+            if (moveFocus) document.querySelector<HTMLElement>('.p6-done-heading')?.focus({preventScroll: true});
           });
         }, 400);
       }
@@ -221,7 +240,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       return <div className={`p6-card${position !== index ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
         <div tabIndex={-1} data-focus-anchor className="sr-only" />
         <div className="p6-card-header">
-          <span className="stmt-meta-left"><span className="stmt-dot" />{msg('conv-p6-label')} · {msg('conv-of', position + 1, data.cards.length)}</span>
+          <span className="stmt-meta-left"><span className="stmt-dot" />{msg('conv-p6-label')} · {msg('conv-of', countOf(position), reachable.length)}</span>
           {/* Error branch first. `selected` survives a failed re-vote, so testing it
               first makes the error unreachable once a card has been voted — and a
               rejected re-vote (a 409 on a paused round, which is the state the repair
@@ -256,9 +275,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(data.cards[index - 1]!.featuredStatementId)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
-          <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', index + 1, data.cards.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={index === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(data.cards[index + 1]!.featuredStatementId)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={prevPosition === undefined} aria-label={msg('conv-nav-prev-aria')} onClick={() => { if (prevPosition !== undefined) showCard(data.cards[prevPosition]!.featuredStatementId); }}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+          <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', countOf(index), reachable.length)}</span>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={nextPosition === undefined} aria-label={msg('conv-nav-next-aria')} onClick={() => { if (nextPosition !== undefined) showCard(data.cards[nextPosition]!.featuredStatementId); }}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
         </div>
       </div>;
     })}

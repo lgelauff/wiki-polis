@@ -291,6 +291,43 @@ test('the last answer gives way to the completion panel, after the confirmation 
   await waitFor(() => expect(heading).toHaveFocus());
 });
 
+test('the card counter counts the cards that can be answered, as the progress does', async () => {
+  renderPanel(workspace(), [unanswered, unvotable, later]);
+  await screen.findByText(STATEMENT);
+
+  const counter = () => panel()!.querySelector('.p6-card:not(.p6-card--hidden) .p6-nav-counter')!;
+  expect(counter()).toHaveTextContent('1 of 2');
+  // Next steps over the card without vote controls, as the advance after a vote does.
+  fireEvent.click(cardButton(31, 'Next statement'));
+  await waitFor(() => expect(shown()).toEqual([34]));
+  expect(counter()).toHaveTextContent('2 of 2');
+  expect(cardButton(34, 'Next statement')).toBeDisabled();
+  fireEvent.click(cardButton(34, 'Previous statement'));
+  await waitFor(() => expect(shown()).toEqual([31]));
+});
+
+for (const [name, cards, next] of [
+  ['an advance', [unanswered, later], 34],
+  ['the completion panel', [unanswered, answered], null],
+] as const) {
+  test(`${name} after a vote leaves focus alone once the participant has moved it`, async () => {
+    server.use(acceptVote(31));
+    renderPanel(workspace(), [...cards]);
+    await screen.findByText(STATEMENT);
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+
+    fireEvent.click(cardButton(31, 'Agree'));
+    expect(await screen.findByText('Agreed')).toBeVisible();
+    elsewhere.focus();
+    if (next === null) await screen.findByRole('heading', {name: "You've given your informed opinion."});
+    else await waitFor(() => expect(shown()).toEqual([next]));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(elsewhere).toHaveFocus();
+    elsewhere.remove();
+  });
+}
+
 test('a finished deck shows a card again when a refetch makes one votable', async () => {
   // A statement initialised after the participant finished: its card becomes votable.
   let reads = 0;
