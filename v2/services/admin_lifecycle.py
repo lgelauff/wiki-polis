@@ -305,8 +305,10 @@ def set_phase_schedule(
             session.commit()
         return changed
     # Nothing left to schedule is the more fundamental refusal: a stale page submits a
-    # time that has also passed, and "choose a future time" would not help.
-    if not schedulable or transition is None:
+    # time that has also passed, and "choose a future time" would not help. An archived
+    # consultation has no schedules (owner, 2026-11-19): setting or freezing one is refused,
+    # and only the cancel above stays open (a no-op there).
+    if not conversation.active or not schedulable or transition is None:
         raise ScheduleUnavailable()
     if scheduled_at <= now:
         raise ScheduleInPast()
@@ -473,21 +475,32 @@ def set_conversation_archived(
 
     The results settings stay as they were, so participants keep the results they had
     (owner, 2026-10-17 and 2026-11-07, #258).
+
+    An archived consultation has no schedules (owner, 2026-11-19): archiving cancels a
+    pending scheduled transition in the same commit, audited as a cancel. Reopening clears
+    one too, so a schedule left over from before that rule can never fire after a reopen.
     """
     if conversation.closed_at is not None:
         raise ConversationClosed()
     currently_archived = not bool(conversation.active)
     changed = currently_archived != archived
     if changed:
+        had_schedule = conversation.scheduled_transition_at is not None
+        cancelled_target = conversation.scheduled_transition_target
         conversation.active = not archived
         if archived:
             conversation.paused = False
-            clear_schedule(conversation)
+        clear_schedule(conversation)
         session.commit()
         audit(
             'conversation.archive' if archived else 'conversation.reopen',
             conv_id=conversation.id,
         )
+        if had_schedule:
+            audit(
+                'phase.schedule.cancel', conv_id=conversation.id,
+                target_type='phase', target_id=cancelled_target,
+            )
     else:
         session.commit()
     return changed

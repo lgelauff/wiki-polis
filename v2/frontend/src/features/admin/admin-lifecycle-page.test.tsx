@@ -404,8 +404,54 @@ test.each([
   within(container.querySelector<HTMLElement>('.schedule-card')!).getByRole('button', {name: testMessages['common-cancel']!}).click();
   await screen.findByText(testMessages['adminconv-no-schedule']!);
   expect(cancelled).toBe(true);
-  // Shown on the page, and also read out through the console's announcer.
-  expect(screen.queryAllByText(testMessages['adminconv-schedule-nothing-to-cancel']!).length > 0).toBe(noted);
+  const note = testMessages['adminconv-schedule-nothing-to-cancel']!;
+  // Shown on the page...
+  const visible = [...container.querySelectorAll('.mode-guided-part p')].some((element) => element.textContent === note);
+  expect(visible).toBe(noted);
+  // ...and, separately, read out through the console's polite live region.
+  const polite = container.querySelector('.admin-shell__announcer[aria-live="polite"]');
+  expect(polite).not.toBeNull();
+  if (noted) await waitFor(() => expect(polite).toHaveTextContent(note));
+  else expect(polite!.textContent).not.toContain(note);
+});
+
+test('a double click on Cancel sends one cancel and adds no nothing-to-cancel note', async () => {
+  const scheduled: Lifecycle = {...lifecycle, schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false}};
+  const cleared: Lifecycle = {...lifecycle, schedule: {...scheduled.schedule, scheduledAt: null}};
+  let puts = 0;
+  server.use(http.put(SCHEDULE_URL, async () => {
+    puts += 1;
+    // The first cancel clears the schedule; a second one would find nothing left.
+    const changed = puts === 1;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return HttpResponse.json({data: {changed, lifecycle: cleared}});
+  }));
+  serve(scheduled);
+  const {container} = renderConsole();
+
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  const cancel = within(container.querySelector<HTMLElement>('.schedule-card')!).getByRole('button', {name: testMessages['common-cancel']!});
+  cancel.click();
+  await waitFor(() => expect(cancel).toBeDisabled());
+  cancel.click();
+  await screen.findByText(testMessages['adminconv-no-schedule']!);
+  expect(puts).toBe(1);
+  expect(screen.queryAllByText(testMessages['adminconv-schedule-nothing-to-cancel']!)).toHaveLength(0);
+});
+
+test('a refused schedule write re-reads the lifecycle, so the card does not stay stale', async () => {
+  const scheduled: Lifecycle = {...lifecycle, schedule: {canSchedule: true, scheduledAt: '2026-11-01T12:00:00Z', targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false}};
+  let reads = 0;
+  server.use(http.put(SCHEDULE_URL, () => HttpResponse.json(
+    {error: {code: 'schedule_unavailable', message: 'Only an active-to-passive next phase can be scheduled.'}}, {status: 409},
+  )));
+  serve(scheduled, () => {reads += 1;});
+  const {container} = renderConsole();
+
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  const before = reads;
+  within(container.querySelector<HTMLElement>('.schedule-card')!).getByRole('button', {name: testMessages['adminconv-freeze']!}).click();
+  await waitFor(() => expect(reads).toBeGreaterThan(before));
 });
 
 test('a site admin can preview the report from the Publish report row while it is unpublished', async () => {
