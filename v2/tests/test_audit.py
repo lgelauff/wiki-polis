@@ -205,6 +205,27 @@ def test_record_audit_survives_a_failed_actor_lookup(app, monkeypatch):
         assert row.detail == {'actor_kind': 'env_admin'}
 
 
+def test_a_failed_actor_lookup_keeps_the_callers_pending_change(app, monkeypatch):
+    """#309: the lookup runs in a savepoint. Rolling back the whole session on its
+    failure threw away a change the caller had made but not yet committed."""
+    import app as app_module
+
+    def _boom():
+        Participant.query.count()  # the lookup has touched the database before failing
+        raise RuntimeError('db down')
+    monkeypatch.setattr(app_module, '_current_participant', _boom)
+    with app.test_request_context('/'):
+        conversation = Conversation(slug='audit-pending', polis_id='auditpend1', title='Before')
+        db.session.add(conversation)
+        db.session.commit()
+        conversation.title = 'After'  # pending, not committed
+        app_module.record_audit('phase.set', conv_id=conversation.id)
+
+        db.session.expire_all()
+        assert db.session.get(Conversation, conversation.id).title == 'After'
+        assert AuditEvent.query.filter_by(operation='phase.set').count() == 1
+
+
 def test_record_audit_outside_a_request_has_no_actor(app):
     from app import record_audit
     with app.app_context():

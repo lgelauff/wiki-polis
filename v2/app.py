@@ -5905,11 +5905,13 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
     if participant is None and has_request_context():
         # An ADMIN_USERS admin passes _is_global_admin without g.participant ever being
         # loaded (#309), so resolve it here rather than record a NULL actor. A failed
-        # lookup must not break the caller, whose action has already committed.
+        # lookup must not break the caller. It runs in a savepoint, so a failure rolls back
+        # the lookup alone, not changes the caller has not committed yet.
         try:
-            participant = _current_participant()
+            with db.session.begin_nested():
+                participant = _current_participant()
         except Exception:
-            db.session.rollback()
+            participant = None
             current_app.logger.exception('audit actor lookup failed: %s', operation)
     actor = getattr(participant, 'id', None)
     if actor is None and has_request_context() and session.get('username'):
