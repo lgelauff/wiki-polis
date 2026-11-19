@@ -205,6 +205,12 @@ statement is hidden, approved or marked meta, so Polis math never sees those cha
 (upstream `f79f992be`). It starts from the image by digest, not `:latest`, and the build
 fails if the line does not match.
 
+These steps run on the Cloud VPS, not on Toolforge: Polis lives there, in two stacks
+side by side. "Staging" is the stack `wiki-polis-dev` talks to (project
+`wiki-polis-staging`, ports 8010/8011); "production" is the one `wiki-polis` talks to
+(project `particiapp-docker`, 8000/8001). See `guide_runbook.md` → *Staging environment*.
+The app itself is deployed on Toolforge as usual, after these steps.
+
 Do staging first, check it, then production. Each stack keeps its own image line, so
 changing one never moves the other. On each environment, switch the image and run the
 one-time stamp (steps 1–4) **before** deploying the app with meta statements (#593):
