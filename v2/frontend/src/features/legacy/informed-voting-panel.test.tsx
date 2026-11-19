@@ -313,6 +313,37 @@ test('a finished deck shows a card again when a refetch makes one votable', asyn
   await client.refetchQueries();
   await waitFor(() => expect(panel()!.querySelector('.p6-card[data-fs-id="33"]')).not.toBeNull());
   expect(screen.queryByRole('heading', {name: "You've given your informed opinion."})).toBeNull();
+  // The card shown is the one that reopened the deck, not the one answered earlier.
+  expect(shown()).toEqual([33]);
+});
+
+test('a deck that loses a card before the current one stays on the current card', async () => {
+  // On the second of three open cards; a refetch drops the first (a statement unfeatured
+  // mid-session). The participant stays where they were instead of skipping ahead.
+  let reads = 0;
+  const client = createQueryClient();
+  const third: Card = {...later, featuredStatementId: 35, statement: 'Budgets should be reviewed yearly.'};
+  server.use(
+    http.get(url('/api/v1/conversations/community-strategy/workspace'), () => HttpResponse.json({data: workspace()})),
+    http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => {
+      reads += 1;
+      return deckResponse(reads === 1 ? [unanswered, later, third] : [later, third]);
+    }),
+  );
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/informed-voting']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByText(STATEMENT);
+  fireEvent.click(cardButton(31, 'Next statement'));
+  await waitFor(() => expect(shown()).toEqual([34]));
+
+  await client.invalidateQueries({queryKey: ['informed-voting']});
+  await client.refetchQueries();
+  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+  await waitFor(() => expect(panel()!.querySelector('.p6-card[data-fs-id="31"]')).toBeNull());
+  expect(shown()).toEqual([34]);
 });
 
 test('a deck that shrinks under the current card still shows a card and its navigation', async () => {

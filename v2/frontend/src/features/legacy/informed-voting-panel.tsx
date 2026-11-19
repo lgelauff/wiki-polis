@@ -92,11 +92,13 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   const msg = useMessage();
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const queryClient = useQueryClient();
-  // Open on the first card still to answer, so a participant who comes back mid-deck is
-  // not put back on a card they already answered (#317). With every card answered this
-  // falls back to the first; the completion panel is what shows then.
-  const [currentIndex, setCurrentIndex] = useState(
-    () => Math.max(0, data.cards.findIndex((card) => card.canVote && !card.voted)),
+  // The current card is held by its id, not its position: a refetch can add, remove or
+  // reorder cards, and a position then points at a different card (#319). Open on the
+  // first card still to answer, so a participant who comes back mid-deck is not put back
+  // on a card they already answered (#317). With every card answered this is null; the
+  // completion panel is what shows then.
+  const [currentId, setCurrentId] = useState<number | null>(
+    () => data.cards.find((card) => card.canVote && !card.voted)?.featuredStatementId ?? null,
   );
   const [votes, setVotes] = useState<Record<number, Choice>>({});
   // Seed from the server, not from an empty set. The API already reports which cards
@@ -119,18 +121,31 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   // deck gives way to the completion panel.
   const [finishing, setFinishing] = useState(false);
   const advanceTimer = useRef<number | null>(null);
-  // Clamped on read: a refetch can return a shorter deck (a statement unfeatured
-  // mid-session), and an index past the end hides every card, navigation included (#319).
-  const index = Math.min(currentIndex, data.cards.length - 1);
+  const firstOpenId = data.cards.find((card) => (
+    card.canVote && !card.voted && !terminalIds.has(card.featuredStatementId)
+  ))?.featuredStatementId ?? null;
+  // A finished deck that a refetch reopens (a statement initialised mid-round) goes to the
+  // card that reopened it, not to whichever card was current when it finished (#319).
+  // Adjusted during render, as React advises for state derived from a change in props.
+  const [wasDone, setWasDone] = useState(done);
+  if (wasDone !== done) {
+    setWasDone(done);
+    if (!done && firstOpenId !== null) setCurrentId(firstOpenId);
+  }
+  // A current card the deck no longer holds (a statement unfeatured mid-session) gives way
+  // to the first card still to answer, then to the first card: never to no card at all,
+  // which would hide the navigation too (#319).
+  const held = data.cards.findIndex((card) => card.featuredStatementId === currentId);
+  const index = held >= 0 ? held : Math.max(0, data.cards.findIndex((card) => card.featuredStatementId === firstOpenId));
 
   useEffect(() => () => {
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
   }, []);
 
-  function showCard(index: number) {
-    setCurrentIndex(index);
+  function showCard(id: number) {
+    setCurrentId(id);
     globalThis.requestAnimationFrame(() => {
-      const card = document.querySelector<HTMLElement>(`.p6-card[data-fs-id="${data.cards[index]?.featuredStatementId}"]`);
+      const card = document.querySelector<HTMLElement>(`.p6-card[data-fs-id="${id}"]`);
       card?.scrollIntoView({behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
       card?.querySelector<HTMLElement>('[data-focus-anchor]')?.focus({preventScroll: true});
     });
@@ -165,10 +180,13 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
         }};
       });
       void queryClient.invalidateQueries({queryKey});
-      const forward = data.cards.findIndex((card, position) => position > index && stillToAnswer(card, nextTerminal));
-      const wrapped = forward < 0 ? data.cards.findIndex((card) => stillToAnswer(card, nextTerminal)) : forward;
-      if (wrapped >= 0) {
-        advanceTimer.current = globalThis.setTimeout(() => showCard(wrapped), 400);
+      const from = receipt.featuredStatementId;
+      const at = data.cards.findIndex((card) => card.featuredStatementId === from);
+      const forward = data.cards.find((card, position) => position > at && stillToAnswer(card, nextTerminal));
+      const wrapped = forward ?? data.cards.find((card) => stillToAnswer(card, nextTerminal));
+      if (wrapped) {
+        const target = wrapped.featuredStatementId;
+        advanceTimer.current = globalThis.setTimeout(() => showCard(target), 400);
       } else {
         // The last answer: the deck gives way to the completion panel, after the same pause
         // as an advance so the confirmation badge is seen first.
@@ -238,9 +256,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(index - 1)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(data.cards[index - 1]!.featuredStatementId)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
           <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', index + 1, data.cards.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={index === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(index + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={index === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(data.cards[index + 1]!.featuredStatementId)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
         </div>
       </div>;
     })}
