@@ -6056,6 +6056,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['SESSION_COOKIE_HTTPONLY']    = True
     app.config['SESSION_COOKIE_SAMESITE']    = 'Lax'
     app.config['SESSION_COOKIE_SECURE']      = not app.debug
+    # Werkzeug 3.1.9 no longer caps form bodies; 2 MB is far above any real request.
+    app.config['MAX_CONTENT_LENGTH']         = 2 * 1024 * 1024
 
     app.config['OAUTH_CLIENT_ID']     = _read_secret('oauth-client-id')
     app.config['OAUTH_CLIENT_SECRET'] = _read_secret('oauth-client-secret')
