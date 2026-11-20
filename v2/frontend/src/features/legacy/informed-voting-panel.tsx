@@ -121,6 +121,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   // deck gives way to the completion panel.
   const [finishing, setFinishing] = useState(false);
   const advanceTimer = useRef<number | null>(null);
+  // The card on screen, readable from the vote's response handler, which runs after any
+  // render. A participant can press Previous or Next before the server answers; the
+  // response must then not take them away from the card they chose.
+  const shownId = useRef<number | null>(null);
   const firstOpenId = data.cards.find((card) => (
     card.canVote && !card.voted && !terminalIds.has(card.featuredStatementId)
   ))?.featuredStatementId ?? null;
@@ -147,11 +151,15 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
   const nextPosition = reachable.find((position) => position > index);
   const countOf = (position: number) => Math.max(1, reachable.filter((at) => at <= position).length);
 
+  const shownNow = data.cards[index]?.featuredStatementId ?? null;
+  useEffect(() => { shownId.current = shownNow; }, [shownNow]);
+
   useEffect(() => () => {
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
   }, []);
 
   function showCard(id: number, moveFocus = true) {
+    shownId.current = id;
     setCurrentId(id);
     globalThis.requestAnimationFrame(() => {
       const card = document.querySelector<HTMLElement>(`.p6-card[data-fs-id="${id}"]`);
@@ -213,7 +221,12 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
       const at = data.cards.findIndex((card) => card.featuredStatementId === from);
       const forward = data.cards.find((card, position) => position > at && stillToAnswer(card, nextTerminal));
       const wrapped = forward ?? data.cards.find((card) => stillToAnswer(card, nextTerminal));
-      if (wrapped) {
+      // Moved to another card before the server answered: they chose that card, as Previous
+      // or Next during the pause does, so there is no advance to make.
+      const movedAway = shownId.current !== from;
+      if (wrapped && movedAway) {
+        advanceTimer.current = null;
+      } else if (wrapped) {
         const target = wrapped.featuredStatementId;
         advanceTimer.current = globalThis.setTimeout(() => showCard(target, focusStayedOn(from)), 400);
       } else {
