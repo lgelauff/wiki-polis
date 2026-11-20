@@ -137,15 +137,17 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
   const canToggle = statement.seed && (statement.meta || !statement.featured);
   const toggleLabel = statement.meta ? msg('stmts-meta-unmark') : msg('stmts-meta-mark');
   // One square [m] toggle (#620): black when the statement is meta, grey and struck through
-  // when it is not, so the state does not rest on colour alone. Its name says the action.
+  // when it is not, so the state does not rest on colour alone. A toggle keeps one name and
+  // says its state with aria-pressed (owner, 2026-11-20); the hover text says what a press
+  // does. No aria-expanded: when people have responded a press opens the warning below,
+  // which announces itself (role=alert), and the toggle is still a toggle.
   const toggle = canToggle ? (
     <button
       type="button"
       className="admin-row__glyph admin-row__meta-toggle"
       title={toggleLabel}
-      aria-label={toggleLabel}
+      aria-label={msg('meta-statement-label')}
       aria-pressed={statement.meta}
-      aria-expanded={statement.hasResponses ? confirming : undefined}
       disabled={meta.isPending}
       onClick={() => {
         if (statement.hasResponses) setConfirming(true);
@@ -166,6 +168,10 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         )}
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
+        {/* A meta statement without the toggle (one made meta outside Proto) still says so. */}
+        {statement.meta && !canToggle && (
+          <span className="admin-row__suffix">{` · ${msg('meta-statement-label')}`}</span>
+        )}
         {statement.provenance && (
           <StatementProvenance provenance={statement.provenance} linked={sourceShown} />
         )}
