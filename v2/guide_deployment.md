@@ -263,6 +263,22 @@ For production, the same steps with `particiapp-docker_polis-server_1`,
 `~/particiapp-docker/docker-compose.yaml`, project `particiapp-docker` and
 `particiapp-docker_postgres_1`. Then record it with `ops/capture_stack_overview.sh`.
 
+**On production, pause participation around it with [maintenance mode](#maintenance-mode),
+not `toolforge webservice stop`.** The site stays up, participants see a page that says
+Proto is being updated and nothing is lost, and nothing arrives while the backup is taken
+and Polis restarts. In order:
+
+1. On the Toolforge bastion, as the `wiki-polis` tool: turn maintenance mode on and check
+   that it took (see [Maintenance mode](#maintenance-mode) for the commands).
+2. Take the backups by hand: the production Polis Postgres and ToolsDB lines under
+   [Backups](#backups), run once now rather than waiting for cron.
+3. Steps 1–5 above, on the production stack.
+4. Deploy the app on Toolforge as usual (`deploy.sh`, with `--migrate` if the release has
+   migrations). Maintenance mode stays on through it; the webservice restart at the end
+   is the only moment the site itself is down, for a few seconds.
+5. Check the site as a site admin (the maintenance banner shows on every page), then turn
+   maintenance mode off. The next `phase-scheduler` run fires whatever came due.
+
 To undo: put the `image:` line back to the image the patch started from,
 `registry.gitlab.com/particiapp/polis/server@sha256:adf9b8b45e134ad4da3596cbdf1748cb3f9f0cbf88b6d77bef0fbee43c16c8e2`
 (not `:latest`, which could move), and run step 3's `up -d` again. The stamps already made
@@ -585,6 +601,63 @@ guessed.
 > It is not run automatically from `deploy.sh` on purpose: `deploy.sh` operates inside a
 > checkout it also pulls into, and writing tracked files there would collide with the next
 > deploy.
+
+## Maintenance mode
+
+One switch pauses participation without stopping the site (#619): a flag file in the
+tool's home. The app checks it on every request, so turning it on or off needs no deploy
+and no restart.
+
+While it is on:
+
+- **Every write is refused, for everyone, site admins included**: votes, statements,
+  arguments, flags, joining, identity reveal and every admin command answer `503` with
+  error code `maintenance` and `Retry-After: 300`. The SPA shows "Proto is being updated"
+  in place of its own error. Nothing changes in the database, so a backup taken now is
+  consistent.
+- **Participants** who open a consultation (`/c/<slug>`, the voucher page, an invitation
+  link, the reveal page) get the branded 503 page: Proto is being updated, nothing they
+  entered is lost, try again in a few minutes.
+- **Reading stays possible** where it needs no Polis call: the front page, the
+  consultation lists, about pages, the moderation log, the published report and
+  outputs, the help pages. Logging in and out still works.
+- **Site admins** can still open every page, and see a banner that maintenance mode is
+  on, so it is not left on by mistake.
+- **The `phase-scheduler` job** skips its run and logs
+  `Skipping: maintenance mode is on.` The first run after the switch is off fires
+  whatever came due.
+
+Not covered: the few seconds of the webservice restart at the end of a deploy.
+
+On the Toolforge bastion, as the tool (`become wiki-polis`, or `become wiki-polis-dev`
+with that tool's path for staging). Turn it on:
+
+```bash
+touch /data/project/wiki-polis/maintenance.flag
+```
+
+Check that it took (a consultation page must answer `503`; use any real slug):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://wiki-polis.toolforge.org/c/<slug>
+```
+
+Turn it off:
+
+```bash
+rm -f /data/project/wiki-polis/maintenance.flag
+```
+
+Check whether it is on:
+
+```bash
+ls -l /data/project/wiki-polis/maintenance.flag
+```
+
+The app reads `maintenance.flag` in the tool's home (`$TOOL_DATA_DIR`, or the home
+directory where that is not set); the webservice, the scheduled job and the bastion all
+see the same file. The `MAINTENANCE_FLAG_PATH` envvar moves it, which is not normally
+needed.
 
 ## Ongoing deploys
 

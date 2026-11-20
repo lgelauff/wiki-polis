@@ -50,9 +50,10 @@ from http_pool import session as polis_http
 from seed_csv import (MAX_ROWS, MAX_TEXT_CHARS, strip_formula_prefixes)
 from logging_setup import configure_logging
 import i18n
-from error_pages import render_error_page
+import maintenance
+from error_pages import maintenance_message, render_error_page
 from api.v1 import (
-    create_api_v1_blueprint, http_exception_json, is_api_request,
+    create_api_v1_blueprint, error_response, http_exception_json, is_api_request,
     register_api_error_handlers,
 )
 from services.identity import (
@@ -6355,6 +6356,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['REMINDERS_EMAIL_DAILY_CAP'] = email_cap_from(
         os.environ.get('REMINDERS_EMAIL_DAILY_CAP', ''))
 
+    # Maintenance mode (#619): the flag file whose presence pauses participation.
+    app.config['MAINTENANCE_FLAG_PATH'] = maintenance.configured_flag_path()
+
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
     if test_config is not None:
@@ -6570,6 +6574,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():
         """Fire due scheduled active-to-passive phase transitions."""
+        # Maintenance mode (#619): a phase change must not fire while Polis is restarted or
+        # a backup is taken. The next run after the switch is off fires whatever is due.
+        if maintenance.is_on():
+            msg = 'Skipping: maintenance mode is on.'
+            app.logger.info('phase scheduler: %s', msg)
+            click.echo(msg)
+            return
         # A deploy checks out the new code minutes before it runs `flask db upgrade` (#456).
         # A run in that gap would query columns the database does not have yet; the next
         # run after the migration fires whatever is due, so skip without failing the job.
@@ -6773,6 +6784,23 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.dir = i18n.text_direction(locale)
         g._persist_locale = persist
 
+
+    @app.before_request
+    def _pause_for_maintenance():
+        # Registered after locale negotiation, so the refusal is in the reader's language,
+        # and before the SPA shell, so a paused participation page never loads the app.
+        if not maintenance.is_on():
+            return None
+        if not maintenance.blocks(request.method, request.path,
+                                  site_admin=_is_global_admin()):
+            return None
+        headers = {'Retry-After': str(maintenance.RETRY_AFTER_SECONDS)}
+        if is_api_request():
+            body, status = error_response(
+                'maintenance', maintenance_message(), 503)
+            body.headers.update(headers)
+            return body, status
+        return render_error_page(503), 503, headers
 
     @app.before_request
     def _serve_canonical_spa_request():

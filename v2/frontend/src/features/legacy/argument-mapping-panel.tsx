@@ -13,6 +13,7 @@ import {LegacyContentFlag} from './legacy-content-flag';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {richHtml} from '../../i18n/rich-html';
+import {maintenanceCopy} from '../../maintenance';
 
 type Mapping = components['schemas']['ArgumentMapping'];
 type Featured = components['schemas']['ArgumentFeaturedStatement'];
@@ -124,7 +125,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
         {msg('conv-arg-skipped')}
         <button type="button" className="at-link contribute-changemind" onClick={compose}>{msg('conv-arg-changemind')}</button>
       </div>
-      {(submit.error || skip.error) && <p className="muted" role="alert">{msg('conv-arg-save-error')}</p>}
+      {(submit.error || skip.error) && <p className="muted" role="alert">{maintenanceCopy(msg, submit.error ?? skip.error) ?? msg('conv-arg-save-error')}</p>}
     </div>
   );
 }

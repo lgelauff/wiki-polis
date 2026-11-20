@@ -14,6 +14,7 @@ from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
 import i18n
+import maintenance
 from error_pages import render_error_page
 from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
@@ -193,6 +194,9 @@ def create_api_v1_blueprint(
                 'capabilities': {
                     'administerSite': bool(resolve_global_admin(participant)),
                 },
+                # Maintenance mode (#619): participation is paused. Site admins see a banner;
+                # everyone else sees the notice where a page or a write is refused.
+                'maintenance': maintenance.is_on(),
                 'csrfToken': generate_csrf(),
                 'developerLogins': resolve_developer_logins(),
                 'gitVersion': resolve_git_version(),

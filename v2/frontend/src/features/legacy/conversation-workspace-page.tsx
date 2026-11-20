@@ -25,6 +25,7 @@ import {phaseLabel, statementErrorCopy, tabLabel, workspaceErrorCopy} from '../.
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {LoginPrompt} from './login-prompt';
+import {isMaintenance, maintenanceCopy} from '../../maintenance';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
@@ -433,7 +434,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
             {data.newStatement.unlocked && <p className="all-done-sub">{msg('conv-alldone-sub')}</p>}
           </div>
         )}
-        {vote.error && <div id="conv-error" role="alert"><p className="muted">{msg('conv-err-submit-vote')}</p></div>}
+        {vote.error && <div id="conv-error" role="alert"><p className="muted">{maintenanceCopy(msg, vote.error) ?? msg('conv-err-submit-vote')}</p></div>}
         {nextFailed && <div id="conv-next-error" role="alert"><p className="muted">{msg('conv-unavailable-body')}</p></div>}
       </div>
     </div>
@@ -533,7 +534,7 @@ export function ConversationWorkspacePage() {
   const restricted = inviteOnlyDetails(workspace.error);
   if (restricted) return <InviteOnlyPage details={restricted} />;
   if (workspace.error) {
-    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{workspace.error instanceof ApiContractError && workspace.error.code === 'not_found' ? msg('errorpage-404-title') : msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
+    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{workspace.error instanceof ApiContractError && workspace.error.code === 'not_found' ? msg('errorpage-404-title') : isMaintenance(workspace.error) ? msg('errorpage-503-title') : msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
   }
   const data = workspace.data;
   if (data.viewer.state === 'join_required') return <NavigationRedirect href={data.links.join} />;

@@ -8,6 +8,7 @@ import {InternalLink} from '../../internal-link';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {roleLabel} from '../../i18n/server-labels';
+import {MaintenanceBanner} from '../../maintenance';
 import {AnnounceProvider, AnnouncerRegions, useAnnouncer, type Announcer} from './admin-announcer';
 import './console.css';
 
@@ -266,6 +267,7 @@ export function AdminShell({announcer, children, data, gatingType, home, section
           </div>
         </div>
       </header>
+      <MaintenanceBanner session={session} msg={msg} />
 
       <div className="admin-shell__body">
         <nav className="admin-shell__side" aria-label={msg('admin-shell-nav-aria')}>
