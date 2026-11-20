@@ -345,6 +345,32 @@ test('Previous during the pause stays on the chosen card, focus inside the shown
   expect(document.activeElement!.closest('.p6-card')).toBe(panel()!.querySelector('.p6-card[data-fs-id="32"]'));
 });
 
+test('Previous before the vote is confirmed stays on the chosen card when the confirmation arrives', async () => {
+  // The server answers only when the test lets it, so Previous lands before the response.
+  let respond!: () => void;
+  const answeredByServer = new Promise<void>((resolve) => { respond = resolve; });
+  let received = false;
+  server.use(http.put(url('/api/v1/conversations/community-strategy/featured-statements/31/informed-vote'), async () => {
+    received = true;
+    await answeredByServer;
+    return HttpResponse.json({data: {featuredStatementId: 31, choice: 'agree', links: {informedVoting: '/api/v1/conversations/community-strategy/informed-voting'}}});
+  }));
+  renderPanel(workspace(), [answered, unanswered, later]);
+  await screen.findByText(STATEMENT);
+
+  fireEvent.click(cardButton(31, 'Agree'));
+  await waitFor(() => expect(received).toBe(true));
+  fireEvent.click(cardButton(31, 'Previous statement'));
+  await waitFor(() => expect(shown()).toEqual([32]));
+  respond();
+  // The vote is still recorded on its card...
+  await waitFor(() => expect(panel()!.querySelector('.p6-card[data-fs-id="31"]')).toHaveClass('p6-card--voted'));
+  // ...but no advance follows: past the moment it would have fired, card 32 is still shown.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(shown()).toEqual([32]);
+  expect(document.activeElement!.closest('.p6-card')).toBe(panel()!.querySelector('.p6-card[data-fs-id="32"]'));
+});
+
 test('Previous during the pause after the last answer keeps focus when the deck gives way', async () => {
   server.use(acceptVote(31));
   renderPanel(workspace(), [answered, unanswered, {...later, voted: true}]);
