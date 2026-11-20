@@ -170,6 +170,26 @@ export async function postReminderTestSend(
   }))).data;
 }
 
+export const staffReminderQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-staff-reminder', conversationId],
+  queryFn: async () => (
+    await requireApiData(api.GET('/admin/conversations/{conversationId}/reminder-dry-run', {
+      params: {path: {conversationId}},
+    }))
+  ).data,
+  staleTime: 10_000,
+});
+
+export async function postStaffReminderDryRun(
+  conversationId: number,
+  body: components['schemas']['StaffReminderDryRunRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/conversations/{conversationId}/reminder-dry-runs', {
+    params: {path: {conversationId}}, body, headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const adminLifecycleQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-lifecycle', conversationId],
   queryFn: async () => (

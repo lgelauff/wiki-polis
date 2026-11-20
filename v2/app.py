@@ -15,6 +15,7 @@ import re
 import secrets
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import NoReturn
@@ -158,6 +159,7 @@ from services.reminder_test import (CHANNELS as REMINDER_CHANNELS, LOGIN_PREFIX,
 from services.reminder_batch import (BatchBusy, DryRunSender, ReminderNotFound,
                                      UnknownReminderWiki, email_cap_from)
 from services.reminders import can_send_reminders
+from services.reminder_staff_run import run_staff_dry_run, staff_state as staff_reminder_state
 from services.reminder_batch import run_batch as run_reminder_batch
 from services.wiki_bot import WIKI_HOSTS
 
@@ -4240,6 +4242,47 @@ def _send_reminder_test_api_payload(body: dict) -> dict:
     }
 
 
+def _current_stage_key(conv) -> str:
+    return _phase_sequence_for(conv)[_current_stage_index(conv)]['key']
+
+
+def _staff_reminder_actor() -> 'Participant':
+    """The super admin behind a staff reminder run (#576); anyone else is refused."""
+    participant = _current_participant()
+    if not can_send_reminders(participant, None, admin_usernames=ADMIN_USERS):
+        _refuse_admin()
+    return participant
+
+
+def _staff_reminder_state_api_payload(conv_id: int) -> dict:
+    _staff_reminder_actor()
+    conv = Conversation.query.get_or_404(conv_id)
+    return staff_reminder_state(conv, admin_usernames=ADMIN_USERS,
+                                phase_key=_current_stage_key(conv),
+                                active_phases=_active_phases)
+
+
+def _run_staff_reminder_api_payload(conv_id: int, body: dict) -> dict:
+    """Dry run of one reminder to this consultation's staff only (#576, step 1)."""
+    actor = _staff_reminder_actor()
+    conv = Conversation.query.get_or_404(conv_id)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    result = run_staff_dry_run(
+        conv, body['reminderType'],
+        phase_key=_current_stage_key(conv),
+        now=now, triggered_by=actor, admin_usernames=ADMIN_USERS,
+        active_phases=_active_phases,
+        email_cap=current_app.config['REMINDERS_EMAIL_DAILY_CAP'],
+        paused=(_truthy(os.environ.get('REMINDERS_PAUSED', ''))
+                or bool(current_app.config['REMINDERS_PAUSED'])),
+    )
+    outcomes = Counter(f"{row['channel']}_{row['status']}" for row in result.rows)
+    record_audit('reminder.staff_dry_run', conv_id=conv.id, target_type='reminder',
+                 target_id=result.reminder_id, reminder_type=body['reminderType'],
+                 **outcomes)
+    return {'reminderId': result.reminder_id, 'rows': result.rows}
+
+
 def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
         _refuse_admin()
@@ -6883,6 +6926,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_global_admin=_set_global_admin_api_payload,
         resolve_reminder_test=_reminder_test_api_payload,
         send_reminder_test=_send_reminder_test_api_payload,
+        resolve_staff_reminder=_staff_reminder_state_api_payload,
+        run_staff_reminder=_run_staff_reminder_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,
