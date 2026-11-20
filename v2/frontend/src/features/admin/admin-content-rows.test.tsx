@@ -170,15 +170,24 @@ function serveMeta(onPut: (body: {meta: boolean; acknowledgeResponses?: boolean}
     async ({request}) => onPut(await request.json() as {meta: boolean; acknowledgeResponses?: boolean})));
 }
 
-test('only a seed statement offers the meta toggle, and a meta row says so', async () => {
+test('only a seed statement offers the meta toggle, and the toggle alone says a row is meta (#620)', async () => {
   serveWorkspace({approved: [seedRow(12), statement(13, 'approved'), seedRow(14, {meta: true})]});
   renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
 
   await screen.findByText('Statement text 12.', {}, {timeout: 10_000});
-  expect(within(rowOf(12)).getByRole('button', {name: m('stmts-meta-mark')})).toBeVisible();
+  const mark = within(rowOf(12)).getByRole('button', {name: m('stmts-meta-mark')});
+  expect(mark).toBeVisible();
+  expect(mark).toHaveAttribute('aria-pressed', 'false');
+  expect(mark).toHaveAttribute('title', m('stmts-meta-mark'));
+  expect(mark).toHaveTextContent(/^m$/);
   expect(within(rowOf(13)).queryByRole('button', {name: m('stmts-meta-mark')})).toBeNull();
-  expect(within(rowOf(14)).getByRole('button', {name: m('stmts-meta-unmark')})).toBeVisible();
-  expect(within(rowOf(14)).getByText(m('meta-statement-label'), {exact: false})).toBeVisible();
+  const unmark = within(rowOf(14)).getByRole('button', {name: m('stmts-meta-unmark')});
+  expect(unmark).toBeVisible();
+  expect(unmark).toHaveAttribute('aria-pressed', 'true');
+  expect(unmark).toHaveAttribute('title', m('stmts-meta-unmark'));
+  expect(unmark).toHaveTextContent(/^m$/);
+  // The "· Meta statement" suffix is gone from the admin row: the pressed m says it.
+  expect(within(rowOf(14)).queryByText(m('meta-statement-label'), {exact: false})).toBeNull();
   expect(within(rowOf(12)).queryByText(m('meta-statement-label'), {exact: false})).toBeNull();
 });
 
@@ -214,10 +223,14 @@ test('a seed with responses warns first, and changes only when confirmed', async
   });
   renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
 
-  fireEvent.click(await screen.findByRole('button', {name: m('stmts-meta-mark')}, {timeout: 10_000}));
+  const toggle = await screen.findByRole('button', {name: m('stmts-meta-mark')}, {timeout: 10_000});
+  expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(toggle);
   const warning = within(rowOf(12)).getByRole('alert');
   expect(warning).toHaveTextContent(m('stmts-meta-warn-responses', 12));
   expect(bodies).toEqual([]);
+  // Asking is not changing: the toggle stays unpressed until the change is confirmed.
+  expect(toggle).toHaveAttribute('aria-pressed', 'false');
 
   fireEvent.click(within(warning).getByRole('button', {name: m('common-cancel')}));
   expect(within(rowOf(12)).queryByRole('alert')).toBeNull();

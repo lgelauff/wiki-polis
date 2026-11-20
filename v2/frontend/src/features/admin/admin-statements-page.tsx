@@ -136,10 +136,15 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
   // Seeds only (owner, 2026-09-24); a featured statement is an opinion, so it is never marked.
   const canToggle = statement.seed && (statement.meta || !statement.featured);
   const toggleLabel = statement.meta ? msg('stmts-meta-unmark') : msg('stmts-meta-mark');
+  // One square [m] toggle (#620): black when the statement is meta, grey and struck through
+  // when it is not, so the state does not rest on colour alone. Its name says the action.
   const toggle = canToggle ? (
     <button
       type="button"
-      className="admin-row__text-button"
+      className="admin-row__glyph admin-row__meta-toggle"
+      title={toggleLabel}
+      aria-label={toggleLabel}
+      aria-pressed={statement.meta}
       aria-expanded={statement.hasResponses ? confirming : undefined}
       disabled={meta.isPending}
       onClick={() => {
@@ -147,7 +152,7 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         else meta.mutate(false);
       }}
     >
-      {toggleLabel}
+      <span aria-hidden="true">m</span>
     </button>
   ) : null;
   return (
@@ -161,9 +166,6 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         )}
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
-        {statement.meta && (
-          <span className="admin-row__suffix">{` · ${msg('meta-statement-label')}`}</span>
-        )}
         {statement.provenance && (
           <StatementProvenance provenance={statement.provenance} linked={sourceShown} />
         )}
