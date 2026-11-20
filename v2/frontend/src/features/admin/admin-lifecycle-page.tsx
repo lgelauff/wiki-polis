@@ -19,6 +19,7 @@ import {
   putAdminPhases,
   putAdminRoles,
   putAdminSchedule,
+  staffReminderQuery,
 } from '../../api/queries';
 import {AdminShell} from './admin-shell';
 import {useAnnouncer} from './admin-announcer';
@@ -302,7 +303,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   function notify(category: LegacyToastMessage['category'], text: string) {setToast({id: Date.now(), category, message: text});}
   function fail(error: Error) {notify('error', message(msg, error));}
   function setLifecycle(lifecycle: Lifecycle) {queryClient.setQueryData(lifecycleOptions.queryKey, lifecycle);}
-  function refreshSupporting() {void queryClient.invalidateQueries({queryKey: settingsOptions.queryKey}); void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});}
+  function refreshSupporting() {void queryClient.invalidateQueries({queryKey: settingsOptions.queryKey}); void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey}); void queryClient.invalidateQueries({queryKey: staffReminderQuery(conversationId).queryKey});}
 
   const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]); const receipt = phaseTransitionToast(msg, result.transition); notify(receipt.category, receipt.message);}, onError: fail});
   const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});

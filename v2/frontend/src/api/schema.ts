@@ -3677,7 +3677,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Nothing recorded: this message was already recorded today (reminder_exists), reminders are paused (reminders_paused), the wiki is unknown to the bot (unknown_wiki), or another run is in progress (batch_busy) */
+            /** @description Nothing recorded: this message was already recorded today (reminder_exists), it is not due now (not_due), no staff member joined and ticked a channel (no_recipients), reminders are paused (reminders_paused), the wiki is unknown to the bot (unknown_wiki), or another run is in progress (batch_busy) */
             409: {
                 headers: {
                     [name: string]: unknown;

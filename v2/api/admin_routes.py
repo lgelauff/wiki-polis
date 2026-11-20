@@ -51,7 +51,9 @@ from services.admin_settings import (
 from services.eligibility_policies import EligibilityPolicyRefused
 from services.reminder_test import ReminderTestRefused
 from services.reminder_batch import BatchBusy
-from services.reminder_staff_run import ReminderExists, RemindersPaused, UnknownWiki
+from services.reminder_staff_run import (
+    NoRecipients, NotDue, ReminderExists, RemindersPaused, UnknownWiki,
+)
 from services.reminders import REMINDER_TYPES
 from services.results_report import ReportPublished
 
@@ -269,6 +271,12 @@ def register_admin_routes(
         except UnknownWiki:
             return error_response(
                 'unknown_wiki', "The bot does not know this consultation's wiki.", 409)
+        except NotDue:
+            return error_response(
+                'not_due', 'This message is not due for this consultation now.', 409)
+        except NoRecipients:
+            return error_response(
+                'no_recipients', 'No staff member joined and ticked a channel.', 409)
         except BatchBusy:
             return error_response('batch_busy', 'Another reminder run is in progress.', 409)
         return _no_store(jsonify({'data': data}))

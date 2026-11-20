@@ -4242,6 +4242,10 @@ def _send_reminder_test_api_payload(body: dict) -> dict:
     }
 
 
+def _current_stage_key(conv) -> str:
+    return _phase_sequence_for(conv)[_current_stage_index(conv)]['key']
+
+
 def _staff_reminder_actor() -> 'Participant':
     """The super admin behind a staff reminder run (#576); anyone else is refused."""
     participant = _current_participant()
@@ -4253,7 +4257,9 @@ def _staff_reminder_actor() -> 'Participant':
 def _staff_reminder_state_api_payload(conv_id: int) -> dict:
     _staff_reminder_actor()
     conv = Conversation.query.get_or_404(conv_id)
-    return staff_reminder_state(conv, admin_usernames=ADMIN_USERS)
+    return staff_reminder_state(conv, admin_usernames=ADMIN_USERS,
+                                phase_key=_current_stage_key(conv),
+                                active_phases=_active_phases)
 
 
 def _run_staff_reminder_api_payload(conv_id: int, body: dict) -> dict:
@@ -4263,7 +4269,7 @@ def _run_staff_reminder_api_payload(conv_id: int, body: dict) -> dict:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     result = run_staff_dry_run(
         conv, body['reminderType'],
-        phase_key=_phase_sequence_for(conv)[_current_stage_index(conv)]['key'],
+        phase_key=_current_stage_key(conv),
         now=now, triggered_by=actor, admin_usernames=ADMIN_USERS,
         active_phases=_active_phases,
         email_cap=current_app.config['REMINDERS_EMAIL_DAILY_CAP'],

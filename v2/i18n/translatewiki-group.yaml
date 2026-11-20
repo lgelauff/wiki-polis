@@ -216,6 +216,11 @@ TAGS:
     - admin-staff-reminder-type-phase-closing
     - admin-staff-reminder-type-phase-opened
     - admin-staff-reminder-type-results
+    - admin-staff-reminder-summary
+    - admin-staff-reminder-running
+    - admin-staff-reminder-busy
+    - admin-staff-reminder-unknown-wiki
+    - admin-staff-reminder-not-due
     - admin-roles-assigned
     - admin-roles-change
     - admin-roles-empty

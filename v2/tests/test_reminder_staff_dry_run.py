@@ -126,9 +126,10 @@ def test_only_super_admins_may_see_or_run_it(client, conv, staff, who):
 def test_state_counts_staff_per_channel_and_says_whether_the_wiki_is_approved(
         admin_client, conv, staff):
     data = admin_client.get(STATE.format(conv.id)).get_json()['data']
+    # Results only go out once the consultation is closed, so it is not offered yet.
     assert data == {
         'wiki': 'nlwiki', 'wikiHost': 'nl.wikipedia.org', 'automatedSendApproved': False,
-        'reminderTypes': ['phase_opened', 'phase_closing', 'results'],
+        'reminderTypes': ['phase_opened', 'phase_closing'],
         'counts': {'email': 1, 'talk': 0},
     }
 
@@ -179,7 +180,94 @@ def test_dry_run_is_refused_while_reminders_are_paused(admin_client, app, conv, 
     assert Reminder.query.count() == 0
 
 
-def test_results_before_close_are_recorded_as_expired(admin_client, conv, staff):
+def test_a_message_that_is_not_due_is_refused_and_records_nothing(admin_client, conv, staff):
     response = admin_client.post(RUN.format(conv.id), json={'reminderType': 'results'})
-    assert [row['status'] for row in response.get_json()['data']['rows']] == ['skipped_expired']
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'not_due'
+    assert Reminder.query.count() == 0
 
+
+def test_a_run_that_would_reach_nobody_is_refused_and_records_nothing(admin_client, conv):
+    organizer = _person()
+    _role(conv, organizer, 'organizer')
+    _join(conv, organizer, email=False, talk=False)
+    _join(conv, _person(), email=True, talk=True)       # a participant who ticked
+    response = admin_client.post(RUN.format(conv.id), json={'reminderType': 'phase_opened'})
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'no_recipients'
+    assert Reminder.query.count() == 0
+
+
+def test_a_busy_batch_leaves_nothing_behind(admin_client, conv, staff, monkeypatch):
+    from services import reminder_staff_run
+    from services.reminder_batch import BatchBusy
+
+    def busy(*args, **kwargs):
+        raise BatchBusy()
+    monkeypatch.setattr(reminder_staff_run, 'run_batch', busy)
+    response = admin_client.post(RUN.format(conv.id), json={'reminderType': 'phase_opened'})
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'batch_busy'
+    assert Reminder.query.count() == 0 and ReminderDelivery.query.count() == 0
+
+
+def _scheduled_run(day):
+    """The daily run, on a wiki where the bot is approved: it hands out what is due."""
+    run_batch(day, now=datetime.combine(day, datetime.min.time()).replace(hour=23),
+              active_phases=lambda c: {'submission'}, sender=Recording(), email_cap=20,
+              approved={'nlwiki': '#581'})
+
+
+def _non_staff_rows(staff):
+    return [row for row in ReminderDelivery.query
+            if row.participation.participant_id == staff['participant'].id]
+
+
+def test_the_reminder_is_never_committed_unrecorded(admin_client, conv, staff):
+    from sqlalchemy import event
+    seen = []
+
+    def check(session):
+        if session.in_nested_transaction():
+            return              # a savepoint release, not a commit others can see
+        seen.append(Reminder.query.filter(Reminder.recorded_at.is_(None)).count())
+    event.listen(db.session, 'before_commit', check)
+    try:
+        assert admin_client.post(RUN.format(conv.id),
+                                 json={'reminderType': 'phase_opened'}).status_code == 200
+    finally:
+        event.remove(db.session, 'before_commit', check)
+    assert seen and set(seen) == {0}
+
+
+def test_a_later_scheduled_run_adds_no_participant(admin_client, conv, staff):
+    assert admin_client.post(RUN.format(conv.id),
+                             json={'reminderType': 'phase_opened'}).status_code == 200
+    day = Reminder.query.one().send_day
+    _scheduled_run(day)
+    assert _non_staff_rows(staff) == []
+    assert [(r.channel, r.status) for r in ReminderDelivery.query] == [('email', 'dry_run')]
+
+
+def test_an_interrupted_run_leaves_no_row_for_a_later_run(app, conv, staff, admin_participant,
+                                                           monkeypatch):
+    from services import reminder_staff_run
+
+    def interrupted(*args, **kwargs):
+        raise SystemExit(1)
+    monkeypatch.setattr(reminder_staff_run, 'run_batch', interrupted)
+    now = datetime(2026, 11, 20, 9)
+    with pytest.raises(SystemExit):
+        reminder_staff_run.run_staff_dry_run(
+            conv, PHASE_OPENED, phase_key='submission', now=now,
+            triggered_by=admin_participant, admin_usernames=[],
+            active_phases=lambda c: {'submission'}, email_cap=20, paused=False)
+    reminder = Reminder.query.one()
+    assert reminder.recorded_at is not None
+    assert [(r.channel, r.status) for r in ReminderDelivery.query] == [
+        ('email', 'skipped_expired')]
+    monkeypatch.undo()
+    _scheduled_run(now.date())
+    _scheduled_run(date(2026, 11, 21))
+    assert _non_staff_rows(staff) == []
+    assert ReminderDelivery.query.filter_by(status='pending').count() == 0

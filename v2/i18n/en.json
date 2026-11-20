@@ -1119,13 +1119,18 @@
     "admin-staff-reminder-approved": "The bot is approved for automatic sends on $1.",
     "admin-staff-reminder-not-approved": "The bot is not approved for automatic sends on $1.",
     "admin-staff-reminder-done": "Dry run done: {{PLURAL:$1|one row|$1 rows}}.",
-    "admin-staff-reminder-empty": "No staff member opted in to this message.",
-    "admin-staff-reminder-exists": "Not run: this message was already recorded for this consultation today.",
+    "admin-staff-reminder-empty": "No staff member joined and ticked a channel.",
+    "admin-staff-reminder-exists": "Not run: this message was already recorded for this consultation today. Try again tomorrow (UTC).",
     "admin-staff-reminder-paused": "Not run: reminders are paused on the server.",
     "admin-staff-reminder-outcome-dry-run": "Would send",
     "admin-staff-reminder-outcome-combined": "Combined with another reminder",
     "admin-staff-reminder-outcome-limit": "Held back: daily limit",
     "admin-staff-reminder-outcome-expired": "Not sent: expired",
     "admin-staff-reminder-outcome-optout": "Not sent: no longer opted in",
-    "admin-staff-reminder-outcome-pending": "Not handled"
+    "admin-staff-reminder-outcome-pending": "Not handled",
+    "admin-staff-reminder-summary": "Staff dry run",
+    "admin-staff-reminder-running": "Running the dry run…",
+    "admin-staff-reminder-busy": "Not run: another reminder run is in progress. Try again in a few minutes.",
+    "admin-staff-reminder-unknown-wiki": "Not run: the bot does not know this consultation's wiki.",
+    "admin-staff-reminder-not-due": "No reminder is due for this consultation now."
 }

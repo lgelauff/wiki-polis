@@ -47,6 +47,8 @@ log = logging.getLogger(__name__)
 RETENTION_AFTER_LAST_MESSAGE = timedelta(days=14)
 STALE_CLAIM = timedelta(minutes=30)
 MAX_EMAIL_CAP = 20            # Wikimedia's limit for an unflagged bot
+# A dry run counts as delivered for the cap and the one-a-day rule, so a dry run
+# shows what a live run would do; it also uses up that day's room (#576).
 _DELIVERED = ('sent', 'dry_run')
 _LOCK_NAME = 'proto-reminder-batch'
 
@@ -266,6 +268,17 @@ def _due_reminders(day, approved, reminder_id, result) -> list[Reminder]:
         else:
             result.waiting_for_trigger.append(reminder.id)
     return due
+
+
+def record_reminder(reminder: Reminder, phases: set[str], now: datetime, *,
+                    audience: Callable[[Conversation], set[int]] | None = None) -> None:
+    """Record a new reminder and its deliveries in one commit.
+
+    For a reminder added to the session but not yet committed: nobody, the
+    scheduled run included, can see it before its rows exist and ``recorded_at``
+    is set, so it is never recorded a second time for a wider audience (#576).
+    """
+    _record_deliveries(reminder, phases, now, who=_narrowed(audience))
 
 
 def _record_missed(day, approved, now, result) -> None:

@@ -40,7 +40,8 @@ function serve(reply: () => Response = () => HttpResponse.json({data: run}), see
   return seen;
 }
 
-async function renderOpen() {
+async function renderOpen(stateData: State = state) {
+  server.use(http.get(STATE_URL, () => HttpResponse.json({data: stateData})));
   render(
     <QueryClientProvider client={createQueryClient()}>
       <Suspense fallback={null}>
@@ -48,7 +49,7 @@ async function renderOpen() {
       </Suspense>
     </QueryClientProvider>,
   );
-  const details = (await screen.findByText('Dry run', {selector: 'summary'})).closest('details')!;
+  const details = (await screen.findByText('Staff dry run', {selector: 'summary'})).closest('details')!;
   details.open = true;
   fireEvent(details, new Event('toggle'));
 }
@@ -80,19 +81,52 @@ test('runs the chosen message and lists each person and channel with what would 
   ]);
 });
 
-test('says so when no staff member opted in', async () => {
-  serve(() => HttpResponse.json({data: {reminderId: 4, rows: []}}));
-  await renderOpen();
-  fireEvent.click(await screen.findByRole('button', {name: 'Dry run'}));
-  expect(await screen.findByText('No staff member opted in to this message.')).toBeTruthy();
+test('offers no button when no staff member joined and ticked a channel', async () => {
+  serve();
+  await renderOpen({...state, counts: {email: 0, talk: 0}});
+  expect(await screen.findByText('No staff member joined and ticked a channel.')).toBeTruthy();
+  expect(screen.queryByRole('button', {name: 'Dry run'})).toBeNull();
 });
 
-test('a message already recorded today is refused in the console\'s words', async () => {
-  serve(() => HttpResponse.json(
-    {error: {code: 'reminder_exists', message: 'This message was already recorded for today.'}},
-    {status: 409}));
+test('says so when no message is due', async () => {
+  serve();
+  await renderOpen({...state, reminderTypes: []});
+  expect(await screen.findByText('No reminder is due for this consultation now.')).toBeTruthy();
+  expect(screen.queryByRole('button', {name: 'Dry run'})).toBeNull();
+});
+
+test('the fold and the button have different names, and the button points at the warning', async () => {
+  serve();
+  await renderOpen();
+  const button = await screen.findByRole('button', {name: 'Dry run'});
+  expect(screen.getByText('Staff dry run', {selector: 'summary'})).toBeTruthy();
+  expect(button.getAttribute('aria-describedby')).toBeTruthy();
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent)
+    .toContain('Staff who opted in: wiki-mail 2, talk page 1.');
+});
+
+test('keeps each message type\'s result while another type is chosen', async () => {
+  serve();
   await renderOpen();
   fireEvent.click(await screen.findByRole('button', {name: 'Dry run'}));
-  expect(await screen.findByText(
-    'Not run: this message was already recorded for this consultation today.')).toBeTruthy();
+  expect(await screen.findByRole('table', {name: 'Phase opened'})).toBeTruthy();
+  const select = screen.getByRole('combobox', {name: 'Message'});
+  fireEvent.change(select, {target: {value: 'phase_closing'}});
+  expect(screen.queryByRole('table')).toBeNull();
+  fireEvent.change(select, {target: {value: 'phase_opened'}});
+  expect(screen.getByRole('table', {name: 'Phase opened'})).toBeTruthy();
+});
+
+test.each([
+  ['reminder_exists', 'Not run: this message was already recorded for this consultation today. Try again tomorrow (UTC).'],
+  ['batch_busy', 'Not run: another reminder run is in progress. Try again in a few minutes.'],
+  ['unknown_wiki', "Not run: the bot does not know this consultation's wiki."],
+  ['not_due', 'No reminder is due for this consultation now.'],
+  ['no_recipients', 'No staff member joined and ticked a channel.'],
+  ['reminders_paused', 'Not run: reminders are paused on the server.'],
+])('a %s refusal is shown in the console\'s words', async (code, text) => {
+  serve(() => HttpResponse.json({error: {code, message: 'server text'}}, {status: 409}));
+  await renderOpen();
+  fireEvent.click(await screen.findByRole('button', {name: 'Dry run'}));
+  expect(await screen.findByText(text)).toBeTruthy();
 });
