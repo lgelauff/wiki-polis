@@ -28,6 +28,7 @@ import {useMessage, type Message} from '../../i18n/messages';
 import {accessPolicyLabel, phaseLabel, routeLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
+import {AdminStaffReminder} from './admin-staff-reminder';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
 type PhaseTransitionReceipt = components['schemas']['AdminPhaseAdvanceReceipt']['transition'];
@@ -381,6 +382,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
 
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
       {canOrganize && <ConfigurationSection settings={settings} />}
+      {isAdmin && <AdminStaffReminder conversationId={conversationId} csrfToken={csrfToken} />}
       {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} onArchive={(archived) => archiveMutation.mutate(archived)} archivePending={archiveMutation.isPending} />}
     </div>
   </AdminShell>;

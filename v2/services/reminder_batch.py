@@ -174,6 +174,7 @@ def run_batch(
     sender: Sender, email_cap: int, paused: bool | Callable[[], bool] = False,
     approved: dict[str, str] | None = None, reminder_id: int | None = None,
     triggered_by_id: int | None = None,
+    audience: Callable[[Conversation], set[int]] | None = None,
 ) -> BatchResult:
     """Handle one day's reminders.
 
@@ -190,6 +191,10 @@ def run_batch(
     ``paused`` may be a callable; it is checked before the run and between
     messages. The command's pause comes from the environment, which a running
     process never re-reads, so in practice it is read at the start of a run.
+
+    ``audience`` (a super admin's trigger only) narrows the recipients to the
+    participant ids it returns for the consultation, for a staff-only run
+    (#576). It only removes people: everyone left must still be a recipient.
     """
     is_paused = paused if callable(paused) else (lambda: paused)
     result = BatchResult(day=day)
@@ -198,6 +203,9 @@ def run_batch(
         return result
     if reminder_id is not None and triggered_by_id is None:
         raise TriggerNeedsSuperAdmin()
+    if audience is not None and reminder_id is None:
+        raise ValueError('audience needs reminder_id: the scheduled run has no audience')
+    who = _narrowed(audience)
 
     with single_flight() as lock:
         result.stale_claims = _settle_stale_claims(now)
@@ -208,12 +216,13 @@ def run_batch(
             db.session.commit()
         for reminder in due:
             if reminder.recorded_at is None:
-                _record_deliveries(reminder, active_phases(reminder.conversation), now)
+                _record_deliveries(reminder, active_phases(reminder.conversation), now,
+                                   who=who)
         if reminder_id is None:
             _record_missed(day, approved, now, result)
 
         _hand_out(due, now=now, sender=sender, email_cap=email_cap, result=result,
-                  active_phases=active_phases, is_paused=is_paused, lock=lock)
+                  active_phases=active_phases, is_paused=is_paused, lock=lock, who=who)
         result.due = [r.id for r in due]
         for reminder in due:
             for status, channel, count in (
@@ -225,6 +234,18 @@ def run_batch(
                 result.totals[(channel, status)] += count
         result.unlinked = unlink_ended(now)
     return result
+
+
+def _narrowed(audience):
+    """``recipients``, kept to the audience when there is one."""
+    if audience is None:
+        return recipients
+
+    def who(conversation, channel):
+        keep = audience(conversation)
+        return [person for person in recipients(conversation, channel)
+                if person.participant_id in keep]
+    return who
 
 
 def _due_reminders(day, approved, reminder_id, result) -> list[Reminder]:
@@ -287,7 +308,7 @@ def _record_missed(day, approved, now, result) -> None:
 
 
 def _record_deliveries(reminder: Reminder, phases: set[str], now: datetime,
-                       *, expired: bool | None = None) -> None:
+                       *, expired: bool | None = None, who=recipients) -> None:
     """One row per recipient and channel; an expired reminder is recorded as such.
 
     Recipients are inserted in random order, so a row's id says nothing about
@@ -301,7 +322,7 @@ def _record_deliveries(reminder: Reminder, phases: set[str], now: datetime,
     }
     shuffle = random.SystemRandom().shuffle
     for channel in REMINDER_CHANNELS:
-        people = recipients(reminder.conversation, channel)
+        people = who(reminder.conversation, channel)
         shuffle(people)
         for participation in people:
             if (participation.id, channel) in existing:
@@ -369,7 +390,7 @@ def _valid(outcome: Outcome) -> Outcome:
 
 
 def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused,
-              lock=None) -> None:
+              lock=None, who=recipients) -> None:
     lock = lock or _NoLock()
     reminder_ids = [r.id for r in due]
     if not reminder_ids:
@@ -413,7 +434,7 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused,
         for row in rows:
             conv = row.reminder.conversation
             if conv.id not in current:
-                current[conv.id] = {p.id for p in recipients(conv, channel)}
+                current[conv.id] = {p.id for p in who(conv, channel)}
                 phases[conv.id] = active_phases(conv)
             if row.participation_id not in current[conv.id]:
                 gone.append((row, Outcome('skipped_optout')))

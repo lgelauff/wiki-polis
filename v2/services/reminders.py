@@ -6,8 +6,11 @@ to record; this module only reads the database.
 
 from collections.abc import Iterable
 
+import sqlalchemy as sa
+
 from db import (
-    ACCOUNT_KIND_WIKIMEDIA, ConversationBan, Participant, Participation, REMINDER_CHANNELS, db,
+    ACCOUNT_KIND_WIKIMEDIA, AdminRole, ConversationBan, Participant, Participation,
+    REMINDER_CHANNELS, db,
 )
 
 PHASE_OPENED = 'phase_opened'
@@ -27,6 +30,24 @@ def can_send_reminders(participant: Participant | None, conversation,
     if participant.is_global_admin:
         return True
     return bool(participant.mw_username) and participant.mw_username in set(admin_usernames)
+
+
+def staff_participant_ids(conversation, *, admin_usernames: Iterable[str] = ()) -> set[int]:
+    """Who counts as staff for a staff-only reminder (#576): an organizer or moderator
+    of this consultation, or a super admin.
+
+    A filter on ``recipients``, never a reason to message someone: staff who did
+    not join, or did not tick a channel, are not recipients either.
+    """
+    ids = {row.participant_id for row in
+           AdminRole.query.filter_by(conversation_id=conversation.id)}
+    configured = [name for name in admin_usernames if name]
+    super_admins = Participant.query.filter(Participant.is_global_admin.is_(True))
+    if configured:
+        super_admins = Participant.query.filter(sa.or_(
+            Participant.is_global_admin.is_(True), Participant.mw_username.in_(configured)))
+    ids.update(person.id for person in super_admins)
+    return ids
 
 
 def recipients(conversation, channel: str) -> list[Participation]:

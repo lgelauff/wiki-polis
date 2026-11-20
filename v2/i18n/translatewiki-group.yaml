@@ -197,6 +197,25 @@ TAGS:
     - admin-reminder-test-sent-fallback
     - admin-reminder-test-talk-summary
     - admin-reminder-test-unknown
+    - admin-staff-reminder-approved
+    - admin-staff-reminder-btn
+    - admin-staff-reminder-counts
+    - admin-staff-reminder-done
+    - admin-staff-reminder-empty
+    - admin-staff-reminder-exists
+    - admin-staff-reminder-heading
+    - admin-staff-reminder-label-type
+    - admin-staff-reminder-not-approved
+    - admin-staff-reminder-outcome-combined
+    - admin-staff-reminder-outcome-dry-run
+    - admin-staff-reminder-outcome-expired
+    - admin-staff-reminder-outcome-limit
+    - admin-staff-reminder-outcome-optout
+    - admin-staff-reminder-outcome-pending
+    - admin-staff-reminder-paused
+    - admin-staff-reminder-type-phase-closing
+    - admin-staff-reminder-type-phase-opened
+    - admin-staff-reminder-type-results
     - admin-roles-assigned
     - admin-roles-change
     - admin-roles-empty
