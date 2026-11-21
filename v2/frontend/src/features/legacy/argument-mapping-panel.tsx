@@ -62,6 +62,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
   // Text over the limit is kept as typed, never cut (#558); Submit waits until it fits.
   const overLimit = Math.max(0, body.length - ARGUMENT_MAX_CHARACTERS);
   const countId = `contribute-count-${featuredId}-${side}`;
+  const errorId = `contribute-error-${featuredId}-${side}`;
   const copy = sideCopy[side];
   const text = sideMessages(msg, side);
   useEffect(() => {
@@ -109,7 +110,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
           <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">{msg('conv-arg-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink>
           <span className="contribute-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : <><span className="cc-len">{body.length}</span> / {ARGUMENT_MAX_CHARACTERS}</>}</span>
         </div>
-        <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={overLimit > 0 ? countId : undefined} aria-invalid={overLimit > 0 || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
+        <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={[overLimit > 0 && countId, (submit.error || skip.error) && errorId].filter(Boolean).join(' ') || undefined} aria-invalid={overLimit > 0 || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
         <div className="contribute-actions">
           <button type="button" className="btn-secondary contribute-skip-btn" disabled={skip.isPending} onClick={() => skip.mutate()}>{msg('conv-arg-nothing')}</button>
           <button type="submit" className="btn-primary contribute-submit-btn" disabled={!body.length || overLimit > 0 || submit.isPending}>{msg('conv-arg-submit')}</button>
@@ -124,7 +125,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
         {msg('conv-arg-skipped')}
         <button type="button" className="at-link contribute-changemind" onClick={compose}>{msg('conv-arg-changemind')}</button>
       </div>
-      {(submit.error || skip.error) && <p className="muted" role="alert">{msg('conv-arg-save-error')}</p>}
+      {(submit.error || skip.error) && <p className="muted" id={errorId} role="alert">{msg('conv-arg-save-error')}</p>}
     </div>
   );
 }

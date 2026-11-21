@@ -476,3 +476,25 @@ test('the number in each progress circle meets text contrast against what is beh
     }
   }
 });
+
+test('a failed save is announced with the text box: its error is in the box\'s description', async () => {
+  serve(mapping());
+  server.use(http.post(url('/api/v1/conversations/community-strategy/featured-statements/:id/arguments'),
+    () => HttpResponse.json({error: {code: 'upstream_unavailable', message: 'The voting service is down.'}}, {status: 502})));
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  fireEvent.click(wrapper.querySelector('.contribute-affordance')!);
+  const box = wrapper.querySelector('textarea')!;
+  expect(box).not.toHaveAttribute('aria-describedby');
+  fireEvent.change(box, {target: {value: 'A reason'}});
+  fireEvent.click(wrapper.querySelector('.contribute-submit-btn')!);
+
+  await waitFor(() => expect(wrapper.querySelector('[role="alert"]')).not.toBeNull());
+  const error = wrapper.querySelector<HTMLElement>('[role="alert"]')!;
+  expect(error.id).not.toBe('');
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toContain(error.id);
+  expect(document.getElementById(error.id)).toBe(error);
+});
