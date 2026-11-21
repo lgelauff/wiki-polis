@@ -162,6 +162,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/reminder-dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Super admins only (#576): who a staff-only reminder would reach, per channel, and whether the bot is approved for automatic sends on the consultation's wiki */
+        get: operations["getStaffReminder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/reminder-dry-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Super admins only (#576): record one reminder for today and run the batch for it in dry run, to the consultation's organizers, moderators and super admins who joined and ticked a channel; nothing is sent */
+        post: operations["postStaffReminderDryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/termination": {
         parameters: {
             query?: never;
@@ -1285,6 +1323,40 @@ export interface components {
             /** @enum {string} */
             channel: "email" | "talk";
             recipient: string;
+        };
+        StaffReminderResponse: {
+            data: {
+                wiki: string;
+                wikiHost: string | null;
+                /** @description Whether the wiki is on AUTOMATED_SEND_WIKIS */
+                automatedSendApproved: boolean;
+                reminderTypes: components["schemas"]["StaffReminderType"][];
+                /** @description Staff who joined and ticked each channel */
+                counts: {
+                    email: number;
+                    talk: number;
+                };
+            };
+        };
+        /** @enum {string} */
+        StaffReminderType: "phase_opened" | "phase_closing" | "results";
+        StaffReminderDryRunRequest: {
+            reminderType: components["schemas"]["StaffReminderType"];
+        };
+        StaffReminderDryRunResponse: {
+            data: {
+                reminderId: number;
+                rows: {
+                    username: string | null;
+                    /** @enum {string} */
+                    channel: "email" | "talk";
+                    /** @enum {string} */
+                    status: "pending" | "sent" | "dry_run" | "combined" | "skipped_expired" | "skipped_optout" | "not_sent_limit" | "failed";
+                    /** @enum {string|null} */
+                    reason: "not_emailable" | "refused" | "nobots" | "throttled" | "blocked" | "lagged" | "outcome_unknown" | "api_error" | null;
+                    errorCode: string | null;
+                }[];
+            };
         };
         ReminderTestSendResponse: {
             data: {
@@ -3486,6 +3558,135 @@ export interface operations {
                 };
             };
             /** @description Too many test sends */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getStaffReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staff reminder state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffReminderResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Super admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postStaffReminderDryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffReminderDryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Per person and channel: the username and the delivery row's outcome */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffReminderDryRunResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Super admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Nothing recorded: this message was already recorded today (reminder_exists), it is not due now (not_due), no staff member joined and ticked a channel (no_recipients), reminders are paused (reminders_paused), the wiki is unknown to the bot (unknown_wiki), or another run is in progress (batch_busy) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many runs */
             429: {
                 headers: {
                     [name: string]: unknown;

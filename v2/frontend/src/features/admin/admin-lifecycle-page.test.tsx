@@ -511,3 +511,15 @@ test.each([
   expect(await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000})).toBeVisible();
   expect(screen.queryByRole('link', {name: new RegExp(`^${testMessages['adminconv-preview-report']}`)})).toBeNull();
 });
+
+test.each([
+  ['a site admin', () => lifecycle, true],
+  ['an organizer', () => ({...lifecycle, operator: {roleLabel: 'Organizer'},
+    capabilities: {...lifecycle.capabilities, useAdvancedPhases: false, archive: false, previewReport: false}}), false],
+  ['a moderator', () => moderatorLifecycle, false],
+] as const)('the staff reminder dry run (#576) is shown only to site admins: %s', async (_role, payload, shown) => {
+  serve(payload());
+  renderConsole();
+  await screen.findByRole('list', {name: 'Consultation phase progress'}, {timeout: 10_000});
+  expect(screen.queryByText('Reminders to staff') !== null).toBe(shown);
+});

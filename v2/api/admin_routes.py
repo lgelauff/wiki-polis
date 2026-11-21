@@ -50,6 +50,11 @@ from services.admin_settings import (
 )
 from services.eligibility_policies import EligibilityPolicyRefused
 from services.reminder_test import ReminderTestRefused
+from services.reminder_batch import BatchBusy
+from services.reminder_staff_run import (
+    NoRecipients, NotDue, ReminderExists, RemindersPaused, UnknownWiki,
+)
+from services.reminders import REMINDER_TYPES
 from services.results_report import ReportPublished
 
 
@@ -66,6 +71,8 @@ def register_admin_routes(
     set_global_admin: Callable[[int, dict], dict],
     resolve_reminder_test: Callable[[], dict],
     send_reminder_test: Callable[[dict], dict],
+    resolve_staff_reminder: Callable[[int], dict],
+    run_staff_reminder: Callable[[int, dict], dict],
     resolve_admin_participants: Callable[[int], dict],
     set_admin_participant_access: Callable[[int, int, dict], dict],
     resolve_admin_flags: Callable[[int], dict],
@@ -241,6 +248,37 @@ def register_admin_routes(
                 exc.code,
                 'Only the configured test accounts, and the wikis and channels the bot knows, can be used.', 400,
             )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/reminder-dry-run')
+    def get_staff_reminder(conversation_id: int):
+        return _no_store(jsonify({'data': resolve_staff_reminder(conversation_id)}))
+
+    @bp.post('/admin/conversations/<int:conversation_id>/reminder-dry-runs')
+    @limiter.limit('6 per minute')
+    def post_staff_reminder(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'reminderType'}
+                or body['reminderType'] not in REMINDER_TYPES):
+            return error_response('validation_failed', 'Choose a message type.', 400)
+        try:
+            data = run_staff_reminder(conversation_id, body)
+        except ReminderExists:
+            return error_response(
+                'reminder_exists', 'This message was already recorded for today.', 409)
+        except RemindersPaused:
+            return error_response('reminders_paused', 'Reminders are paused.', 409)
+        except UnknownWiki:
+            return error_response(
+                'unknown_wiki', "The bot does not know this consultation's wiki.", 409)
+        except NotDue:
+            return error_response(
+                'not_due', 'This message is not due for this consultation now.', 409)
+        except NoRecipients:
+            return error_response(
+                'no_recipients', 'No staff member joined and ticked a channel.', 409)
+        except BatchBusy:
+            return error_response('batch_busy', 'Another reminder run is in progress.', 409)
         return _no_store(jsonify({'data': data}))
 
     @bp.get('/admin/conversations/<int:conversation_id>/participants')
