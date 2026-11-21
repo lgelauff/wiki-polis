@@ -2714,6 +2714,13 @@ a { color: var(--pass); }
   white-space: nowrap;
 }
 
+.contribute-guidance {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .contribute-charcount {
   font-family: var(--mono);
   font-size: 11px;

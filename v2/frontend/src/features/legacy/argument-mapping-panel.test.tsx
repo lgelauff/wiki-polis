@@ -377,11 +377,35 @@ test('an argument over the limit is kept in full and waits at Submit until it fi
   expect(box).toHaveAttribute('aria-invalid', 'true');
   const count = wrapper.querySelector('.contribute-charcount')!;
   expect(count).toHaveTextContent('(conv-composer-over-limit: 3)');
-  expect(box.getAttribute('aria-describedby')).toBe(count.id);
+  const guidance = wrapper.querySelector('.contribute-guidance')!;
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toEqual([guidance.id, count.id]);
 
   fireEvent.change(box, {target: {value: over.slice(3)}});
   expect(submit).toBeEnabled();
   expect(box).not.toHaveAttribute('aria-invalid');
+  expect(box.getAttribute('aria-describedby')).toBe(guidance.id);
+});
+
+test('each side\'s writing box shows its own guidance line, and the text field is described by it', async () => {
+  serve(mapping());
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the two sides' lines swapped or shared, the line placed outside the writing box,
+  // and a screen reader landing in the text field without hearing it (#401).
+  for (const [side, key] of [['pro', '(conv-arg-guidance-for)'], ['con', '(conv-arg-guidance-against)']] as const) {
+    const wrapper = document.querySelector<HTMLElement>(`#fs-9 .contribute-wrapper[data-side="${side}"]`)!;
+    const composer = wrapper.querySelector('.contribute-composer')!;
+    const guidance = within(composer as HTMLElement).getByText(key);
+    expect(guidance.id).toBe(`contribute-guidance-9-${side}`);
+    expect(composer.querySelector('textarea')).toHaveAttribute('aria-describedby', guidance.id);
+    // The "Argument tips" link stays, opening in a new tab. The composer is hidden until
+    // "Add" is pressed, so the link is found by its class, not its role.
+    const tips = composer.querySelector('a.contribute-help-link')!;
+    expect(tips).toHaveTextContent('(conv-arg-tips)');
+    expect(tips).toHaveAttribute('target', '_blank');
+  }
 });
 
 test('each progress circle is a button that names its state and marks the shown statement', async () => {

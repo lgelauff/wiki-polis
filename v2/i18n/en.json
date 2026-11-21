@@ -453,6 +453,8 @@
     "conv-arg-composer-label-for": "Your argument in favour · one sentence, one point",
     "conv-arg-composer-label-against": "Your argument against · one sentence, one point",
     "conv-arg-tips": "Argument tips",
+    "conv-arg-guidance-for": "A good argument gives one clear reason why someone might agree with the statement.",
+    "conv-arg-guidance-against": "A good argument gives one clear reason why someone might disagree with the statement.",
     "conv-arg-placeholder-for": "Give one reason someone might agree (max $1 {{PLURAL:$1|character|characters}})…",
     "conv-arg-placeholder-against": "Give one reason someone might disagree (max $1 {{PLURAL:$1|character|characters}})…",
     "conv-arg-submit": "Submit argument",

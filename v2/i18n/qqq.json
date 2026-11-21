@@ -452,6 +452,8 @@
     "conv-arg-composer-label-for": "Label above the box for writing one argument supporting the statement. Keep the middle dot. See also {{msg-proto|conv-arg-composer-label-against}}.",
     "conv-arg-composer-label-against": "Label above the box for writing one argument opposing the statement. Keep the middle dot. See also {{msg-proto|conv-arg-composer-label-for}}.",
     "conv-arg-tips": "Link to the argument-writing guidance.",
+    "conv-arg-guidance-for": "Guidance line above the box for writing one argument in favour of the statement (the for side). Says what a good argument looks like. See also {{msg-proto|conv-arg-guidance-against}}.",
+    "conv-arg-guidance-against": "Guidance line above the box for writing one argument against the statement (the against side). Says what a good argument looks like. See also {{msg-proto|conv-arg-guidance-for}}.",
     "conv-arg-placeholder-for": "Placeholder in the box for writing one argument supporting the statement. See also {{msg-proto|conv-arg-placeholder-against}}. Parameters:\n* $1 - the most characters an argument may have, e.g. 280",
     "conv-arg-placeholder-against": "Placeholder in the box for writing one argument opposing the statement. See also {{msg-proto|conv-arg-placeholder-for}}. Parameters:\n* $1 - the most characters an argument may have, e.g. 280",
     "conv-arg-submit": "Submit button in the argument composer.",
