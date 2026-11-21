@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 import i18n
+from services.reminder_reference import body_with, subject_with
 from services.reminders import PHASE_CLOSING, PHASE_OPENED, RESULTS
 from services.wiki_bot import FALLBACK_WIKI, WIKI_HOSTS
 
@@ -89,10 +90,16 @@ def _user_page_url(username: str) -> str:
     return f'https://{WIKI_HOSTS[FALLBACK_WIKI]}/wiki/User:{quote(username.replace(" ", "_"))}'
 
 
-def build_email(reminders, settings: MessageSettings) -> ReminderMessage:
-    """One wiki-mail for everything due for one person today."""
+def build_email(reminders, settings: MessageSettings, *, reference: str) -> ReminderMessage:
+    """One wiki-mail for everything due for one person today.
+
+    ``reference`` (#622) goes in the subject and as the body's last line, outside
+    the translated text.
+    """
     if not reminders:
         raise ValueError('no reminders')
+    if not reference:
+        raise ValueError('no reference')
     locale = _locale(reminders)
     if len(reminders) == 1:
         only = reminders[0]
@@ -106,7 +113,8 @@ def build_email(reminders, settings: MessageSettings) -> ReminderMessage:
             '/wiki/User:', '/wiki/User_talk:'),
     ))
     body = '\n\n'.join(items + ['--', footer])
-    return ReminderMessage(subject=subject, body=body, summary='')
+    return ReminderMessage(subject=subject_with(subject, reference),
+                           body=body_with(body, reference), summary='')
 
 
 def build_talk(reminders, settings: MessageSettings) -> ReminderMessage:

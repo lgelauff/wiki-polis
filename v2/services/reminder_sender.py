@@ -10,6 +10,8 @@ Per message:
   wiki-mail; if not, check on Meta and send from there. Neither: ``not_emailable``.
   If the check passed and the wiki still refuses the mail, the person muted the
   bot or refuses mail from new accounts: ``refused``, with no retry from Meta.
+- Every wiki-mail carries its reference (#622), asked for just before the
+  text is built; talk-page notes carry none.
 - Talk page: skip a page that keeps bots out ({{nobots}}, {{bots|…}}) or is in
   the wiki's MassMessage opt-out category (``nobots``). Posts on one wiki are
   spaced by that wiki's interval (services/reminder_wikis.py).
@@ -68,11 +70,17 @@ class LiveSender:
             self._clients[key] = self._client_for(wiki, channel)
         return self._clients[key]
 
-    def send(self, *, channel, wiki, participation, reminders) -> Outcome:
+    def send(self, *, channel, wiki, participation, reminders, reference=None) -> Outcome:
         username = participation.participant.mw_username
         # Built first: a text that cannot be built fails before any wiki is asked.
+        # A wiki-mail without its reference (#622) is never sent.
         try:
-            message = (build_email if channel == 'email' else build_talk)(reminders, self._messages)
+            if channel == 'email':
+                if reference is None:
+                    raise ValueError('a wiki-mail needs its reference')
+                message = build_email(reminders, self._messages, reference=reference())
+            else:
+                message = build_talk(reminders, self._messages)
         except ValueError:
             return Outcome('failed', reason='api_error', error_code='bad_message')
         answering = wiki

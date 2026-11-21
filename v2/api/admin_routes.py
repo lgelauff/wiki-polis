@@ -66,6 +66,7 @@ def register_admin_routes(
     set_global_admin: Callable[[int, dict], dict],
     resolve_reminder_test: Callable[[], dict],
     send_reminder_test: Callable[[dict], dict],
+    lookup_reminder_reference: Callable[[dict], dict],
     resolve_admin_participants: Callable[[int], dict],
     set_admin_participant_access: Callable[[int, int, dict], dict],
     resolve_admin_flags: Callable[[int], dict],
@@ -242,6 +243,19 @@ def register_admin_routes(
                 'Only the configured test accounts, and the wikis and channels the bot knows, can be used.', 400,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.post('/admin/reminder-reference-lookups')
+    @limiter.limit('20 per minute')
+    def post_reminder_reference_lookup():
+        # A reference is short, but people paste whole lines of a mail around it.
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'reference'}
+                or not isinstance(body['reference'], str) or not body['reference'].strip()
+                or len(body['reference']) > 2000):
+            return error_response(
+                'validation_failed', 'Paste the reference from the message.', 400,
+            )
+        return _no_store(jsonify({'data': lookup_reminder_reference(body)}))
 
     @bp.get('/admin/conversations/<int:conversation_id>/participants')
     def get_admin_conversation_participants(conversation_id: int):

@@ -696,9 +696,34 @@ class ReminderDelivery(db.Model):
     sent_via         = db.Column(db.String(32), nullable=True)   # the wiki that sent it
     claimed_at       = db.Column(db.DateTime, nullable=True)
     attempted_at     = db.Column(db.DateTime, nullable=True)
+    # A row handed out in the same message as another (a combined mail, #622) points to
+    # that first row, whose reference the message carried; NULL for the first row itself.
+    combined_into_id = db.Column(db.Integer,
+                                 db.ForeignKey('reminder_deliveries.id', ondelete='SET NULL'),
+                                 nullable=True)
 
     reminder      = db.relationship('Reminder', back_populates='deliveries')
     participation = db.relationship('Participation')
+
+
+class ReminderReferenceKey(db.Model):
+    """One encryption key per UTC month for the references in bot wiki-mail (#622).
+
+    A reference is a delivery's id, encrypted with the key of the month it was sent
+    in; the key's id is the label in front of it ("K7"). A key is deleted 90 days
+    after its last use, and with it the only way to trace its references. Only the
+    reference code (services/reminder_reference.py) reads or writes this table.
+    """
+    __tablename__ = 'reminder_reference_keys'
+    __table_args__ = (
+        db.UniqueConstraint('month', name='uq_reminder_reference_keys_month'),
+    )
+
+    id           = db.Column(db.Integer, primary_key=True)
+    month        = db.Column(db.String(7), nullable=False)   # 'YYYY-MM', UTC
+    key          = db.Column(db.LargeBinary(32), nullable=False)
+    created_at   = db.Column(db.DateTime, nullable=False)
+    last_used_at = db.Column(db.DateTime, nullable=False)
 
 
 # ── Explicit indexes ──────────────────────────────────────────────────────────
@@ -726,3 +751,4 @@ db.Index('ix_reminders_conversation_id', Reminder.conversation_id)
 db.Index('ix_reminders_send_day', Reminder.send_day)
 db.Index('ix_reminder_deliveries_status', ReminderDelivery.status)
 db.Index('ix_reminder_deliveries_participation_id', ReminderDelivery.participation_id)
+db.Index('ix_reminder_deliveries_combined_into_id', ReminderDelivery.combined_into_id)

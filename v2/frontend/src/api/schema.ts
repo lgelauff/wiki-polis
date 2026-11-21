@@ -162,6 +162,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/reminder-reference-lookups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Look up what a wiki-mail reference points to (super admins only); a made-up, altered or expired reference all answer match false. Each lookup is audited with who and when only */
+        post: operations["postReminderReferenceLookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/termination": {
         parameters: {
             query?: never;
@@ -1285,6 +1302,28 @@ export interface components {
             /** @enum {string} */
             channel: "email" | "talk";
             recipient: string;
+        };
+        ReminderReferenceLookupRequest: {
+            /** @description The reference, or a line of the message that holds it */
+            reference: string;
+        };
+        ReminderReferenceLookupResponse: {
+            data: {
+                match: boolean;
+                /** @enum {string|null} */
+                kind: "reminder" | "test_send" | null;
+                /** @description The account's current username; null when the delivery no longer links to a person, and for a test send */
+                username: string | null;
+                /** Format: date */
+                sendDay: string | null;
+                /** @description Every consultation in the message (a combined mail has several) */
+                items: {
+                    conversationId: number;
+                    title: string;
+                    /** @enum {string} */
+                    reminderType: "phase_opened" | "phase_closing" | "results";
+                }[];
+            };
         };
         ReminderTestSendResponse: {
             data: {
@@ -3486,6 +3525,66 @@ export interface operations {
                 };
             };
             /** @description Too many test sends */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postReminderReferenceLookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderReferenceLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description The lookup result: match false, or the message the reference points to */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderReferenceLookupResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many lookups */
             429: {
                 headers: {
                     [name: string]: unknown;

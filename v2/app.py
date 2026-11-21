@@ -66,7 +66,7 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
-from services import reporting_rules
+from services import reminder_reference, reporting_rules
 from services.phase_timeline import PHASE_OPERATIONS, build_phase_timeline
 from services.results_report import ReportPublished, build_results_report
 from services.intermediate_results import build_intermediate_results
@@ -4205,6 +4205,8 @@ def _run_reminder_test(*, wiki: str, channel: str, recipient: str):
         result = send_test_message(
             wiki=wiki, channel=channel, recipient=recipient, settings=settings,
             message=message, client_factory=default_client_factory(settings),
+            reference=lambda: reminder_reference.for_test_send(
+                datetime.now(timezone.utc).replace(tzinfo=None)),
         )
     except ReminderTestRefused as exc:
         record_audit('reminder.test', outcome='refused', reason=exc.code, **audited, **origin)
@@ -4237,6 +4239,29 @@ def _send_reminder_test_api_payload(body: dict) -> dict:
     return {
         'outcome': result.outcome, 'reason': result.reason, 'code': result.code,
         'sentVia': result.sent_via,
+    }
+
+
+def _reminder_reference_lookup_api_payload(body: dict) -> dict:
+    """Super admins only (#622): what a wiki-mail reference points to.
+
+    A made-up, altered or expired reference (its key deleted after 90 days) all get
+    the same answer, ``match: false``. Each lookup writes one audit row with who and
+    when only: not the reference, and not what it pointed to."""
+    if not _is_global_admin():
+        _refuse_admin()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    found = reminder_reference.lookup(body['reference'], now)
+    record_audit('reminder.reference_lookup')
+    if found is None:
+        return {'match': False, 'kind': None, 'username': None, 'sendDay': None, 'items': []}
+    return {
+        'match': True,
+        'kind': found.kind,
+        'username': found.username,
+        'sendDay': found.send_day.isoformat(),
+        'items': [{'conversationId': item.conversation_id, 'title': item.title,
+                   'reminderType': item.reminder_type} for item in found.items],
     }
 
 
@@ -6658,7 +6683,8 @@ def create_app(test_config: dict | None = None) -> Flask:
             return ', '.join(map(str, values)) or '-'
         click.echo(f'Day {handled_day}. Reminders handled: {ids(result.due)}; waiting for a '
                    f'super admin: {ids(result.waiting_for_trigger)}; missed and dropped as '
-                   f'expired: {ids(result.missed)}; rows unlinked: {result.unlinked}.')
+                   f'expired: {ids(result.missed)}; rows unlinked: {result.unlinked}; '
+                   f'reference keys deleted: {result.reference_keys_deleted}.')
         for label, counts in (('This run', result.this_run), ('All rows', result.totals)):
             if counts:
                 click.echo(f'{label}: ' + ', '.join(
@@ -6883,6 +6909,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_global_admin=_set_global_admin_api_payload,
         resolve_reminder_test=_reminder_test_api_payload,
         send_reminder_test=_send_reminder_test_api_payload,
+        lookup_reminder_reference=_reminder_reference_lookup_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,

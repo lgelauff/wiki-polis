@@ -171,6 +171,18 @@ TAGS:
     - admin-policy-span-years
     - admin-provenance-aria
     - admin-provenance-title
+    - admin-reminder-reference-btn
+    - admin-reminder-reference-heading
+    - admin-reminder-reference-intro
+    - admin-reminder-reference-label
+    - admin-reminder-reference-no-match
+    - admin-reminder-reference-rate-limited
+    - admin-reminder-reference-sent-to
+    - admin-reminder-reference-sent-to-unknown
+    - admin-reminder-reference-test-send
+    - admin-reminder-reference-type-phase_closing
+    - admin-reminder-reference-type-phase_opened
+    - admin-reminder-reference-type-results
     - admin-reminder-test-btn
     - admin-reminder-test-channel-email
     - admin-reminder-test-channel-talk

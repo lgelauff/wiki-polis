@@ -19,6 +19,7 @@ from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass
 
+from services.reminder_reference import body_with, subject_with
 from services.wiki_bot import (
     FALLBACK_WIKI, NOBOTS, NOT_EMAILABLE, OUTCOME_UNKNOWN, WIKI_HOSTS, BotCredentials,
     WikiBotClient, WikiBotError,
@@ -133,11 +134,16 @@ def default_client_factory(settings: ReminderSettings) -> ClientFactory:
 
 
 def send_test_message(*, wiki: str, channel: str, recipient: str, settings: ReminderSettings,
-                      message: ReminderTestMessage, client_factory: ClientFactory) -> ReminderTestResult:
+                      message: ReminderTestMessage, client_factory: ClientFactory,
+                      reference: Callable[[], str] | None = None) -> ReminderTestResult:
+    """``reference`` makes the wiki-mail's reference (#622); it is asked for only when a
+    mail is about to go out. A wiki-mail without one is refused; a talk note gets none."""
     if wiki not in WIKI_HOSTS:
         raise ReminderTestRefused('unknown_wiki')
     if channel not in CHANNELS:
         raise ReminderTestRefused('unknown_channel')
+    if channel == 'email' and reference is None:
+        raise ValueError('a test wiki-mail needs its reference')
     recipient = normalize_username(recipient)
     if recipient not in settings.test_recipients:
         raise ReminderTestRefused('recipient_not_allowed')
@@ -153,7 +159,7 @@ def send_test_message(*, wiki: str, channel: str, recipient: str, settings: Remi
             return client
         try:
             if channel == 'email':
-                return _send_email(wiki, recipient, message, open_client)
+                return _send_email(wiki, recipient, message, open_client, reference)
             client = open_client(wiki)
             if not client.talk_page_allows_bot(recipient):
                 return ReminderTestResult(FAILED, NOBOTS)
@@ -167,7 +173,7 @@ def send_test_message(*, wiki: str, channel: str, recipient: str, settings: Remi
             return ReminderTestResult(outcome, exc.reason, code=exc.code)
 
 
-def _send_email(wiki, recipient, message, open_client) -> ReminderTestResult:
+def _send_email(wiki, recipient, message, open_client, reference) -> ReminderTestResult:
     client = open_client(wiki)
     if not client.is_emailable(recipient):
         if wiki == FALLBACK_WIKI:
@@ -175,5 +181,7 @@ def _send_email(wiki, recipient, message, open_client) -> ReminderTestResult:
         client = open_client(FALLBACK_WIKI)
         if not client.is_emailable(recipient):
             return ReminderTestResult(FAILED, NOT_EMAILABLE)
-    client.send_email(recipient, subject=message.subject, text=message.body)
+    ref = reference()
+    client.send_email(recipient, subject=subject_with(message.subject, ref),
+                      text=body_with(message.body, ref))
     return ReminderTestResult(SENT, sent_via=client.wiki)

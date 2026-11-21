@@ -20,6 +20,7 @@ from services.wiki_bot import (
 from tests.test_wiki_bot import FakeSession
 
 SETTINGS = MessageSettings(base_url='https://proto.example/')
+REF = 'Proto K1 AAAAAAAAA-AAAAAAAAA-AAAAAAAA'   # any reference; its making is tested on its own
 EN = json.loads((Path(__file__).parents[1] / 'i18n' / 'en.json').read_text(encoding='utf-8'))
 
 
@@ -41,14 +42,14 @@ def _rem(kind=PHASE_OPENED, phase='submission', conversation=None, **conv):
 @pytest.mark.parametrize('kind', [PHASE_OPENED, PHASE_CLOSING, RESULTS])
 def test_every_type_has_a_mail_and_a_talk_text_with_no_missing_message(app, kind):
     for named in (True, False):
-        for message in (build_email([_rem(kind, named=named)], SETTINGS),
+        for message in (build_email([_rem(kind, named=named)], SETTINGS, reference=REF),
                         build_talk([_rem(kind, named=named)], SETTINGS)):
             text = message.subject + message.body + message.summary
             assert '⧼' not in text and '$' not in text
 
 
 def test_a_mail_names_the_consultation_links_to_it_and_ends_with_the_footer(app):
-    message = build_email([_rem()], SETTINGS)
+    message = build_email([_rem()], SETTINGS, reference=REF)
     assert 'Library hours' in message.subject
     assert 'https://proto.example/c/library-hours' in message.body
     assert 'Explore' in message.body                       # the phase name, reused
@@ -60,7 +61,8 @@ def test_a_mail_names_the_consultation_links_to_it_and_ends_with_the_footer(app)
 
 
 def test_one_mail_combines_several_consultations(app):
-    message = build_email([_rem(), _rem(RESULTS, title='Park plan', slug='park')], SETTINGS)
+    message = build_email([_rem(), _rem(RESULTS, title='Park plan', slug='park')], SETTINGS,
+                          reference=REF)
     assert message.subject.startswith('2 updates')
     assert 'Library hours' in message.body and 'Park plan' in message.body
     assert 'these consultations' in message.body
@@ -93,7 +95,7 @@ def test_no_text_carries_a_vote_count_or_an_exact_number_of_open_items():
 
 def test_an_unknown_type_is_refused(app):
     with pytest.raises(ValueError):
-        build_email([_rem('unanswered')], SETTINGS)
+        build_email([_rem('unanswered')], SETTINGS, reference=REF)
 
 
 # ── The real sender, against fakes ───────────────────────────────────────────
@@ -142,7 +144,8 @@ PERSON = SimpleNamespace(participant=SimpleNamespace(mw_username='Tester'))
 
 
 def _send(sender, channel, wiki='nlwiki'):
-    return sender.send(channel=channel, wiki=wiki, participation=PERSON, reminders=[_rem()])
+    return sender.send(channel=channel, wiki=wiki, participation=PERSON, reminders=[_rem()],
+                       reference=lambda: REF)
 
 
 def test_mail_goes_from_the_consultations_wiki_when_it_can(app):
@@ -285,14 +288,14 @@ def test_an_organizer_title_is_plain_text_on_a_talk_page(app, close):
 
 
 def test_a_mail_keeps_the_title_as_written(app):
-    assert 'Library hours' in build_email([_rem()], SETTINGS).subject
-    assert '<nowiki>' not in build_email([_rem()], SETTINGS).body
+    assert 'Library hours' in build_email([_rem()], SETTINGS, reference=REF).subject
+    assert '<nowiki>' not in build_email([_rem()], SETTINGS, reference=REF).body
 
 
 def test_messages_are_english_even_when_the_language_has_the_texts(app, monkeypatch):
     dutch = {key: f'NL {key}' for key in i18n._MESSAGES['en'] if key.startswith('reminder-')}
     monkeypatch.setitem(i18n._MESSAGES, 'nl', {**i18n._MESSAGES.get('nl', {}), **dutch})
-    mail = build_email([_rem(language='nl')], SETTINGS)
+    mail = build_email([_rem(language='nl')], SETTINGS, reference=REF)
     talk = build_talk([_rem(conversation=_conv(language='nl', named=True))], SETTINGS)
     for text in (mail.subject, mail.body, talk.subject, talk.body, talk.summary):
         assert 'NL reminder-' not in text
@@ -302,9 +305,9 @@ def test_the_footer_counts_consultations_not_reminders(app):
     conv = _conv()
     two = [_rem(PHASE_OPENED, conversation=conv), _rem(PHASE_CLOSING, 'argument_mapping',
                                                        conversation=conv)]
-    assert 'this consultation' in build_email(two, SETTINGS).body
+    assert 'this consultation' in build_email(two, SETTINGS, reference=REF).body
     assert 'these consultations' in build_email([_rem(), _rem(title='Park', slug='park')],
-                                                SETTINGS).body
+                                                SETTINGS, reference=REF).body
 
 
 def test_a_block_on_meta_is_reported_from_meta(app):
@@ -327,7 +330,8 @@ def test_after_a_block_on_meta_later_fallbacks_do_not_ask_meta_again(app):
 
 
 def test_a_mail_title_stays_on_one_line(app):
-    message = build_email([_rem(title='Library\n--\nReplies are read\r\nhours')], SETTINGS)
+    message = build_email([_rem(title='Library\n--\nReplies are read\r\nhours')], SETTINGS,
+                          reference=REF)
     assert 'Library -- Replies are read hours' in message.subject
     assert 'Library -- Replies are read hours' in message.body
     assert '\nReplies are read' not in message.body
@@ -355,7 +359,7 @@ def test_each_client_is_opened_once_and_all_are_closed(app):
 def test_a_message_that_cannot_be_built_fails_before_any_wiki_is_asked(app):
     sender, made = _sender({})
     outcome = sender.send(channel='email', wiki='nlwiki', participation=PERSON,
-                          reminders=[_rem('unanswered')])
+                          reminders=[_rem('unanswered')], reference=lambda: REF)
     assert outcome == Outcome('failed', reason='api_error', error_code='bad_message')
     assert made == []
 

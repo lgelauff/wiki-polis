@@ -11,6 +11,7 @@ import {
   putGlobalAdmin,
 } from '../../api/queries';
 import {AdminComing} from './admin-coming';
+import {AdminReminderReference} from './admin-reminder-reference';
 import {AdminReminderTest} from './admin-reminder-test';
 import {AdminShell} from './admin-shell';
 import {EligibilityPolicyField, refreshPoliciesAfterRefusal} from './eligibility-policy-field';
@@ -301,6 +302,8 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         </details>
 
         <AdminReminderTest csrfToken={csrfToken} />
+
+        <AdminReminderReference csrfToken={csrfToken} />
 
         {/* What is not built yet, last on the page (see `AdminComing`). */}
         <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />

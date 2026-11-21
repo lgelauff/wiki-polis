@@ -39,7 +39,7 @@ from db import (
     Conversation, Participation, Reminder, ReminderDelivery, REMINDER_CHANNELS,
     REMINDER_DELIVERY_STATUSES, REMINDER_FAILURE_REASONS, db,
 )
-from services import reminder_wikis
+from services import reminder_reference, reminder_wikis
 from services.reminders import is_expired, recipients
 
 log = logging.getLogger(__name__)
@@ -61,13 +61,15 @@ class Outcome:
 
 class Sender(Protocol):
     def send(self, *, channel: str, wiki: str, participation: Participation,
-             reminders: list[Reminder]) -> Outcome: ...
+             reminders: list[Reminder], reference: Callable[[], str] | None = None,
+             ) -> Outcome: ...
 
 
 class DryRunSender:
-    """Records the send it would make; no network call."""
+    """Records the send it would make; no network call. It makes no reference
+    either: a reference is made only for a message that leaves (#622)."""
 
-    def send(self, *, channel, wiki, participation, reminders):
+    def send(self, *, channel, wiki, participation, reminders, reference=None):
         return Outcome('dry_run', sent_via=wiki)
 
 
@@ -84,6 +86,7 @@ class BatchResult:
     blocked_wikis: set = field(default_factory=set)
     stale_claims: int = 0
     unlinked: int = 0
+    reference_keys_deleted: int = 0
 
 
 class ReminderNotFound(LookupError):
@@ -224,6 +227,7 @@ def run_batch(
             ):
                 result.totals[(channel, status)] += count
         result.unlinked = unlink_ended(now)
+        result.reference_keys_deleted = reminder_reference.delete_unused_keys(now)
     return result
 
 
@@ -436,10 +440,14 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused,
         elif channel == 'email' and room <= 0:
             _finish(live, Outcome('not_sent_limit'), now, result)
         else:
+            # A wiki-mail carries the reference of its first row (#622); the sender
+            # asks for it just before sending, so a dry run makes none.
+            reference = (_reference_for(live[0].id, now) if channel == 'email' else None)
             try:
                 outcome = _valid(sender.send(channel=channel, wiki=wiki,
                                              participation=live[0].participation,
-                                             reminders=[row.reminder for row in live]))
+                                             reminders=[row.reminder for row in live],
+                                             reference=reference))
             except Exception:
                 log.exception('reminders: the sender raised; recorded as outcome_unknown')
                 outcome = Outcome('failed', reason='outcome_unknown')
@@ -453,7 +461,14 @@ def _hand_out(due, *, now, sender, email_cap, result, active_phases, is_paused,
             if live[1:]:
                 rest = Outcome('combined') if outcome.status in _DELIVERED else outcome
                 _finish(live[1:], rest, now, result)
+                for row in live[1:]:
+                    # In the same message as the first row, whose reference it carried.
+                    row.combined_into_id = live[0].id
         db.session.commit()
+
+
+def _reference_for(delivery_id: int, now: datetime) -> Callable[[], str]:
+    return lambda: reminder_reference.for_delivery(delivery_id, now)
 
 
 def _may_have_gone_out(outcome: Outcome) -> bool:

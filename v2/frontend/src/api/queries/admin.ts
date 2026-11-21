@@ -170,6 +170,14 @@ export async function postReminderTestSend(
   }))).data;
 }
 
+export async function postReminderReferenceLookup(
+  body: components['schemas']['ReminderReferenceLookupRequest'], csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/reminder-reference-lookups', {
+    body, headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const adminLifecycleQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-lifecycle', conversationId],
   queryFn: async () => (

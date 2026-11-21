@@ -26,6 +26,9 @@ dependencies = [
     # HTTP
     "requests>=2.31",
 
+    # Encrypted wiki-mail references (#622): AES key wrap
+    "cryptography>=46",
+
     # Pseudonym generation
     "coolname>=2.2",
 

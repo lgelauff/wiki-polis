@@ -63,6 +63,7 @@ def run(wiki='nlwiki', channel='email', recipient='Tester', *, conf=None, log=No
     result = send_test_message(
         wiki=wiki, channel=channel, recipient=recipient, settings=conf or settings(),
         message=MESSAGE, client_factory=lambda w, c: FakeBot(w, log, login=c, **bot),
+        reference=lambda: 'Proto K1 AAAAAAAAA-AAAAAAAAA-AAAAAAAA',
     )
     return result, log
 
@@ -112,7 +113,10 @@ def test_no_bot_login_is_a_dry_run():
 def test_email_is_sent_from_the_chosen_wiki_when_the_account_accepts_it_there():
     result, log = run(recipient='tester', emailable=('nlwiki', 'metawiki'))
     assert (result.outcome, result.sent_via) == (SENT, 'nlwiki')
-    assert log[-2] == ('email', 'nlwiki', 'Tester', 'Proto test message', 'Body')
+    # The mail carries its reference (#622) in the subject and as the body's last line.
+    ref = 'Proto K1 AAAAAAAAA-AAAAAAAAA-AAAAAAAA'
+    assert log[-2] == ('email', 'nlwiki', 'Tester', f'Proto test message [{ref}]',
+                       f'Body\n\nReference: {ref}')
     assert log[-1] == ('login', 'Protowikibot@mail')
 
 
