@@ -87,6 +87,11 @@ outsized influence: they appear first, get the most votes, and frame the whole
 conversation [1]. About 1 in 10 participants will add their own
 statements; the rest only vote [3].
 
+**Drawing statements from a document** (a white paper, a strategy draft)? See
+[Sourcing statements from a document](guide_sourcing-statements.md) for a worked method:
+how to harvest and rewrite candidates, why measured figures belong in the intro rather
+than the statement pool, and how to handle where the statements came from.
+
 **What makes a statement good:**
 
 - **One claim (atomic).** Never join two claims with "and / but / because." A compound
