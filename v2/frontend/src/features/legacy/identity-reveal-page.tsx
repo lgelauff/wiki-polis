@@ -14,6 +14,7 @@ import {richHtml} from '../../i18n/rich-html';
 import {RevealTimeline} from './reveal-timeline';
 import {LoginPrompt} from './login-prompt';
 import {LogoutChoice} from './logout-choice';
+import {maintenanceCopy} from '../../maintenance';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -129,7 +130,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
                 <input type="checkbox" name="confirm" value="1" required checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
                 <span>{withNodes(msg('reveal-consent', nodeSlot(0), nodeSlot(1)), <strong>{data.wikimediaUsername}</strong>, <strong>{data.pseudonym}</strong>)}</span>
               </label>
-              {mutation.error && <p className="error" role="alert">{refused ? msg('reveal-submit-unavailable') : msg('reveal-submit-unknown')}</p>}
+              {mutation.error && <p className="error" role="alert">{refused ? msg('reveal-submit-unavailable') : maintenanceCopy(msg, mutation.error) ?? msg('reveal-submit-unknown')}</p>}
               <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
                 <button type="submit" className="participate-btn" style={{background: 'var(--ink)'}} disabled={mutation.isPending}>{msg('reveal-submit')}</button>
                 <InternalLink href={data.links.conversation} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>{msg('common-cancel')}</InternalLink>

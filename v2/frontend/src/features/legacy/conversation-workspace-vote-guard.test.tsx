@@ -18,6 +18,7 @@ import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 
+import en from '../../../../i18n/en.json';
 import {App} from '../../app';
 import {server} from '../../test/server';
 import {createQueryClient} from '../../query-client';
@@ -81,7 +82,7 @@ function serveTwoCards() {
   const votes: {statementId: number; choice: string}[] = [];
   const reads = {count: 0};
   let card = 0;
-  let failing = false;
+  let failing: string | false = false;
   let held: Promise<void> | null = null;
   let release = () => {};
   server.use(
@@ -91,7 +92,7 @@ function serveTwoCards() {
       if (held) await held;
       if (failing) {
         return HttpResponse.json({
-          error: {code: 'upstream_unavailable', message: 'The voting service is unavailable.'},
+          error: {code: failing, message: 'The voting service is unavailable.'},
         }, {status: 503});
       }
       return HttpResponse.json(exploreState(card, 3 + card));
@@ -113,8 +114,8 @@ function serveTwoCards() {
     votes,
     reads,
     /** Every deck reload from now on fails with a 503. */
-    failDeck: () => {
-      failing = true;
+    failDeck: (code = 'upstream_unavailable') => {
+      failing = code;
     },
     /** What the deck serves next, the way advancing the queue would. */
     answerAndMoveOn: () => {
@@ -273,6 +274,18 @@ test('when the reload fails, the error is shown, the block is lifted and a vote 
     {statementId: 12, choice: 'agree'},
     {statementId: 12, choice: 'disagree'},
   ]);
+});
+
+test('when the reload is refused for maintenance, the maintenance notice is shown (#619)', async () => {
+  const deck = serveTwoCards();
+  renderApp();
+
+  tap(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000}));
+  await screen.findByText('Your response: Agree', {selector: '#voted-label'});
+  deck.failDeck('maintenance');
+  tap(screen.getByRole('button', {name: /Move on/}));
+
+  expect(await screen.findByText(en['maintenance-error'], {selector: '#conv-next-error p'})).toBeVisible();
 });
 
 test('a keyboard activation within 1.5 s of a new card is ignored, and one after it counts', async () => {

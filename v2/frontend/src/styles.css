@@ -1006,3 +1006,15 @@ h1[tabindex="-1"]:focus { outline: none; }
   .featured-selection li, .featured-candidates > ul > li { grid-template-columns: 1fr; gap: .8rem; }
   .featured-candidates dl { flex-wrap: wrap; }
 }
+
+/* Maintenance mode is on (#619), shown to site admins only, under the header of either shell.
+   A status, not an action: plain text on an amber tint, full width so it is not missed. */
+.maintenance-banner {
+  margin: 0;
+  padding: 8px 20px;
+  background: #fdf3e2;
+  border-bottom: 1px solid #e7c58e;
+  color: #6b3a00;
+  font-size: 13px;
+  line-height: 1.5;
+}

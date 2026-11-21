@@ -6,6 +6,7 @@ import {informedVotingQuery, putInformedVote} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {nodeSlot, withNodes} from '../../i18n/message-nodes';
+import {maintenanceCopy} from '../../maintenance';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type Card = components['schemas']['InformedVotingCard'];
@@ -272,7 +273,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
               first makes the error unreachable once a card has been voted — and a
               rejected re-vote (a 409 on a paused round, which is the state the repair
               runbook puts the tool in) would silently keep showing the old choice. */}
-          <span className={`p6-voted-badge${!error && selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{error ? msg('conv-p6-vote-failed') : <><span aria-hidden="true">✓</span> {selected ? recordedLabel(msg, selected) : null}</>}</span>
+          <span className={`p6-voted-badge${!error && selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{error ? maintenanceCopy(msg, vote.error) ?? msg('conv-p6-vote-failed') : <><span aria-hidden="true">✓</span> {selected ? recordedLabel(msg, selected) : null}</>}</span>
           {/* Answered before this visit. The badge above needs a known choice; this one
               only claims that a vote exists, which is all the read contract supports.
               Gated here rather than in CSS: the stylesheet is not loaded under test, so a

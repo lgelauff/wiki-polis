@@ -476,3 +476,16 @@ test('the number in each progress circle meets text contrast against what is beh
     }
   }
 });
+
+test('a mark refused for maintenance is reverted and says why (#619)', async () => {
+  serve(mapping());
+  server.use(http.put(url('/api/v1/conversations/community-strategy/arguments/:id/priority'),
+    () => HttpResponse.json({error: {code: 'maintenance', message: 'Paused.'}}, {status: 503})));
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+  const card = document.querySelector<HTMLElement>('[data-arg-id="92"]')!;
+  fireEvent.click(card);
+  expect(await within(card).findByText('(maintenance-error)')).toBeInTheDocument();
+  await waitFor(() => expect(card.querySelector('.argument-checkbox')).toHaveAttribute('aria-pressed', 'false'));
+});
