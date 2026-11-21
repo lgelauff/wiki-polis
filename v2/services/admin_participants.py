@@ -4,11 +4,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import nh3
 from sqlalchemy.orm import joinedload
 
 from db import (Argument, ArgumentVote, Conversation, ConversationBan,
                 FeaturedStatement, Participant, Participation, db)
+from services.text_rules import clean_note
 
 
 def _utc_iso(value) -> str | None:
@@ -196,7 +196,7 @@ def set_participant_access(
         participant_id=participant_id,
         lifted_at=None,
     ).first()
-    clean_summary = nh3.clean((summary or '').strip(), tags=frozenset())[:1000]
+    clean_summary = clean_note(summary)
     changed = False
     operation = None
     changed_at = None

@@ -229,7 +229,7 @@ Treat it as a tripwire on one known path, not as enforcement of the property abo
 
 ### `arguments`
 `id` PK · `featured_statement_id` FK (CASCADE) · `proposer_pseudonym` str(80) nullable
-(no FK) · `body` str(280) · `side` enum(`pro`/`con`) · `hidden` bool=F · `created_at`.
+(no FK) · `body` str(1000) (280 characters as displayed, stored as typed, not HTML-escaped; #616) · `side` enum(`pro`/`con`) · `hidden` bool=F · `created_at`.
 Unique `(featured_statement_id, proposer_pseudonym, side)` — one argument per side per
 pseudonym; a **NULL `proposer_pseudonym` (seeded argument) is exempt** (SQL
 `NULL != NULL`), so multiple seeds per side are allowed.

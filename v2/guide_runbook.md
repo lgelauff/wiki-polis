@@ -16,6 +16,26 @@ them:
 - **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
 - **Create voucher codes** → [Voucher codes](#voucher-codes) below (until the organizer screens exist).
 
+## Seeds stored escaped before #616
+
+Until #616, organizer seed statements were HTML-escaped before they were sent to Polis,
+so some show "&amp;" or "&lt;" there. After the #616 migration, list them once, inside
+the webservice shell like a migration, and correct each one in Polis by hand:
+
+```bash
+# Read-only. Tab-separated: slug, polis or cache, statement id, text as stored, as it should read.
+flask --app app escaped-seeds > escaped-seeds.tsv        # every consultation
+flask --app app escaped-seeds <slug>                    # one consultation
+
+# Once those seeds are fixed in Polis: empty Proto's escaped copies, so they fill again
+# from Polis with the fixed text.
+flask --app app escaped-seeds --clear-cache
+```
+
+"cache" rows are Proto's own copy of a featured statement. It is only filled while it is
+empty, so it keeps the escaped text until it is cleared. Run `--clear-cache` after the
+fix in Polis, not before: a copy that fills from a seed still escaped stays escaped.
+
 ## Voucher codes
 
 Until the organizer screens exist (#368), codes for a voucher-gated process are created

@@ -23,6 +23,7 @@ import {StatementProvenance} from './admin-provenance';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
+import {countCharacters} from '../../text-rules';
 
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
@@ -231,7 +232,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const [seedText, setSeedText] = useState('');
   // A seed over the limit is kept as typed, never cut (#558); Add waits until it fits.
-  const seedOverLimit = Math.max(0, seedText.length - 280);
+  const seedCharacters = countCharacters(seedText);
+  const seedOverLimit = Math.max(0, seedCharacters - 280);
   const [derivedFrom, setDerivedFrom] = useState('');
   const [seedMeta, setSeedMeta] = useState(false);
   const [importText, setImportText] = useState('');
@@ -517,7 +519,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                 </label>
                 <div className="admin-form__actions">
                   <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending || seedOverLimit > 0}>{msg('stmts-seed-submit')}</button>
-                  <span id="seed-count" className="admin-form__count">{seedOverLimit > 0 ? msg('conv-composer-over-limit', seedOverLimit) : `${seedText.length} / 280`}</span>
+                  <span id="seed-count" className="admin-form__count">{seedOverLimit > 0 ? msg('conv-composer-over-limit', seedOverLimit) : `${seedCharacters} / 280`}</span>
                 </div>
                 <FormFeedback lines={seedFeedback} />
               </form>

@@ -150,11 +150,11 @@ def test_admin_flag_resolution_is_idempotent_and_audited_once(
     assert first.get_json()['data']['changed'] is True
     assert replay.get_json()['data']['changed'] is False
     assert replay.get_json()['data']['resolution']['note'] == (
-        'Removed identifying details'
+        '<b>Removed identifying details</b>'   # #616: stored as typed
     )
     db.session.refresh(flag)
     assert flag.status == 'resolved'
-    assert flag.resolution_note == 'Removed identifying details'
+    assert flag.resolution_note == '<b>Removed identifying details</b>'
     assert [event.operation for event in AuditEvent.query.all()] == [
         'content_flag.resolve',
     ]

@@ -325,7 +325,7 @@ def test_seed_import_sanitizes_deduplicates_and_reports_counts(
         response = admin_client.post(
             f'/api/v1/admin/conversations/{conversation.id}/statement-imports',
             json={'statements': [
-                '<b>New seed</b>', 'new seed', '=Formula', 'Approved seed',
+                'New seed', 'new seed', '=Formula', 'Approved seed',
             ]},
         )
 
@@ -357,7 +357,7 @@ def test_single_seed_supports_plain_and_correction_provenance(
     ):
         corrected = admin_client.post(
             f'/api/v1/admin/conversations/{conversation.id}/statements',
-            json={'text': '<b>Corrected seed</b>', 'derivedFromId': 12},
+            json={'text': '  Corrected & seed\r\n', 'derivedFromId': 12},
         )
         plain = admin_client.post(
             f'/api/v1/admin/conversations/{conversation.id}/statements',
@@ -373,11 +373,11 @@ def test_single_seed_supports_plain_and_correction_provenance(
         'links': {'statements': f'/api/v1/admin/conversations/{conversation.id}/statements'},
     }
     assert server.add_seed.call_args_list[0].args == (
-        conversation.polis_id, 'Corrected seed',
+        conversation.polis_id, 'Corrected & seed',
     )
     provenance.assert_called_once_with(
         conversation.id, 42, 12,
-        parent_text='Approved seed', new_text='Corrected seed',
+        parent_text='Approved seed', new_text='Corrected & seed',
     )
     assert plain.status_code == 201
     assert plain.get_json()['data']['provenanceRecorded'] is None
@@ -395,7 +395,8 @@ def test_single_seed_limit_counts_the_typed_text_not_its_escaped_form(
     refused a statement the counter allowed."""
     server, _participant = _upstream()
     server.add_seed.return_value = (42, True)
-    accepted = ['&' * 280, '<' * 280, 'Tom & Jerry ' * 23, '\U0001F600' * 280]
+    accepted = ['&' * 280, '<' * 280, 'Tom & Jerry ' * 23, '\U0001F600' * 280,
+                '\U0001F1F3\U0001F1F1' * 280]   # #616: 280 flags, 560 code points
     with patch('app._polis_server_client', return_value=server):
         responses = [
             admin_client.post(

@@ -1,0 +1,230 @@
+{
+ "_doc": "Shared by tests/test_text_rules.py and src/text-rules.test.ts (#616). input -> clean is what is stored; characters is the displayed count of clean; fits is the 280 rule with the hidden caps. When repeat is set, input and clean are repeated that many times; with append, the single character is followed by append repeated instead.",
+ "cases": [
+  {
+   "name": "ampersand",
+   "input": "A & B",
+   "clean": "A & B",
+   "characters": 5,
+   "fits": true
+  },
+  {
+   "name": "markup is text",
+   "input": "<b>x</b>",
+   "clean": "<b>x</b>",
+   "characters": 8,
+   "fits": true
+  },
+  {
+   "name": "quotes",
+   "input": "\"q\" it's",
+   "clean": "\"q\" it's",
+   "characters": 8,
+   "fits": true
+  },
+  {
+   "name": "entity stays as typed",
+   "input": "&amp;",
+   "clean": "&amp;",
+   "characters": 5,
+   "fits": true
+  },
+  {
+   "name": "combining accent",
+   "input": "cafe\u0301",
+   "clean": "caf\u00e9",
+   "characters": 4,
+   "fits": true
+  },
+  {
+   "name": "flag",
+   "input": "\ud83c\uddf3\ud83c\uddf1",
+   "clean": "\ud83c\uddf3\ud83c\uddf1",
+   "characters": 1,
+   "fits": true
+  },
+  {
+   "name": "family emoji",
+   "input": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+   "clean": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+   "characters": 1,
+   "fits": true
+  },
+  {
+   "name": "skin tone",
+   "input": "\ud83d\udc4d\ud83c\udffd",
+   "clean": "\ud83d\udc4d\ud83c\udffd",
+   "characters": 1,
+   "fits": true
+  },
+  {
+   "name": "keycap",
+   "input": "1\ufe0f\u20e3",
+   "clean": "1\ufe0f\u20e3",
+   "characters": 1,
+   "fits": true
+  },
+  {
+   "name": "arabic",
+   "input": "\u0645\u0631\u062d\u0628\u0627",
+   "clean": "\u0645\u0631\u062d\u0628\u0627",
+   "characters": 5,
+   "fits": true
+  },
+  {
+   "name": "CRLF becomes newline",
+   "input": "a\r\nb",
+   "clean": "a\nb",
+   "characters": 3,
+   "fits": true
+  },
+  {
+   "name": "lone CR becomes newline",
+   "input": "a\rb",
+   "clean": "a\nb",
+   "characters": 3,
+   "fits": true
+  },
+  {
+   "name": "outer whitespace stripped",
+   "input": "  hi \n",
+   "clean": "hi",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "tab kept inside",
+   "input": "a\tb",
+   "clean": "a\tb",
+   "characters": 3,
+   "fits": true
+  },
+  {
+   "name": "NUL removed",
+   "input": "a\u0000b",
+   "clean": "ab",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "C1 control removed",
+   "input": "a\u0085b",
+   "clean": "ab",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "right-to-left override removed",
+   "input": "ab\u202ecd",
+   "clean": "abcd",
+   "characters": 4,
+   "fits": true
+  },
+  {
+   "name": "isolate removed",
+   "input": "a\u2066b\u2069",
+   "clean": "ab",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "line separator removed",
+   "input": "a\u2028b",
+   "clean": "ab",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "noncharacter removed",
+   "input": "a\ufdd0b\uffff",
+   "clean": "ab",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "RLM kept",
+   "input": "a\u200fb",
+   "clean": "a\u200fb",
+   "characters": 3,
+   "fits": true
+  },
+  {
+   "name": "ZWNJ kept (joins the cluster before it)",
+   "input": "a\u200cb",
+   "clean": "a\u200cb",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "only invisible is empty",
+   "input": "\u202e\u0000 ",
+   "clean": "",
+   "characters": 0,
+   "fits": false
+  },
+  {
+   "name": "empty",
+   "input": "",
+   "clean": "",
+   "characters": 0,
+   "fits": false
+  },
+  {
+   "name": "280 characters fit",
+   "input": "x",
+   "clean": "x",
+   "characters": 280,
+   "fits": true,
+   "repeat": 280
+  },
+  {
+   "name": "281 characters do not fit",
+   "input": "x",
+   "clean": "x",
+   "characters": 281,
+   "fits": false,
+   "repeat": 281
+  },
+  {
+   "name": "280 ampersands fit",
+   "input": "&",
+   "clean": "&",
+   "characters": 280,
+   "fits": true,
+   "repeat": 280
+  },
+  {
+   "name": "280 emoji fit",
+   "input": "\ud83d\ude00",
+   "clean": "\ud83d\ude00",
+   "characters": 280,
+   "fits": true,
+   "repeat": 280
+  },
+  {
+   "name": "280 flags fit (560 code points)",
+   "input": "\ud83c\uddf3\ud83c\uddf1",
+   "clean": "\ud83c\uddf3\ud83c\uddf1",
+   "characters": 280,
+   "fits": true,
+   "repeat": 280
+  },
+  {
+   "name": "over the 1000 code point cap",
+   "input": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+   "clean": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+   "characters": 150,
+   "fits": false,
+   "repeat": 150
+  },
+  {
+   "name": "one oversized cluster",
+   "input": "x",
+   "clean": "x",
+   "characters": 1,
+   "fits": false,
+   "append": "\u0301",
+   "repeat": 50
+  }
+ ]
+}

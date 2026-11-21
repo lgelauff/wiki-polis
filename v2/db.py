@@ -403,7 +403,7 @@ class Argument(db.Model):
     featured_statement_id = db.Column(db.Integer, db.ForeignKey('featured_statements.id', ondelete='CASCADE'),
                                       nullable=False)
     proposer_pseudonym    = db.Column(db.String(80), nullable=True)
-    body                  = db.Column(db.String(280), nullable=False)
+    body                  = db.Column(db.String(1000), nullable=False)  # 280 characters as displayed; 1000 code points cap (#616)
     side                  = db.Column(db.Enum(*ARGUMENT_SIDES, name='argument_side'), nullable=False)
     hidden                = db.Column(db.Boolean, nullable=False, default=False)
     created_at            = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

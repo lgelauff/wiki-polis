@@ -13,6 +13,7 @@ import {LegacyContentFlag} from './legacy-content-flag';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {richHtml} from '../../i18n/rich-html';
+import {countCharacters} from '../../text-rules';
 
 type Mapping = components['schemas']['ArgumentMapping'];
 type Featured = components['schemas']['ArgumentFeaturedStatement'];
@@ -60,7 +61,8 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
   );
   const [body, setBody] = useState('');
   // Text over the limit is kept as typed, never cut (#558); Submit waits until it fits.
-  const overLimit = Math.max(0, body.length - ARGUMENT_MAX_CHARACTERS);
+  const characters = countCharacters(body);
+  const overLimit = Math.max(0, characters - ARGUMENT_MAX_CHARACTERS);
   const countId = `contribute-count-${featuredId}-${side}`;
   const copy = sideCopy[side];
   const text = sideMessages(msg, side);
@@ -107,7 +109,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
           <span className="contribute-glyph filled">{copy.sign}</span>
           <span className="contribute-composer-label" id={`contribute-label-${featuredId}-${side}`}>{text.composerLabel}</span>
           <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">{msg('conv-arg-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink>
-          <span className="contribute-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : <><span className="cc-len">{body.length}</span> / {ARGUMENT_MAX_CHARACTERS}</>}</span>
+          <span className="contribute-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : <><span className="cc-len">{characters}</span> / {ARGUMENT_MAX_CHARACTERS}</>}</span>
         </div>
         <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={overLimit > 0 ? countId : undefined} aria-invalid={overLimit > 0 || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
         <div className="contribute-actions">
