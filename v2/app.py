@@ -9,6 +9,7 @@ import functools
 import hashlib
 import hmac
 import html
+import json
 import os
 import random
 import re
@@ -282,6 +283,8 @@ _VOUCHER_MESSAGES = {
     'invalid-excluded': ('voucher-invalid-excluded-letters',
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
+    'link-expired': ('voucher-link-resume-ended',
+                     'This link no longer signs you in. Type your access code to continue.'),
     'joined': ('voucher-already-joined',
                'You already take part in this consultation with an access code in this browser. '
                'Log out first to use a different code.'),
@@ -341,7 +344,7 @@ _VOUCHER_PAGE = (
     '{lead}'
     '<h1>{heading}</h1>'
     '{body}'
-    '</main></body></html>'
+    '</main>{address}</body></html>'
 )
 
 
@@ -415,6 +418,22 @@ def _voucher_lead(conv) -> str:
     )
 
 
+def _clear_code_from_address() -> str:
+    """A script that takes a linked ?v=<code> out of the address bar, or ''.
+
+    A voucher page answers a linked code in place (200, #412 decision b): a wrong or
+    ambiguous code shows the form, a code for another account asks first. The page
+    stays as it is; only the address is replaced, so history, bookmarks and
+    screenshots keep no code. Other parameters such as ``uselang`` stay.
+    """
+    if 'v' not in request.args:
+        return ''
+    target = json.dumps(_keep_other_params(request.path)).replace('</', '<\\/')
+    nonce = html.escape(g.get('csp_nonce', ''))
+    return (f'<script nonce="{nonce}">'
+            f'history.replaceState(history.state,"",{target}+location.hash);</script>')
+
+
 def _voucher_response(conv, heading: str, body: str, *, lead: str = ''):
     """Self-contained page: it carries a credential, so it is never cached."""
     locale = g.get('locale') or i18n.SOURCE_LOCALE
@@ -422,6 +441,7 @@ def _voucher_response(conv, heading: str, body: str, *, lead: str = ''):
         lang=html.escape(locale), dir=i18n.text_direction(locale),
         doc_title=_voucher_text('doc-title', conv.title),
         heading=heading, body=body, lead=lead, notice=_take_logout_notice_html(),
+        address=_clear_code_from_address(),
     ))
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'
@@ -718,10 +738,22 @@ def _voucher_throttled(request_limit):
     return response
 
 
-def _voucher_submit(conv, code: str, *, confirmed: bool):
+def _link_resume_ended(voucher) -> bool:
+    """True once the code's batch no longer lets a link sign its holder back in (#412)."""
+    until = voucher.batch.link_resume_until if voucher.batch is not None else None
+    if until is None:
+        return False
+    if until.tzinfo is not None:
+        until = until.astimezone(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc).replace(tzinfo=None) >= until
+
+
+def _voucher_submit(conv, code: str, *, confirmed: bool, linked: bool = False):
     """Redeem or resume *code* on *conv*, then send the holder to the process.
 
     The code leaves the address bar on success: the redirect target carries none.
+    *linked* is a code that arrived in the address (?v=); after its batch's
+    link_resume_until it no longer resumes an account, it has to be typed (#412).
     """
     if not code.strip():
         return _voucher_form_page(conv, error='empty')
@@ -733,6 +765,16 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
     entry = classify_voucher(code, conv.id)
     if entry.outcome == 'invalid':
         return _voucher_not_valid(conv, code)
+
+    # A link past its batch's resume date asks for the code to be typed, unless this
+    # browser is already that account. The answer reveals that the code is valid, so
+    # it spends the failed-attempt budget like a miss; the field stays empty, so the
+    # page never shows the code.
+    if linked and entry.outcome == 'resume' and _link_resume_ended(entry.voucher):
+        current = _current_participant()
+        if current is None or current.id != entry.participant.id:
+            g.voucher_attempt_failed = True
+            return _voucher_form_page(conv, error='link-expired')
 
     # Both answers below reveal that the code is valid without using it, so they
     # spend the failed-attempt budgets like a miss: otherwise a signed-in browser
@@ -6513,14 +6555,22 @@ def create_app(test_config: dict | None = None) -> Flask:
     vouchers_cli = click.Group('vouchers', help='Create voucher codes for a process.')
     app.cli.add_command(vouchers_cli)
 
-    def _voucher_batch_for(slug: str, label: str | None):
+    def _link_resume_end(day):
+        """A --link-resume-until day as the moment links stop: the end of that day, UTC."""
+        return None if day is None else day.replace(tzinfo=None) + timedelta(days=1)
+
+    _LINK_RESUME_HELP = ('Last day (YYYY-MM-DD, UTC) on which a link signs a returning holder '
+                         'back in; after it the code must be typed. Default: no end.')
+
+    def _voucher_batch_for(slug: str, label: str | None, link_resume_until=None):
         conv = Conversation.query.filter_by(slug=slug).first()
         if conv is None:
             raise click.ClickException(f'No conversation with slug {slug!r}.')
         if not (is_gated_conversation(conv) and conversation_gating_type(conv) == 'voucher'):
             click.echo(f'Warning: {slug!r} is not voucher-gated yet; the codes will not '
                        'work until its gating type is set to voucher.', err=True)
-        batch = VoucherBatch(conversation_id=conv.id, label=label)
+        batch = VoucherBatch(conversation_id=conv.id, label=label,
+                             link_resume_until=_link_resume_end(link_resume_until))
         db.session.add(batch)
         return batch
 
@@ -6528,9 +6578,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     @click.argument('slug')
     @click.argument('count', type=click.IntRange(1, 20000))
     @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
-    def vouchers_generate_cmd(slug, count, label):
+    @click.option('--link-resume-until', type=click.DateTime(formats=['%Y-%m-%d']),
+                  default=None, help=_LINK_RESUME_HELP)
+    def vouchers_generate_cmd(slug, count, label, link_resume_until):
         """Generate COUNT codes and print them, one per line. Shown only once."""
-        codes = generate_voucher_codes(_voucher_batch_for(slug, label), count)
+        codes = generate_voucher_codes(
+            _voucher_batch_for(slug, label, link_resume_until), count)
         db.session.commit()
         for code in codes:
             click.echo(' '.join(code[i:i + 4] for i in range(0, len(code), 4)))
@@ -6539,13 +6592,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     @click.argument('slug')
     @click.argument('source', type=click.File('r', encoding='utf-8'))
     @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
-    def vouchers_import_cmd(slug, source, label):
+    @click.option('--link-resume-until', type=click.DateTime(formats=['%Y-%m-%d']),
+                  default=None, help=_LINK_RESUME_HELP)
+    def vouchers_import_cmd(slug, source, label, link_resume_until):
         """Import organizer-made codes from SOURCE (a file, or - for stdin), one per line.
 
         Capitals, spaces and hyphens do not matter. Codes must be 5-64 letters and
         digits; a code is only as hard to guess as it is long and random.
         """
-        result = import_voucher_codes(_voucher_batch_for(slug, label), source)
+        result = import_voucher_codes(
+            _voucher_batch_for(slug, label, link_resume_until), source)
         if not result.added:
             db.session.rollback()
             raise click.ClickException('No codes imported.')
@@ -6566,6 +6622,39 @@ def create_app(test_config: dict | None = None) -> Flask:
                        'and digits:', err=True)
             for line in result.rejected:
                 click.echo(f'  {line}', err=True)
+
+    @vouchers_cli.command('set-link-resume')
+    @click.argument('slug')
+    @click.argument('until')
+    @click.option('--label', default=None,
+                  help='Only the batches with this label; default: every batch of SLUG.')
+    def vouchers_set_link_resume_cmd(slug, until, label):
+        """Set the last day (YYYY-MM-DD, UTC) on which links resume, or 'never-ends'.
+
+        After that day a link opens the code page and the code must be typed; typing
+        still resumes the account. 'never-ends' lets links resume again with no end.
+        """
+        conv = Conversation.query.filter_by(slug=slug).first()
+        if conv is None:
+            raise click.ClickException(f'No conversation with slug {slug!r}.')
+        if until == 'never-ends':
+            end = None
+        else:
+            try:
+                end = _link_resume_end(datetime.strptime(until, '%Y-%m-%d'))
+            except ValueError:
+                raise click.ClickException('UNTIL is a date (YYYY-MM-DD) or never-ends.')
+        batches = VoucherBatch.query.filter_by(conversation_id=conv.id)
+        if label is not None:
+            batches = batches.filter_by(label=label)
+        changed = 0
+        for batch in batches:
+            batch.link_resume_until = end
+            changed += 1
+        if not changed:
+            raise click.ClickException('No voucher batch matched.')
+        db.session.commit()
+        click.echo(f'Updated {changed} batch(es).')
 
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():
@@ -7107,7 +7196,7 @@ def _register_routes(app: Flask) -> None:
             )
         code = request.args.get('v', '')
         if code.strip():
-            return _voucher_submit(conv, code, confirmed=False)
+            return _voucher_submit(conv, code, confirmed=False, linked=True)
         return _voucher_form_page(conv)
 
 

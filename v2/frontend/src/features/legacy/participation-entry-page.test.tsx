@@ -475,3 +475,18 @@ test('a voucher account can join, without Wikimedia notification options', async
   expect(screen.getByText(testMessages['base-single-consultation-account']!)).toBeVisible();
   expect(screen.getByRole('button', {name: testMessages['base-log-out']!})).toBeVisible();
 });
+
+test('a code account is told on the join step that the link or code is its credential (#412)', async () => {
+  serveVoucherSession();
+  serveJoinEntry({emailable: false});
+  renderJoin();
+  await joinForm();
+  expect(document.getElementById('accept-voucher-credential')).toHaveTextContent(testMessages['accept-voucher-credential']!);
+});
+
+test('a Wikimedia account gets no code-credential line on the join step', async () => {
+  serveJoinEntry({emailable: true});
+  renderJoin();
+  await joinForm();
+  expect(document.getElementById('accept-voucher-credential')).toBeNull();
+});

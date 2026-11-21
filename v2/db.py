@@ -567,6 +567,9 @@ class VoucherBatch(db.Model):
     conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
     label           = db.Column(db.String(255), nullable=True)
     created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # From this moment a link (?v=<code>) no longer signs a returning holder back in;
+    # the code must be typed (#412). NULL: links resume for as long as the code lives.
+    link_resume_until = db.Column(db.DateTime, nullable=True)
 
     conversation = db.relationship('Conversation', back_populates='voucher_batches')
     vouchers     = db.relationship('VoucherCode', back_populates='batch', cascade='all, delete-orphan')

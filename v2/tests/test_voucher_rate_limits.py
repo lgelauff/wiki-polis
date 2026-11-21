@@ -170,3 +170,37 @@ def test_operators_can_change_the_browser_budget(limited_app, conv):  # noqa: F8
         assert statuses == [200] * 5 + [429]
     finally:
         limited_app.config.pop('VOUCHER_SESSION_FAILURE_LIMIT')
+
+
+def test_a_throttled_linked_code_leaves_the_address(limited_app, conv):  # noqa: F811
+    """#412 (b): the 429 for a linked code is answered in place, and the code still
+    leaves the address bar."""
+    from tests.test_voucher import _address_script
+    client = limited_app.test_client()
+    for i in range(SESSION_BUDGET):
+        client.get(f'/c/{conv.slug}/v?v=WRONG{i:04d}')
+    breach = client.get(f'/c/{conv.slug}/v?v=WRONG9999')
+    assert breach.status_code == 429
+    assert _address_script(breach) == f'/c/{conv.slug}/v'
+
+
+def test_an_ended_link_spends_the_budget_like_a_miss(limited_app, conv):  # noqa: F811
+    """#412: the "type the code" answer shows the code is valid, so a link past its
+    date cannot be used to test codes unthrottled."""
+    # The code is redeemed directly in the database: after one browser's successful
+    # POST, another browser's misses are not counted in this test set-up, on main too.
+    from datetime import datetime, timedelta, timezone
+    from services.identity import create_voucher_participant
+    from services.vouchers import lookup_voucher
+    holder = create_voucher_participant(conversation_id=conv.id, xid='h' * 64)
+    db.session.add(holder)
+    db.session.flush()
+    voucher = lookup_voucher(CODE, conv.id)
+    voucher.status, voucher.participant_id = 'redeemed', holder.id
+    batch = VoucherBatch.query.one()
+    batch.link_resume_until = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+    db.session.commit()
+    finder = limited_app.test_client()
+    statuses = [finder.get(f'/c/{conv.slug}/v?v={CODE}').status_code
+                for _ in range(SESSION_BUDGET + 1)]
+    assert statuses == [200] * SESSION_BUDGET + [429]
