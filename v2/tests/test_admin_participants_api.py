@@ -145,9 +145,9 @@ def test_admin_access_command_is_idempotent_and_audits_only_changes(
     assert first.status_code == replay.status_code == 200
     assert lifted.status_code == lifted_replay.status_code == 200
     assert first.get_json()['data']['changed'] is True
-    assert first.get_json()['data']['summary'] == 'Repeated disruption'
+    assert first.get_json()['data']['summary'] == '<b>Repeated disruption</b>'
     assert replay.get_json()['data']['changed'] is False
-    assert replay.get_json()['data']['summary'] == 'Repeated disruption'
+    assert replay.get_json()['data']['summary'] == '<b>Repeated disruption</b>'
     assert lifted.get_json()['data']['changed'] is True
     assert lifted.get_json()['data']['banned'] is False
     assert lifted_replay.get_json()['data']['changed'] is False

@@ -434,6 +434,32 @@ def test_statement_command_creates_once_and_replays_completed_receipt(
     assert decision.detail == {'decision': 0, 'policy': 'moderate'}
 
 
+def test_statement_text_is_cleaned_and_counted_as_displayed(
+    auth_client, participant, conversation,
+):
+    """#616: 280 flags (560 code points) fit; the text goes to Polis as typed, with only
+    the invisible direction override removed; 281 characters do not fit."""
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    flags = '\U0001F1F3\U0001F1F1' * 279
+    with patch(
+        'app.polis_http.post', return_value=_response({'id': 42}, status=201),
+    ) as post:
+        fits = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': flags + '&\u202e'},
+            headers={'Idempotency-Key': 'statement-key-42'},
+        )
+        too_long = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': flags + '&<'},
+            headers={'Idempotency-Key': 'statement-key-43'},
+        )
+    assert fits.status_code == 201
+    assert post.call_args.kwargs['json'] == {'text': flags + '&'}
+    assert too_long.status_code == 400
+
+
 def test_statement_command_bootstraps_safe_policy_when_settings_are_unavailable(
     auth_client, participant, conversation,
 ):

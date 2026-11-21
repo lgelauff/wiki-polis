@@ -384,6 +384,23 @@ test('an argument over the limit is kept in full and waits at Submit until it fi
   expect(box).not.toHaveAttribute('aria-invalid');
 });
 
+test('the argument counter counts characters as displayed, not UTF-16 units (#616)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  const box = wrapper.querySelector('textarea')!;
+  const submit = wrapper.querySelector<HTMLButtonElement>('.contribute-submit-btn')!;
+  // 280 flags are 560 code points and 1120 UTF-16 units, and 280 characters on screen.
+  const flags = '\u{1F1F3}\u{1F1F1}'.repeat(ARGUMENT_MAX_CHARACTERS);
+  fireEvent.change(box, {target: {value: flags}});
+  expect(wrapper.querySelector('.cc-len')).toHaveTextContent(String(ARGUMENT_MAX_CHARACTERS));
+  expect(submit).toBeEnabled();
+  fireEvent.change(box, {target: {value: 'Tom & Jerry'}});
+  expect(wrapper.querySelector('.cc-len')).toHaveTextContent('11');
+});
+
 test('each progress circle is a button that names its state and marks the shown statement', async () => {
   serve(mapping());
   renderPanel();

@@ -48,6 +48,7 @@ from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          polis_server_config_error)
 from http_pool import session as polis_http
 from seed_csv import (MAX_ROWS, MAX_TEXT_CHARS, strip_formula_prefixes)
+from services.text_rules import clean_text, fits
 from logging_setup import configure_logging
 import i18n
 from error_pages import render_error_page
@@ -3730,8 +3731,8 @@ def _statement_api_payload(
     slug: str, body: dict, idempotency_key: str,
 ) -> tuple[dict, int]:
     conv, participant, participation = _require_explore_api_context(slug)
-    text_value = body['text'].strip()
-    if not text_value or len(text_value) > 280:
+    text_value = clean_text(body['text'])
+    if not fits(text_value):
         abort(400, description='Statement text must contain 1 to 280 characters.')
     derived_from = body.get('derivedFromStatementId')
     config = conv.argument_vote_data or {}
@@ -4698,7 +4699,6 @@ def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
         conversation=conv,
         candidates=body['statements'],
         existing_buckets=existing,
-        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
         strip_formula_prefixes=strip_formula_prefixes,
         bulk_add_seeds=_polis_server_client().bulk_add_seeds,
         max_rows=MAX_ROWS,
@@ -4733,7 +4733,6 @@ def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
         conversation=conv,
         text=body['text'],
         derived_from_id=body['derivedFromId'],
-        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
         statement_text_map=_statement_text_map,
         add_seed=_polis_server_client().add_seed,
         record_provenance=record_statement_provenance,
@@ -5599,9 +5598,6 @@ def _backfill_statement_texts(conv, confirmed: list) -> bool:
     if changed:
         db.session.commit()
     return changed
-
-# nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
-_NH3_NO_TAGS: frozenset[str] = frozenset()
 
 
 _FLAG_CATEGORY_LABELS = {
@@ -6566,6 +6562,53 @@ def create_app(test_config: dict | None = None) -> Flask:
                        'and digits:', err=True)
             for line in result.rejected:
                 click.echo(f'  {line}', err=True)
+
+    _ESCAPED_ENTITY_RE = re.compile(r'&(?:amp|lt|gt|quot|#39|#x27);')
+
+    @app.cli.command('escaped-seeds')
+    @click.argument('slug', required=False)
+    @click.option('--clear-cache', is_flag=True,
+                  help="Also empty the listed cache rows, so they fill again from Polis.")
+    def escaped_seeds_cmd(slug, clear_cache):
+        """List seed statements stored HTML-escaped before #616, for a manual fix in Polis.
+
+        For every consultation (or only SLUG) it prints, tab-separated: the slug, where
+        the text is (polis = the seed in Polis, cache = Proto's copy in
+        featured_statements), the statement id, the text as stored and as it should
+        read. Participant statements were never escaped and are not listed. Read-only,
+        except --clear-cache: the cache is only filled while empty, so after the seeds
+        are fixed in Polis, clearing the listed rows makes them fill with the fixed text.
+        """
+        query = Conversation.query.filter(Conversation.polis_id.isnot(None))
+        if slug:
+            query = query.filter_by(slug=slug)
+        conversations = query.order_by(Conversation.slug).all()
+        if slug and not conversations:
+            raise click.ClickException(f'No conversation with slug {slug!r}.')
+        found = 0
+        for conv in conversations:
+            buckets, _strict = _load_admin_statement_sources(conv)
+            if buckets is None:
+                click.echo(f'{conv.slug}: Polis could not be reached; not checked.', err=True)
+            for bucket in buckets or ():
+                for row in bucket:
+                    text = str(row.get('txt') or row.get('text') or '')
+                    # Rows without the flag (the Particiapi fallback) are listed too.
+                    if row.get('is_seed', True) and _ESCAPED_ENTITY_RE.search(text):
+                        click.echo('\t'.join((conv.slug, 'polis', str(row.get('tid')),
+                                               text, html.unescape(text))))
+                        found += 1
+            for featured in FeaturedStatement.query.filter_by(conversation_id=conv.id):
+                text = featured.statement_text or ''
+                if _ESCAPED_ENTITY_RE.search(text):
+                    click.echo('\t'.join((conv.slug, 'cache', str(featured.polis_statement_id),
+                                           text, html.unescape(text))))
+                    found += 1
+                    if clear_cache:
+                        featured.statement_text = None
+        if clear_cache:
+            db.session.commit()
+        click.echo(f'{found} escaped text(s) found.', err=True)
 
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():

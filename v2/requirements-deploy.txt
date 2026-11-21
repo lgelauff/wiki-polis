@@ -29,6 +29,7 @@ psycopg2-binary==2.9.12
 pymysql==1.2.0
 python-dotenv==1.2.3
 redis==8.1.0
+regex==2026.9.29
 requests==2.34.2
 sqlalchemy==2.0.52
 typing-extensions==4.16.0
