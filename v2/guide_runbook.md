@@ -30,7 +30,20 @@ flask --app app vouchers generate <slug> 200 --label "Workshop Utrecht 12 Oct" >
 
 # Import the organizers' own codes, one per line (a file, or - for stdin).
 flask --app app vouchers import <slug> organizer-codes.txt --label "Printed cards"
+
+# Optional: the last day (UTC) on which a link signs a returning holder back in (#412).
+# Set it when creating a batch, or change it later; never-ends removes the date.
+flask --app app vouchers generate <slug> 200 --label "Event" --link-resume-until 2026-12-01
+flask --app app vouchers set-link-resume <slug> 2026-12-01 --label "Event"
+flask --app app vouchers set-link-resume <slug> never-ends
 ```
+
+- **Links and their last day (#412).** Every code works as a link (`/c/<slug>/v?v=<code>`)
+  and typed. Without a date, a link signs its holder back in for as long as the code
+  lives. After the batch's last day, a link to a code that is already in use opens the
+  code page and asks for the code to be typed; typing it still signs the holder back in,
+  and a first use by link still joins. `set-link-resume` without `--label` changes every
+  batch of the process.
 
 - **Same codes in several processes:** import the same list into each process. Each
   process stores its own HMACs, and each code makes a separate account per process.
