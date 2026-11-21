@@ -45,6 +45,7 @@ React surface exists.
 
 ### Names, descriptions, repetition
 - Accessible **name = the concise action**; secondary/helper text goes in `aria-describedby`, not baked into the name. *(WCAG 2.4.6 "descriptive *and concise*")*
+- **Exception — an on/off toggle** (`aria-pressed`) is named for what it switches, and the name stays the same in both states; `aria-pressed` says whether it is on. The action ("Mark as meta" / "Unmark as meta") goes in `title`. A name that flips with the state reads as "Unmark as meta, pressed". *(WAI-ARIA APG, button pattern; #620)*
 - Don't repeat the same label many times — explain once, e.g. via `aria-live="polite"`.
 
 ### Symbols, language, contrast, images

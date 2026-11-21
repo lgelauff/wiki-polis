@@ -560,6 +560,37 @@
   cursor: pointer;
 }
 
+/* The meta toggle on a seed row (#620): a square [m]. Pressed (meta) is a black m; not
+   pressed is a grey m with a diagonal line through it, so the state does not rest on
+   colour alone. Size, border and font weight are the same in both states and on hover,
+   so the row never shifts. */
+.admin-shell .admin-row__meta-toggle {
+  position: relative;
+  inline-size: 2rem;
+  padding: 0;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.admin-shell .admin-row__meta-toggle[aria-pressed="true"] {
+  color: var(--shell-ink);
+}
+
+.admin-shell .admin-row__meta-toggle[aria-pressed="false"] {
+  color: var(--shell-muted);
+}
+
+.admin-shell .admin-row__meta-toggle[aria-pressed="false"]::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 25%;
+  inline-size: 50%;
+  border-block-start: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+
 .admin-shell .admin-row__text-button {
   min-block-size: 2rem;
   padding: .25rem .5rem;
