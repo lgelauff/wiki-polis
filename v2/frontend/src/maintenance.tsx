@@ -3,6 +3,10 @@ import type {Message} from './i18n/messages';
 
 type Session = components['schemas']['Session'];
 
+/** How often a screen refused for maintenance, and the session while maintenance is on, ask
+ *  again. Shorter than the server's Retry-After (300s): the switch may go off at any time. */
+export const MAINTENANCE_RECHECK_MS = 30_000;
+
 /** The server refused because maintenance mode is on (#619): 503 with code `maintenance`. */
 export function isMaintenance(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'maintenance';
@@ -19,5 +23,5 @@ export function maintenanceCopy(msg: Message, error: unknown): string | null {
  *  Participants learn about the pause where something is refused, not from a banner. */
 export function MaintenanceBanner({session, msg}: {session: Session; msg: Message}) {
   if (!session.maintenance || !session.capabilities.administerSite) return null;
-  return <p className="maintenance-banner" role="status">{msg('maintenance-banner')}</p>;
+  return <p className="maintenance-banner">{msg('maintenance-banner')}</p>;
 }

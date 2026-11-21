@@ -49,6 +49,23 @@ def _assert_maintenance_page(response):
 
 # ── The switch ────────────────────────────────────────────────────────────────
 
+def test_an_unreadable_flag_counts_as_off_and_is_logged(app, monkeypatch, caplog):
+    def denied(path):
+        raise PermissionError(13, 'Permission denied', path)
+    monkeypatch.setattr(maintenance.os, 'stat', denied)
+    monkeypatch.setattr(maintenance, '_last_warning', 0.0)
+    monkeypatch.setattr(maintenance.time, 'monotonic', lambda: 1_000.0)
+    with caplog.at_level('WARNING', logger='maintenance'):
+        assert not maintenance.is_on()
+    assert app.config['MAINTENANCE_FLAG_PATH'] in caplog.text
+
+
+def test_a_missing_flag_is_not_logged(app, caplog):
+    with caplog.at_level('WARNING', logger='maintenance'):
+        assert not maintenance.is_on()
+    assert caplog.text == ''
+
+
 def test_off_unless_the_flag_file_exists(app):
     assert not maintenance.is_on()
     _switch_on(app)
@@ -141,6 +158,21 @@ def test_site_admins_can_still_open_participation_pages(app, admin_client, conve
     assert admin_client.get('/api/v1/conversations/test-conv/workspace').status_code != 503
 
 
+@pytest.mark.parametrize('read', ['statements', 'featured-statements', 'report-preview',
+                                  'termination'])
+def test_console_reads_that_need_polis_answer_503_for_organizers(app, auth_client,
+                                                                 conversation, read):
+    _switch_on(app)
+    _assert_maintenance_json(
+        auth_client.get(f'/api/v1/admin/conversations/{conversation.id}/{read}'))
+
+
+def test_site_admins_can_still_open_the_console_reads(app, admin_client, conversation):
+    _switch_on(app)
+    response = admin_client.get(f'/api/v1/admin/conversations/{conversation.id}/statements')
+    assert response.status_code != 503
+
+
 @pytest.mark.parametrize('path', [
     '/', '/c/test-conv/about', '/c/test-conv/report', '/help/statements',
     '/api/v1/conversations/test-conv/about', '/api/v1/conversations/test-conv/results',
@@ -160,6 +192,7 @@ def test_scheduler_skips_and_says_so_while_maintenance_is_on(app):
     assert result.exit_code == 0, result.output
     run.assert_not_called()
     assert 'maintenance' in result.output
+    assert app.config['MAINTENANCE_FLAG_PATH'] in result.output
 
 
 def test_scheduler_runs_when_maintenance_is_off(app):
@@ -167,3 +200,12 @@ def test_scheduler_runs_when_maintenance_is_off(app):
         result = app.test_cli_runner().invoke(args=['process-phase-schedules'])
     assert result.exit_code == 0, result.output
     run.assert_called_once()
+
+
+def test_reminders_skip_and_say_so_while_maintenance_is_on(app):
+    _switch_on(app)
+    with patch('app.run_reminder_batch') as run:
+        result = app.test_cli_runner().invoke(args=['process-reminders'])
+    assert result.exit_code == 0, result.output
+    run.assert_not_called()
+    assert 'maintenance' in result.output

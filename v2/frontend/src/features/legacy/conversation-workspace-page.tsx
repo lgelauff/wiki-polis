@@ -307,7 +307,8 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   const [composer, setComposer] = useState<ComposerMode>(null);
   const [submitted, setSubmitted] = useState(false);
   const [loadingNext, setLoadingNext] = useState(false);
-  const [nextFailed, setNextFailed] = useState(false);
+  // The error behind a failed reload of the next card, or null; false while none failed.
+  const [nextFailed, setNextFailed] = useState<unknown>(false);
   const nextPending = useRef(false);
   const statementId = data.currentStatement?.id ?? null;
   // A receipt belongs to the card it was given for: the next card never shows it, even in the
@@ -366,7 +367,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
     setLoadingNext(false);
     if (result.isError) {
       // The old card keeps its receipt, so Move on is right there to try again.
-      setNextFailed(true);
+      setNextFailed(result.error ?? true);
       return;
     }
     setReceipt(null);
@@ -435,7 +436,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
           </div>
         )}
         {vote.error && <div id="conv-error" role="alert"><p className="muted">{maintenanceCopy(msg, vote.error) ?? msg('conv-err-submit-vote')}</p></div>}
-        {nextFailed && <div id="conv-next-error" role="alert"><p className="muted">{msg('conv-unavailable-body')}</p></div>}
+        {nextFailed !== false && <div id="conv-next-error" role="alert"><p className="muted">{maintenanceCopy(msg, nextFailed) ?? msg('conv-unavailable-body')}</p></div>}
       </div>
     </div>
   );

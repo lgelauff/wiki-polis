@@ -6577,7 +6577,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         # Maintenance mode (#619): a phase change must not fire while Polis is restarted or
         # a backup is taken. The next run after the switch is off fires whatever is due.
         if maintenance.is_on():
-            msg = 'Skipping: maintenance mode is on.'
+            msg = maintenance.skip_message()
             app.logger.info('phase scheduler: %s', msg)
             click.echo(msg)
             return
@@ -6614,12 +6614,21 @@ def create_app(test_config: dict | None = None) -> Flask:
     def process_reminders_cmd(day, reminder_id, by_username):
         """Handle one day's reminders (#577). Dry run: nothing is sent yet.
 
-        Exit codes: 0 done; 1 done, but a wiki was unknown or the bot was blocked;
+        Exit codes: 0 done, or skipped because maintenance mode is on (#619); 1 done, but a
+        wiki was unknown or the bot was blocked;
         2 refused, nothing changed; 3 the run broke off (see the log).
         """
         def refuse(text):
             click.echo(text, err=True)
             raise SystemExit(2)
+
+        # Maintenance mode (#619): a run writes claim and status rows, so it waits. The next
+        # run after the switch is off handles the day.
+        if maintenance.is_on():
+            msg = maintenance.skip_message()
+            app.logger.info('process-reminders: %s', msg)
+            click.echo(msg)
+            return
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         if day is not None and day.date() > now.date():
@@ -6788,7 +6797,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.before_request
     def _pause_for_maintenance():
         # Registered after locale negotiation, so the refusal is in the reader's language,
-        # and before the SPA shell, so a paused participation page never loads the app.
+        # and before the SPA shell, so the paused pages it knows answer with the 503 page. A
+        # route it does not list (such as /app/c/<slug>) loads the shell, whose API reads are
+        # refused, so the app shows the maintenance notice instead.
         if not maintenance.is_on():
             return None
         if not maintenance.blocks(request.method, request.path,

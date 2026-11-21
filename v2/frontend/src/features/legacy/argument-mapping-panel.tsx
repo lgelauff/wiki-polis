@@ -73,6 +73,8 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
     mutationFn: () => createArgument(
       slug, featuredId, {side, body: body.trim()}, csrfToken,
     ),
+    // Only the latest attempt's refusal is shown: an older skip error would be stale.
+    onMutate: (): void => skip.reset(),
     onSuccess: async () => {
       setState('submitted');
       await refresh();
@@ -80,6 +82,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
   });
   const skip = useMutation({
     mutationFn: () => skipArgumentContribution(slug, featuredId, side, csrfToken),
+    onMutate: (): void => submit.reset(),
     onSuccess: async () => {
       setState('skipped');
       await refresh();
@@ -198,6 +201,8 @@ function ArgumentCard({mapping, slug, csrfToken, side, item, prioritization}: {
           {item.capabilities.flag && <LegacyContentFlag slug={slug} target={{contentType: 'argument', targetId: item.id}} csrfToken={csrfToken} />}
           {item.capabilities.moderate && <span style={{display: 'inline-flex', gap: 4, marginLeft: 'auto'}}><button type="button" className={`btn-small${item.hidden ? '' : ' btn-warn'}`} disabled={moderate.isPending} onClick={(event) => { event.stopPropagation(); moderate.mutate(); }}>{item.hidden ? msg('conv-arg-unhide') : msg('conv-arg-hide')}</button></span>}
         </div>
+        {/* A refused mark is reverted; during maintenance (#619) say why, so it does not look ignored. */}
+        {maintenanceCopy(msg, priority.error) && <p className="muted" role="alert">{maintenanceCopy(msg, priority.error)}</p>}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import {MutationCache, QueryCache, QueryClient} from '@tanstack/react-query';
 
-import {isMaintenance} from './maintenance';
+import {isMaintenance, MAINTENANCE_RECHECK_MS} from './maintenance';
 
 /** The server logs a single-consultation (voucher) account out where it finds that the
  *  account's code was withdrawn (#514). Any request that reports it makes the shell ask
@@ -33,6 +33,9 @@ export function createQueryClient(): QueryClient {
           return failureCount < 2;
         },
         refetchOnWindowFocus: false,
+        // A screen refused for maintenance (#619) is not retried, but asks again every half
+        // minute, so it comes back by itself once the switch is off.
+        refetchInterval: (query) => isMaintenance(query.state.error) ? MAINTENANCE_RECHECK_MS : false,
       },
     },
   });
