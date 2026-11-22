@@ -2718,7 +2718,7 @@ a { color: var(--pass); }
   margin: 0 0 6px;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--body);
 }
 
 .contribute-charcount {
