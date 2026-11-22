@@ -25,7 +25,7 @@ import {phaseLabel, statementErrorCopy, tabLabel, workspaceErrorCopy} from '../.
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {LoginPrompt} from './login-prompt';
-import {countCharacters} from '../../text-rules';
+import {countCharacters, fitsLimit} from '../../text-rules';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
@@ -235,7 +235,10 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   const countId = suggest ? 'composer-suggest-count' : 'composer-newstmt-count';
   const characters = countCharacters(text);
   const overLimit = Math.max(0, characters - STATEMENT_MAX_CHARACTERS);
-  const describedBy = [helperId, overLimit > 0 && countId, mutation.error && errorId].filter(Boolean).join(' ');
+  // Within 280 but over the hidden storage caps (long emoji sequences): the server refuses it.
+  const fits = fitsLimit(text, STATEMENT_MAX_CHARACTERS);
+  const tooBig = !fits && overLimit === 0 && characters > 0;
+  const describedBy = [helperId, (overLimit > 0 || tooBig) && countId, mutation.error && errorId].filter(Boolean).join(' ');
   return (
     <div id={suggest ? 'composer-suggest' : 'composer-newstmt'} className="v2-composer">
       <div className="v2-composer-header">
@@ -243,14 +246,14 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
           <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink></div>
         </div>
-        <span className="propose-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : msg('conv-composer-charcount', characters)}</span>
+        <span className="propose-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : tooBig ? msg('conv-composer-too-big') : msg('conv-composer-charcount', characters)}</span>
       </div>
-      <textarea className="v2-composer-textarea" aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={describedBy} aria-invalid={textRejected || overLimit > 0 || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
+      <textarea className="v2-composer-textarea" aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={describedBy} aria-invalid={textRejected || overLimit > 0 || tooBig || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
       <div className="v2-composer-footer">
         <span className="v2-composer-hint">{suggest ? msg('conv-suggest-hint') : msg('conv-newstmt-hint')}</span>
         <div className="v2-composer-btns">
           <button type="button" className="btn-small btn-muted" onClick={onCancel}>{msg('common-cancel')}</button>
-          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || overLimit > 0 || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
+          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !fits || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
         </div>
       </div>
       {mutation.error && <p className="error" id={errorId} role="alert">{statementErrorCopy(msg, mutation.error)}</p>}

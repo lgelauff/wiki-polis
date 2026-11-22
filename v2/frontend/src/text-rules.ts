@@ -10,19 +10,26 @@ export const MAX_CHARACTERS = 280;
 export const STORAGE_CODE_POINTS = 1000;
 export const MAX_CLUSTER_CODE_POINTS = 30;
 
-// C0 except tab and newline, DEL, C1, U+2028/2029, bidi embeddings/overrides/isolates,
-// lone surrogates and noncharacters: the same set as _REMOVED on the server.
-const REMOVED = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufdd0-\ufdef\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]|[\ud83f\ud87f\ud8bf\ud8ff\ud93f\ud97f\ud9bf\ud9ff\uda3f\uda7f\udabf\udaff\udb3f\udb7f\udbbf\udbff][\udffe\udfff]/g;
+// CRLF, CR, VT, FF, NEL and U+2028/2029 become a newline, as on the server.
+const LINE_BREAK = /\r\n|[\r\u000b\u000c\u0085\u2028\u2029]/g;
+// C0 except tab and line breaks, DEL, C1 except NEL, U+FEFF, bidi embeddings/overrides/
+// isolates, lone surrogates and noncharacters: the same set as _REMOVED on the server.
+const REMOVED = /[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\ufeff\u202a-\u202e\u2066-\u2069\ufdd0-\ufdef\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]|[\ud83f\ud87f\ud8bf\ud8ff\ud93f\ud97f\ud9bf\ud9ff\uda3f\uda7f\udabf\udaff\udb3f\udb7f\udbbf\udbff][\udffe\udfff]/g;
 
-const segmenter = new Intl.Segmenter(undefined, {granularity: 'grapheme'});
+// Firefox before 125 has no Intl.Segmenter: count code points there. That only over-counts
+// (the server stays the judge), and the page still loads.
+const segmenter = typeof Intl.Segmenter === 'function'
+  ? new Intl.Segmenter(undefined, {granularity: 'grapheme'})
+  : null;
 
-/** The text as the server stores it: newlines unified, invisible and disguising
+/** The text as the server stores it: line breaks unified, invisible and disguising
  *  characters removed, NFC, outer whitespace stripped. */
 export function cleanText(value: string): string {
-  return value.replace(/\r\n?/g, '\n').replace(REMOVED, '').normalize('NFC').trim();
+  return value.replace(LINE_BREAK, '\n').replace(REMOVED, '').normalize('NFC').trim();
 }
 
 function clusters(text: string): string[] {
+  if (!segmenter) return Array.from(text);
   return Array.from(segmenter.segment(text), (part) => part.segment);
 }
 

@@ -5,14 +5,20 @@ character each. Escaping happens where the text is shown (React does it by defau
 here. Cleaning only removes what a reader cannot see or what can disguise the text:
 
 * NFC normalisation (never NFKC, which changes what was typed);
-* CRLF and lone CR become a newline;
+* CRLF, lone CR, VT, FF, NEL and U+2028/U+2029 become a newline (Word and PowerPoint
+  paste some of these between lines);
 * control characters other than newline and tab, DEL, C1 controls, U+2028/U+2029, lone
-  surrogates and noncharacters are removed;
+  surrogates, noncharacters and U+FEFF (byte order mark) are removed;
 * the bidi embedding, override and isolate characters U+202A–U+202E and U+2066–U+2069
   (the "Trojan Source" pattern) are removed;
 * whitespace around the text is stripped.
 
 LRM/RLM/ALM, ZWJ/ZWNJ and variation selectors stay: emoji and several scripts need them.
+
+Removing the isolates is a trade-off: balanced pairs are legitimate in mixed-direction
+text, and without them such text can show its parts in a different order. They are
+removed anyway because, like the overrides, they can make text read differently from
+what is stored. LRM/RLM, which stay, cover most mixed-direction needs.
 
 A character is what a reader sees as one: an extended grapheme cluster (UAX #29), counted
 with the `regex` package's ``\\X``. The browser counts the same way with Intl.Segmenter
@@ -34,8 +40,8 @@ MAX_CLUSTER_CODE_POINTS = 30
 
 _REMOVED = re.compile(
     '['
-    '\x00-\x08\x0b-\x1f\x7f-\x9f'          # C0 except tab and newline, DEL, C1
-    '\u2028\u2029'                          # line and paragraph separators
+    '\x00-\x08\x0e-\x1f\x7f-\x84\x86-\x9f'  # C0 but tab and line breaks, DEL, C1 but NEL
+    '\ufeff'                                # byte order mark
     '\u202a-\u202e\u2066-\u2069'            # bidi embeddings, overrides and isolates
     '\ud800-\udfff'                         # lone surrogates
     '\ufdd0-\ufdef'                         # noncharacters
@@ -47,12 +53,13 @@ _REMOVED = re.compile(
     '\U000cfffe\U000cffff\U000dfffe\U000dffff\U000efffe\U000effff\U000ffffe\U000fffff'
     '\U0010fffe\U0010ffff]'
 )
+_LINE_BREAK = re.compile('\r\n|[\r\x0b\x0c\x85\u2028\u2029]')
 _CLUSTER = regex.compile(r'\X')
 
 
 def clean_text(value: str | None) -> str:
     """The text as it is stored and shown: see the module docstring."""
-    text = (value or '').replace('\r\n', '\n').replace('\r', '\n')
+    text = _LINE_BREAK.sub('\n', value or '')
     text = _REMOVED.sub('', text)
     return unicodedata.normalize('NFC', text).strip()
 

@@ -401,6 +401,28 @@ test('the argument counter counts characters as displayed, not UTF-16 units (#61
   expect(wrapper.querySelector('.cc-len')).toHaveTextContent('11');
 });
 
+test('Submit waits when the text is within 280 characters but over the storage cap (#616)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  const box = wrapper.querySelector('textarea')!;
+  const submit = wrapper.querySelector<HTMLButtonElement>('.contribute-submit-btn')!;
+  // 150 family emoji: 150 characters on screen, 1050 code points, which the server refuses.
+  const families = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}'.repeat(150);
+  fireEvent.change(box, {target: {value: families}});
+  expect(submit).toBeDisabled();
+  expect(box).toHaveAttribute('aria-invalid', 'true');
+  // The counter gives the reason in place of the number.
+  expect(wrapper.querySelector('.cc-len')).toBeNull();
+  expect(box.getAttribute('aria-describedby')).toBe(wrapper.querySelector('.contribute-charcount')!.id);
+
+  fireEvent.change(box, {target: {value: '   '}});
+  expect(submit).toBeDisabled();
+  expect(box).not.toHaveAttribute('aria-invalid');
+});
+
 test('each progress circle is a button that names its state and marks the shown statement', async () => {
   serve(mapping());
   renderPanel();

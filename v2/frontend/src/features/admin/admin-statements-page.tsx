@@ -23,7 +23,7 @@ import {StatementProvenance} from './admin-provenance';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
-import {countCharacters} from '../../text-rules';
+import {countCharacters, fitsLimit} from '../../text-rules';
 
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
@@ -234,6 +234,9 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   // A seed over the limit is kept as typed, never cut (#558); Add waits until it fits.
   const seedCharacters = countCharacters(seedText);
   const seedOverLimit = Math.max(0, seedCharacters - 280);
+  // Within 280 but over the hidden storage caps (long emoji sequences): the server refuses it.
+  const seedFits = fitsLimit(seedText, 280);
+  const seedTooBig = !seedFits && seedOverLimit === 0 && seedCharacters > 0;
   const [derivedFrom, setDerivedFrom] = useState('');
   const [seedMeta, setSeedMeta] = useState(false);
   const [importText, setImportText] = useState('');
@@ -483,7 +486,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           <>
             <h2>{msg('stmts-seed-heading')}</h2>
             <div className="admin-form">
-              <form onSubmit={(event) => { event.preventDefault(); if (!seedOverLimit) seedMutation.mutate(); }}>
+              <form onSubmit={(event) => { event.preventDefault(); if (seedFits) seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
                 <label className="admin-field">{msg('stmts-seed-label')}
                   <textarea
@@ -492,7 +495,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                     id="seed-txt"
                     required
                     aria-describedby="seed-count"
-                    aria-invalid={seedOverLimit > 0 || undefined}
+                    aria-invalid={seedOverLimit > 0 || seedTooBig || undefined}
                     value={seedText}
                     onChange={(event) => setSeedText(event.target.value)}
                   />
@@ -518,8 +521,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   {msg('stmts-seed-meta-label')}
                 </label>
                 <div className="admin-form__actions">
-                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending || seedOverLimit > 0}>{msg('stmts-seed-submit')}</button>
-                  <span id="seed-count" className="admin-form__count">{seedOverLimit > 0 ? msg('conv-composer-over-limit', seedOverLimit) : `${seedCharacters} / 280`}</span>
+                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending || !seedFits}>{msg('stmts-seed-submit')}</button>
+                  <span id="seed-count" className="admin-form__count">{seedOverLimit > 0 ? msg('conv-composer-over-limit', seedOverLimit) : seedTooBig ? msg('conv-composer-too-big') : `${seedCharacters} / 280`}</span>
                 </div>
                 <FormFeedback lines={seedFeedback} />
               </form>

@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import fixture from './text-rules-cases.json';
 import {cleanText, countCharacters, fitsLimit} from './text-rules';
 
@@ -22,4 +22,17 @@ test.each(cases.map((item) => [item.name, item] as const))('%s', (_name, item) =
 
 test('text is never HTML-escaped', () => {
   expect(cleanText('<a href="x">&amp;</a>')).toBe('<a href="x">&amp;</a>');
+});
+
+test('without Intl.Segmenter the module still loads and counts code points (Firefox < 125)', async () => {
+  vi.resetModules();
+  vi.stubGlobal('Intl', {...Intl, Segmenter: undefined});
+  try {
+    const rules = await import('./text-rules');
+    expect(rules.countCharacters('caf\u00e9 \u{1F1F3}\u{1F1F1}')).toBe(7);
+    expect(rules.fitsLimit('x'.repeat(280))).toBe(true);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  }
 });

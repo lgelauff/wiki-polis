@@ -81,4 +81,83 @@ def test_upgrade_unescapes_every_column_once_and_widens_the_argument_body():
     assert _column_length(engine, 'arguments', 'body') == 280
     with engine.connect() as connection:
         assert connection.execute(sa.text(
-            'SELECT body FROM arguments WHERE id = 1')).scalar() == 'Tom & Jerry'
+            'SELECT body FROM arguments WHERE id = 1')).scalar() == 'Tom &amp; Jerry'
+
+
+def test_downgrade_refuses_while_an_argument_is_longer_than_280():
+    migration = _migration_module()
+    metadata = sa.MetaData()
+    _old_schema(metadata)
+    engine = sa.create_engine('sqlite://')
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        connection.execute(sa.text('INSERT INTO arguments (id, body) VALUES (1, :b), (2, :s)'),
+                           {'b': 'é' * 281, 's': 'short'})
+
+    with engine.begin() as connection:
+        migration.op = Operations(MigrationContext.configure(connection))
+        try:
+            migration.downgrade()
+        except RuntimeError as error:
+            assert str(error).endswith('longer: 1')
+        else:
+            raise AssertionError('downgrade narrowed a 281-character argument')
+    assert _column_length(engine, 'arguments', 'body') == 1000
+
+
+def test_up_down_up_gives_back_the_text_stored_in_between():
+    migration = _migration_module()
+    metadata = sa.MetaData()
+    _old_schema(metadata)
+    engine = sa.create_engine('sqlite://')
+    metadata.create_all(engine)
+
+    def run(step):
+        with engine.begin() as connection:
+            migration.op = Operations(MigrationContext.configure(connection))
+            step()
+
+    with engine.begin() as connection:
+        connection.execute(sa.text("INSERT INTO arguments (id, body) VALUES (1, 'A &amp; B')"))
+        connection.execute(sa.text(
+            "INSERT INTO content_flags (id, detail, resolution_note) VALUES (1, NULL, NULL)"))
+    run(migration.upgrade)
+    typed = {2: 'typed &amp; literally', 3: '1 < 2 > 0 & more'}
+    with engine.begin() as connection:
+        for row_id, body in typed.items():
+            connection.execute(sa.text('INSERT INTO arguments (id, body) VALUES (:i, :b)'),
+                               {'i': row_id, 'b': body})
+        connection.execute(sa.text("UPDATE content_flags SET detail = 'x &amp; y' WHERE id = 1"))
+    run(migration.downgrade)
+    with engine.connect() as connection:
+        assert connection.execute(sa.text(
+            'SELECT body FROM arguments WHERE id = 3')).scalar() == '1 &lt; 2 &gt; 0 &amp; more'
+    run(migration.upgrade)
+    with engine.connect() as connection:
+        bodies = dict(connection.execute(sa.text('SELECT id, body FROM arguments')).all())
+        detail = connection.execute(sa.text('SELECT detail FROM content_flags')).scalar()
+    assert bodies == {1: 'A & B', **typed}
+    assert detail == 'x &amp; y'
+
+
+def test_downgrade_counts_the_escaped_length():
+    migration = _migration_module()
+    metadata = sa.MetaData()
+    _old_schema(metadata)
+    engine = sa.create_engine('sqlite://')
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        connection.execute(sa.text('INSERT INTO arguments (id, body) VALUES (5, :b)'),
+                           {'b': 'a' * 270 + '&' * 10})   # 280 typed, 320 escaped
+    with engine.begin() as connection:
+        migration.op = Operations(MigrationContext.configure(connection))
+        try:
+            migration.downgrade()
+        except RuntimeError as error:
+            assert str(error).endswith('longer: 5')
+        else:
+            raise AssertionError('downgrade narrowed an argument longer than 280 escaped')

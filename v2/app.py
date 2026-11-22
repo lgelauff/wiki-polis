@@ -6563,21 +6563,39 @@ def create_app(test_config: dict | None = None) -> Flask:
             for line in result.rejected:
                 click.echo(f'  {line}', err=True)
 
-    _ESCAPED_ENTITY_RE = re.compile(r'&(?:amp|lt|gt|quot|#39|#x27);')
+    def _escaped(text: str) -> bool:
+        """True when ``text`` still holds an HTML entity nh3 wrote (any entity, &nbsp; too)."""
+        return html.unescape(text) != text
+
+    def _tsv_field(text: str) -> str:
+        """Seed text on one TSV line: backslash, tab, newline and other unprintable
+        characters as escapes, so a column never breaks and nothing reaches the
+        terminal as a control sequence."""
+        return ''.join(ch if ch.isprintable() and ch != '\\'
+                       else ch.encode('unicode_escape').decode('ascii')
+                       for ch in text)
 
     @app.cli.command('escaped-seeds')
     @click.argument('slug', required=False)
-    @click.option('--clear-cache', is_flag=True,
-                  help="Also empty the listed cache rows, so they fill again from Polis.")
-    def escaped_seeds_cmd(slug, clear_cache):
+    @click.option('--refresh-cache', is_flag=True,
+                  help="Replace the listed cache rows with the text now in Polis, once it is "
+                       "fixed there.")
+    def escaped_seeds_cmd(slug, refresh_cache):
         """List seed statements stored HTML-escaped before #616, for a manual fix in Polis.
 
         For every consultation (or only SLUG) it prints, tab-separated: the slug, where
-        the text is (polis = the seed in Polis, cache = Proto's copy in
-        featured_statements), the statement id, the text as stored and as it should
-        read. Participant statements were never escaped and are not listed. Read-only,
-        except --clear-cache: the cache is only filled while empty, so after the seeds
-        are fixed in Polis, clearing the listed rows makes them fill with the fixed text.
+        the text is, the statement id, the text as stored and as it should read. Places:
+        polis (the seed in the consultation's Polis conversation), round6 (its copy in
+        the Round 6 conversation) and cache (Proto's copy in featured_statements).
+        Statements Polis returns without a seed flag follow as polis-unflagged and
+        round6-unflagged: check those by hand, they may be a participant's own text.
+        Text is printed with tabs, newlines and unprintable characters escaped.
+
+        Read-only, except --refresh-cache: it copies the text now in Polis into each
+        listed cache row, and only once that seed is fixed in Polis and its own Round 6
+        copy is no longer escaped (the Round 6 re-sync matches by text). Other
+        statements in Round 6, a participant's included, do not hold it back. A row it
+        cannot refresh is left as it is, with the reason on stderr.
         """
         query = Conversation.query.filter(Conversation.polis_id.isnot(None))
         if slug:
@@ -6585,29 +6603,85 @@ def create_app(test_config: dict | None = None) -> Flask:
         conversations = query.order_by(Conversation.slug).all()
         if slug and not conversations:
             raise click.ClickException(f'No conversation with slug {slug!r}.')
-        found = 0
+        found = refreshed = 0
+
+        def listed(buckets, place):
+            """(flagged, unflagged) TSV lines for the escaped statements in ``buckets``."""
+            flagged, unflagged = [], []
+            for bucket in buckets:
+                for row in bucket:
+                    text = str(row.get('txt') or row.get('text') or '')
+                    if row.get('is_seed') is False or not _escaped(text):
+                        continue
+                    target, where = ((flagged, place) if 'is_seed' in row
+                                     else (unflagged, f'{place}-unflagged'))
+                    target.append((where, row.get('tid'), text))
+            return flagged, unflagged
+
+        def say(conv, message):
+            click.echo(f'{conv.slug}: {message}', err=True)
+
         for conv in conversations:
             buckets, _strict = _load_admin_statement_sources(conv)
             if buckets is None:
-                click.echo(f'{conv.slug}: Polis could not be reached; not checked.', err=True)
-            for bucket in buckets or ():
-                for row in bucket:
-                    text = str(row.get('txt') or row.get('text') or '')
-                    # Rows without the flag (the Particiapi fallback) are listed too.
-                    if row.get('is_seed', True) and _ESCAPED_ENTITY_RE.search(text):
-                        click.echo('\t'.join((conv.slug, 'polis', str(row.get('tid')),
-                                               text, html.unescape(text))))
-                        found += 1
-            for featured in FeaturedStatement.query.filter_by(conversation_id=conv.id):
+                say(conv, 'Polis could not be reached; not checked.')
+                continue
+            flagged, unflagged = listed(buckets, 'polis')
+            # The Round 6 re-sync finds a featured statement's copy by text. A copy still
+            # escaped there would no longer match a refreshed cache, so that statement
+            # waits; the mapped id is checked too, in case its text differs. Only those
+            # statements wait, not the whole consultation.
+            round6_readable = True
+            r6_escaped_tids, r6_escaped_texts = set(), set()
+            if conv.phase6_polis_conversation_id:
+                round6 = _polis_server_client().get_statements(conv.phase6_polis_conversation_id)
+                if round6 is None:
+                    round6_readable = False
+                    say(conv, 'the Round 6 conversation could not be read; not checked.')
+                else:
+                    r6_flagged, r6_unflagged = listed(round6, 'round6')
+                    flagged += r6_flagged
+                    unflagged += r6_unflagged
+                    for bucket in round6:
+                        for row in bucket:
+                            r6_text = str(row.get('txt') or row.get('text') or '')
+                            if _escaped(r6_text):
+                                r6_escaped_tids.add(row.get('tid'))
+                                r6_escaped_texts.add(_norm(r6_text))
+            polis_text = {row.get('tid'): str(row.get('txt') or row.get('text') or '')
+                          for bucket in buckets for row in bucket}
+            cache = []
+            for featured in (FeaturedStatement.query.filter_by(conversation_id=conv.id)
+                             .order_by(FeaturedStatement.polis_statement_id)):
                 text = featured.statement_text or ''
-                if _ESCAPED_ENTITY_RE.search(text):
-                    click.echo('\t'.join((conv.slug, 'cache', str(featured.polis_statement_id),
-                                           text, html.unescape(text))))
-                    found += 1
-                    if clear_cache:
-                        featured.statement_text = None
-        if clear_cache:
+                if _escaped(text):
+                    cache.append(('cache', featured.polis_statement_id, text))
+                    if not refresh_cache:
+                        continue
+                    live = polis_text.get(featured.polis_statement_id)
+                    if live is None:
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'not found in Polis.')
+                    elif _escaped(live):
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'still escaped in Polis; fix it there first.')
+                    elif not round6_readable:
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'the Round 6 conversation could not be read.')
+                    elif (featured.phase6_polis_statement_id in r6_escaped_tids
+                          or _norm(text) in r6_escaped_texts):
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'its Round 6 copy is still escaped; fix it there first.')
+                    else:
+                        featured.statement_text = live
+                        refreshed += 1
+            for where, tid, text in flagged + cache + unflagged:
+                click.echo('\t'.join((conv.slug, where, str(tid), _tsv_field(text),
+                                       _tsv_field(html.unescape(text)))))
+            found += len(flagged) + len(cache) + len(unflagged)
+        if refresh_cache:
             db.session.commit()
+            click.echo(f'{refreshed} cache row(s) refreshed.', err=True)
         click.echo(f'{found} escaped text(s) found.', err=True)
 
     @app.cli.command('process-phase-schedules')

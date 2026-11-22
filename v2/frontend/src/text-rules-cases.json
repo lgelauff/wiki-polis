@@ -108,9 +108,23 @@
   },
   {
    "name": "C1 control removed",
-   "input": "a\u0085b",
+   "input": "a\u0086b",
    "clean": "ab",
    "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "NEL becomes newline",
+   "input": "a\u0085b",
+   "clean": "a\nb",
+   "characters": 3,
+   "fits": true
+  },
+  {
+   "name": "VT and FF become newlines",
+   "input": "a\u000bb\fc",
+   "clean": "a\nb\nc",
+   "characters": 5,
    "fits": true
   },
   {
@@ -128,10 +142,10 @@
    "fits": true
   },
   {
-   "name": "line separator removed",
-   "input": "a\u2028b",
-   "clean": "ab",
-   "characters": 2,
+   "name": "line and paragraph separators become newlines",
+   "input": "a\u2028b\u2029c",
+   "clean": "a\nb\nc",
+   "characters": 5,
    "fits": true
   },
   {
@@ -140,6 +154,20 @@
    "clean": "ab",
    "characters": 2,
    "fits": true
+  },
+  {
+   "name": "byte order mark removed",
+   "input": "\ufeffa\ufeffb\ufeff",
+   "clean": "ab",
+   "characters": 2,
+   "fits": true
+  },
+  {
+   "name": "only a byte order mark is empty",
+   "input": "\ufeff",
+   "clean": "",
+   "characters": 0,
+   "fits": false
   },
   {
    "name": "RLM kept",

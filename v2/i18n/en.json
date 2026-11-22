@@ -407,6 +407,7 @@
     "conv-composer-submit": "Submit & next",
     "conv-composer-charcount": "$1 / 280",
     "conv-composer-over-limit": "$1 {{PLURAL:$1|character|characters}} too many",
+    "conv-composer-too-big": "Too long to send: emoji and combined characters take more room. Shorten the text.",
     "conv-newstmt-helper": "Bring a different angle, in one claim and one sentence. It goes to moderation, then into the same pool as the other statements.",
     "conv-newstmt-placeholder": "A new angle on the topic…",
     "conv-newstmt-hint": "This is a separate statement, and other people can respond to it too. You release your statement into the public domain (CC0).",
