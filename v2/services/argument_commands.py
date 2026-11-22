@@ -3,11 +3,11 @@
 import random
 from dataclasses import dataclass
 
-import nh3
 from sqlalchemy.exc import IntegrityError
 
 from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
                 FeaturedStatement, Participation, db)
+from services.text_rules import clean_text, fits
 
 
 class InvalidArgument(ValueError):
@@ -53,8 +53,8 @@ def submit_argument(
     featured_statement_id: int, side: str, body: str, touch,
 ) -> ArgumentSubmission:
     _featured(conversation, featured_statement_id)
-    clean_body = nh3.clean((body or '').strip(), tags=frozenset())
-    if side not in {'pro', 'con'} or not clean_body or len(clean_body) > 280:
+    clean_body = clean_text(body)
+    if side not in {'pro', 'con'} or not fits(clean_body):
         raise InvalidArgument()
     lookup = {
         'proposer_pseudonym': participation.pseudonym,

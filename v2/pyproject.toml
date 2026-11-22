@@ -23,6 +23,9 @@ dependencies = [
     # HTML sanitisation
     "nh3>=0.2",
 
+    # Character counting: grapheme clusters (\X) for the clean-text rule (#616)
+    "regex>=2026.9.29",
+
     # HTTP
     "requests>=2.31",
 

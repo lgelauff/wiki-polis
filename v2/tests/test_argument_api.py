@@ -379,7 +379,7 @@ def test_content_flag_api_creates_and_deduplicates_argument_flag(
     assert replay.status_code == 200
     assert first.get_json()['data']['created'] is True
     assert replay.get_json()['data']['created'] is False
-    assert ContentFlag.query.one().detail == 'Needs review'
+    assert ContentFlag.query.one().detail == '<b>Needs review</b>'   # #616: as typed
     assert AuditEvent.query.filter_by(operation='content_flag.create').count() == 1
 
 

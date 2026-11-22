@@ -16,6 +16,43 @@ them:
 - **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
 - **Create voucher codes** → [Voucher codes](#voucher-codes) below (until the organizer screens exist).
 
+## Seeds stored escaped before #616
+
+Until #616, organizer seed statements were HTML-escaped before they were sent to Polis,
+so some show "&amp;", "&lt;" or "&nbsp;" there. Deploy #616 with the webservice stopped
+during `flask db upgrade`: the old code still escapes, and a row it writes between the
+migration and the restart stays escaped. If it was not stopped, check rows created since
+the migration for "&amp;", "&lt;" and "&gt;".
+
+After the migration, list the escaped seeds once, inside the webservice shell like a
+migration, and correct each one in Polis by hand:
+
+```bash
+# Read-only. Tab-separated: slug, place, statement id, text as stored, as it should read.
+flask --app app escaped-seeds > escaped-seeds.tsv        # every consultation
+flask --app app escaped-seeds <slug>                    # one consultation
+
+# Once those seeds are fixed in Polis (Round 6 copies too): copy the fixed text into
+# Proto's own copies.
+flask --app app escaped-seeds --refresh-cache
+```
+
+Places:
+
+- **polis**: the seed in the consultation's Polis conversation.
+- **round6**: its copy in the Round 6 conversation. Fix these too: the Round 6 re-sync
+  matches featured statements to Round 6 by text.
+- **cache**: Proto's own copy of a featured statement, used by informed voting and the
+  results. It only fills while empty, so `--refresh-cache` replaces it.
+- **polis-unflagged**, **round6-unflagged**: Polis did not say whether the statement is a
+  seed. Check by hand; it may be a participant's own text.
+
+Tabs, newlines and other unprintable characters in the text are printed as escapes
+(`\t`, `\n`, `\xa0`). `--refresh-cache` only copies a seed that is no longer escaped
+in Polis and whose own Round 6 copy is fixed too; other Round 6 statements don't matter.
+It refreshes nothing for a consultation whose Round 6 conversation could not be read. It
+says why on stderr for each row it leaves.
+
 ## Voucher codes
 
 Until the organizer screens exist (#368), codes for a voucher-gated process are created

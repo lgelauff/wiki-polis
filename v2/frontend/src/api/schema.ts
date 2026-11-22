@@ -1444,6 +1444,7 @@ export interface components {
             };
         };
         AdminSeedStatementRequest: {
+            /** @description At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped. */
             text: string;
             derivedFromId: number | null;
             /** @default false */
@@ -2906,6 +2907,7 @@ export interface components {
         };
         ArgumentItem: {
             id: number;
+            /** @description At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped. */
             body: string;
             own: boolean;
             selected: boolean;
@@ -2932,6 +2934,7 @@ export interface components {
         CreateArgumentRequest: {
             /** @enum {string} */
             side: "pro" | "con";
+            /** @description At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped. */
             body: string;
         };
         ArgumentCommandLinks: {
@@ -2998,6 +3001,7 @@ export interface components {
             };
         };
         CreateStatementRequest: {
+            /** @description At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped. */
             text: string;
             derivedFromStatementId?: number | null;
         };

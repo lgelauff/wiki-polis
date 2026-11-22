@@ -2,9 +2,8 @@
 
 from dataclasses import dataclass
 
-import nh3
-
 from db import FLAG_CATEGORIES, ContentFlag, Conversation, Participation, db
+from services.text_rules import clean_note
 
 
 class InvalidFlag(ValueError):
@@ -24,7 +23,7 @@ def submit_content_flag(
 ) -> FlagResult:
     if content_type not in {'statement', 'argument'} or category not in FLAG_CATEGORIES:
         raise InvalidFlag()
-    clean_detail = nh3.clean((detail or '').strip(), tags=frozenset())[:1000]
+    clean_detail = clean_note(detail)
     if category == 'other' and not clean_detail:
         raise InvalidFlag()
     target = {'statement_tid': target_id} if content_type == 'statement' else {

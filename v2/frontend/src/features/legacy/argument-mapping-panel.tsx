@@ -14,6 +14,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {richHtml} from '../../i18n/rich-html';
 import {maintenanceCopy} from '../../maintenance';
+import {countCharacters, fitsLimit} from '../../text-rules';
 
 type Mapping = components['schemas']['ArgumentMapping'];
 type Featured = components['schemas']['ArgumentFeaturedStatement'];
@@ -63,7 +64,12 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
   );
   const [body, setBody] = useState('');
   // Text over the limit is kept as typed, never cut (#558); Submit waits until it fits.
-  const overLimit = Math.max(0, body.length - ARGUMENT_MAX_CHARACTERS);
+  const characters = countCharacters(body);
+  const overLimit = Math.max(0, characters - ARGUMENT_MAX_CHARACTERS);
+  // Within 280 but over the hidden storage caps (long emoji sequences): the server refuses it.
+  const fits = fitsLimit(body, ARGUMENT_MAX_CHARACTERS);
+  const tooBig = !fits && overLimit === 0 && characters > 0;
+  const invalid = overLimit > 0 || tooBig;
   const countId = `contribute-count-${featuredId}-${side}`;
   const guidanceId = `contribute-guidance-${featuredId}-${side}`;
   const errorId = `contribute-error-${featuredId}-${side}`;
@@ -100,7 +106,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
 
   function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (body.trim() && !overLimit) submit.mutate();
+    if (fits) submit.mutate();
   }
 
   return (
@@ -115,13 +121,13 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
           <span className="contribute-glyph filled">{copy.sign}</span>
           <span className="contribute-composer-label" id={`contribute-label-${featuredId}-${side}`}>{text.composerLabel}</span>
           <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">{msg('conv-arg-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink>
-          <span className="contribute-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : <><span className="cc-len">{body.length}</span> / {ARGUMENT_MAX_CHARACTERS}</>}</span>
+          <span className="contribute-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : tooBig ? msg('conv-composer-too-big') : <><span className="cc-len">{characters}</span> / {ARGUMENT_MAX_CHARACTERS}</>}</span>
         </div>
         <p className="contribute-guidance" id={guidanceId}>{text.guidance}</p>
-        <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={[guidanceId, overLimit > 0 && countId, (submit.error || skip.error) && errorId].filter(Boolean).join(' ')} aria-invalid={overLimit > 0 || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
+        <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={[guidanceId, invalid && countId, (submit.error || skip.error) && errorId].filter(Boolean).join(' ')} aria-invalid={invalid || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
         <div className="contribute-actions">
           <button type="button" className="btn-secondary contribute-skip-btn" disabled={skip.isPending} onClick={() => skip.mutate()}>{msg('conv-arg-nothing')}</button>
-          <button type="submit" className="btn-primary contribute-submit-btn" disabled={!body.length || overLimit > 0 || submit.isPending}>{msg('conv-arg-submit')}</button>
+          <button type="submit" className="btn-primary contribute-submit-btn" disabled={!fits || submit.isPending}>{msg('conv-arg-submit')}</button>
         </div>
       </form>
       <div className={`at-contribute at-contribute--done contribute-submitted contribute-submitted--${side}`}>
