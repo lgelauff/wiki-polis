@@ -1,7 +1,7 @@
 """add voucher_batches.link_resume_until (#412)
 
 Revision ID: c9d0e1f2a3b4
-Revises: a7b8c9d0e1f2
+Revises: b8c9d0e1f2a3
 Create Date: 2026-11-21 15:00:00.000000
 
 An optional moment per batch after which a link carrying a code no longer signs a
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 
 revision = 'c9d0e1f2a3b4'
-down_revision = 'a7b8c9d0e1f2'
+down_revision = 'b8c9d0e1f2a3'
 branch_labels = None
 depends_on = None
 
