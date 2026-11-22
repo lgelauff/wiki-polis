@@ -182,6 +182,7 @@ def test_a_throttled_linked_code_leaves_the_address(limited_app, conv):  # noqa:
     breach = client.get(f'/c/{conv.slug}/v?v=WRONG9999')
     assert breach.status_code == 429
     assert _address_script(breach) == f'/c/{conv.slug}/v'
+    assert 'WRONG9999' not in breach.get_data(as_text=True)
 
 
 def test_an_ended_link_spends_the_budget_like_a_miss(limited_app, conv):  # noqa: F811
@@ -201,6 +202,6 @@ def test_an_ended_link_spends_the_budget_like_a_miss(limited_app, conv):  # noqa
     batch.link_resume_until = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
     db.session.commit()
     finder = limited_app.test_client()
-    statuses = [finder.get(f'/c/{conv.slug}/v?v={CODE}').status_code
-                for _ in range(SESSION_BUDGET + 1)]
-    assert statuses == [200] * SESSION_BUDGET + [429]
+    responses = [finder.get(f'/c/{conv.slug}/v?v={CODE}') for _ in range(SESSION_BUDGET + 1)]
+    assert [r.status_code for r in responses] == [200] * SESSION_BUDGET + [429]
+    assert CODE not in responses[-1].get_data(as_text=True)   # the 429 page shows no code

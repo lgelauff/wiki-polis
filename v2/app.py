@@ -423,8 +423,10 @@ def _clear_code_from_address() -> str:
 
     A voucher page answers a linked code in place (200, #412 decision b): a wrong or
     ambiguous code shows the form, a code for another account asks first. The page
-    stays as it is; only the address is replaced, so history, bookmarks and
-    screenshots keep no code. Other parameters such as ``uselang`` stay.
+    stays as it is; only the current history entry is replaced, so the address bar,
+    a reload or a bookmark made afterwards carry no code. It cannot clear what already
+    saw the address: the browser's global history and address-bar suggestions, or the
+    request log of a proxy. Other parameters such as ``uselang`` stay.
     """
     if 'v' not in request.args:
         return ''
@@ -723,14 +725,14 @@ def _voucher_attempt_failed(_response) -> bool:
 def _voucher_throttled(request_limit):
     """The voucher page's own 429: the form, with how long to wait.
 
-    What was typed (or linked) stays in the field, so it can be sent again once
-    the wait is over. That depends only on the input, not on the code's state.
+    What was typed stays in the field, so it can be sent again once the wait is
+    over. A linked code does not: the page never shows a code that came in a link.
     """
     conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
     if conv is None:
         return None  # fall back to the generic 429
     wait = max(1, int(request_limit.reset_at - time.time()))
-    typed = request.form.get('code', '') or request.args.get('v', '')
+    typed = request.form.get('code', '') if request.method == 'POST' else ''
     response = _voucher_form_page(conv, error='throttled', code_value=typed,
                                   error_params=(wait,))
     response.status_code = 429
