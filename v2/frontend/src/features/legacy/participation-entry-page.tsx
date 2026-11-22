@@ -208,6 +208,9 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
             </div>
           </div>
 
+          {/* Whoever has the link or code is this account (#412): say so where it is first used. */}
+          {voucher && <div className="accept-section"><p id="accept-voucher-credential">{msg('accept-voucher-credential')}</p></div>}
+
           {/* A voucher account has no Wikimedia email or talk page to notify (#368). */}
           {!voucher && <div className="accept-section" role="group" aria-labelledby="notification-title" aria-describedby="notification-help">
             <h2 id="notification-title">{msg('accept-notify-heading')}</h2>
