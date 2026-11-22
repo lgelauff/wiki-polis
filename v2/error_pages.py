@@ -164,6 +164,14 @@ _ERRORS = {
         'message': 'This address only works from a button on the site, not as a link.',
         'hint': 'Go to <a href="/">the front page</a> to continue.',
     },
+    # Maintenance mode (#619). Not an error the reader caused or can fix; the page says the
+    # pause is deliberate and short, and that nothing they entered is lost.
+    503: {
+        'title': 'Proto is being updated',
+        'message': 'Participation is paused for a few minutes while the site is upgraded. '
+                   'Nothing you entered is lost.',
+        'hint': 'Try again in a few minutes.',
+    },
     500: {
         'title': 'Something went wrong',
         'message': 'The server could not complete this request.',
@@ -198,6 +206,18 @@ def render_error_page(code: int) -> str:
         message=html.escape(translated['message']),
         hint=translated['hint'],
     )
+
+
+_MAINTENANCE_MESSAGE = ('Proto is being updated. Nothing you entered is lost. '
+                        'Try again in a few minutes.')
+
+
+def maintenance_message() -> str:
+    """The one-line maintenance notice, for the API's 503 ``maintenance`` envelope (#619).
+
+    The same text the SPA shows for that code, in the reader's language where there is one.
+    """
+    return _t('maintenance-error', _MAINTENANCE_MESSAGE)
 
 
 def _page_language() -> str:

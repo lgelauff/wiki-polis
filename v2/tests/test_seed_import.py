@@ -384,12 +384,13 @@ def _existing(*texts):
 def test_sanitizes_and_deduplicates(admin_client, conv):
     with _mock_polis(existing_statements=_existing('Already there')) as mock:
         outcome = _outcome(_import(admin_client, conv.id, [
-            '<b>Hello</b>', 'Hello', '&equals;SUM(A1)', 'Already there',
+            '<b>Hello</b>', 'Hello', 'hello', '=SUM(A1)', 'Already there',
         ]))
-    assert _sent(mock) == ['Hello', 'SUM(A1)']
-    assert outcome['imported'] == 2
+    # #616: markup is kept as typed, so '<b>Hello</b>' and 'Hello' are two statements.
+    assert _sent(mock) == ['<b>Hello</b>', 'Hello', 'SUM(A1)']
+    assert outcome['imported'] == 3
     assert outcome['skippedExisting'] == 1           # 'Already there'
-    assert outcome['skippedDuplicateInput'] == 1     # '<b>Hello</b>' vs 'Hello'
+    assert outcome['skippedDuplicateInput'] == 1     # 'hello' vs 'Hello'
 
 
 def test_skips_statements_already_in_polis(admin_client, conv):
@@ -398,6 +399,14 @@ def test_skips_statements_already_in_polis(admin_client, conv):
                                    ['Already there', 'New one']))
     assert _sent(mock) == ['New one']
     assert outcome['imported'] == 1
+    assert outcome['skippedExisting'] == 1
+
+
+def test_a_seed_escaped_in_polis_before_616_counts_as_existing(admin_client, conv):
+    """Older seeds were sent HTML-escaped; typing the same text again is a duplicate."""
+    with _mock_polis(existing_statements=_existing('Tom &amp; Jerry')) as mock:
+        outcome = _outcome(_import(admin_client, conv.id, ['Tom & Jerry', 'New one']))
+    assert _sent(mock) == ['New one']
     assert outcome['skippedExisting'] == 1
 
 
@@ -477,19 +486,15 @@ def test_outcome_counts_successes_and_upstream_skips_together(admin_client, conv
 
 # ── Security ─────────────────────────────────────────────────────────────────
 
-def test_xss_in_statement_text_never_reaches_polis(admin_client, conv):
-    """A script payload is stripped to nothing and the import is refused.
+def test_markup_in_statement_text_reaches_polis_as_typed(admin_client, conv):
+    """#616: seed text is stored and sent as typed, never HTML-escaped or stripped.
 
-    The Jinja version asserted only that '<script>' was absent from the rendered
-    page, which the empty SPA shell satisfied for free. What matters is that the
-    payload never reaches Polis: nh3 removes the script element and its contents,
-    leaving an empty statement, which the import then rejects outright.
+    Every page that shows it escapes it on output (React), so markup is plain text.
+    Participant statements already reach Polis this way.
     """
     with _mock_polis() as mock:
-        resp = _import(admin_client, conv.id, ['<script>alert(1)</script>'])
-    assert 'empty after sanitization' in _error(resp, 400)['message'].lower()
-    assert _sent(mock) is None
-    assert b'<script>' not in resp.data
+        _outcome(_import(admin_client, conv.id, ['<script>alert(1)</script>', 'Tom & Jerry']))
+    assert _sent(mock) == ['<script>alert(1)</script>', 'Tom & Jerry']
 
 
 def test_formula_injection_stripped_before_add_seed(admin_client, conv):
@@ -498,35 +503,36 @@ def test_formula_injection_stripped_before_add_seed(admin_client, conv):
     assert _sent(mock) == ['DANGEROUS']
 
 
-def test_html_entity_formula_injection_stripped(admin_client, conv):
-    # &equals; is the HTML entity for '=' — nh3 decodes it, so the formula prefix
-    # must be stripped again after sanitisation.
+def test_html_entity_is_kept_as_typed(admin_client, conv):
+    # #616: entities are no longer decoded, so '&equals;' stays text and starts no formula.
     with _mock_polis() as mock:
         _outcome(_import(admin_client, conv.id, ['&equals;SUM(A1)']))
-    assert _sent(mock) == ['SUM(A1)']
+    assert _sent(mock) == ['&equals;SUM(A1)']
 
 
-def test_text_that_sanitizes_to_nothing_is_rejected(admin_client, conv):
-    """CHANGED BEHAVIOUR (was test_all_tags_text_produces_empty_string_and_is_not_sent).
-
-    '<b></b>' becomes '' after nh3.clean. The textarea route dropped such a line
-    silently; the API rejects the import and names the statement. Either way it
-    must never reach Polis as an empty seed.
-    """
+def test_text_that_cleans_to_nothing_is_rejected(admin_client, conv):
+    """A line that is only formula prefixes is empty once they are stripped: the API
+    rejects the import and names the statement, so no empty seed reaches Polis."""
     with _mock_polis() as mock:
-        resp = _import(admin_client, conv.id, ['<b></b>'])
+        resp = _import(admin_client, conv.id, ['=+-'])
     message = _error(resp, 400)['message']
     assert 'Statement 1' in message
     assert 'empty after sanitization' in message.lower()
     assert _sent(mock) is None
 
 
-def test_nh3_induced_duplicate_sent_only_once(admin_client, conv):
-    # '<b>Hello</b>' and 'Hello' both sanitize to 'Hello' — only one
-    # should reach Polis.
+def test_invisible_characters_are_removed_before_sending(admin_client, conv):
+    """#616: direction overrides and control characters are removed; text is NFC."""
     with _mock_polis() as mock:
-        outcome = _outcome(_import(admin_client, conv.id, ['<b>Hello</b>', 'Hello']))
+        _outcome(_import(admin_client, conv.id, ['ab\u202ecd\u0000', 'cafe\u0301']))
+    assert _sent(mock) == ['abcd', 'caf\u00e9']
+
+
+def test_normalisation_duplicate_sent_only_once(admin_client, conv):
+    # 'cafe' + combining acute and the precomposed 'café' are the same text after NFC.
+    with _mock_polis() as mock:
+        outcome = _outcome(_import(admin_client, conv.id, ['cafe\u0301', 'caf\u00e9']))
     texts_sent = _sent(mock)
     assert texts_sent is not None, 'bulk_add_seeds should have been called'
-    assert texts_sent.count('Hello') == 1
+    assert texts_sent.count('caf\u00e9') == 1
     assert outcome['skippedDuplicateInput'] == 1

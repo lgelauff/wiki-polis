@@ -228,6 +228,8 @@ const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
   forbidden: 'conv-err-submissions-closed',
   // A session that expired mid-consultation: a retry fails the same way, so say to log in.
   unauthorized: 'common-err-nologin',
+  // Maintenance mode (#619): nothing was saved, and a retry after the pause will work.
+  maintenance: 'maintenance-error',
   _fallback: 'conv-err-submit-statement',
 };
 
@@ -236,6 +238,8 @@ const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
  *  here, so it has no entry. */
 const WORKSPACE_ERROR_MESSAGES: Record<string, string> = {
   not_found: 'errorpage-404-message',
+  // Maintenance mode (#619), under the heading errorpage-503-title.
+  maintenance: 'errorpage-503-message',
   _fallback: 'conv-unavailable-body',
 };
 
@@ -246,6 +250,7 @@ const JOIN_ERROR_MESSAGES: Record<string, string> = {
   join_closed: 'accept-err-closed',
   // The session expired while the form was open.
   unauthorized: 'common-err-nologin',
+  maintenance: 'maintenance-error',
   _fallback: 'accept-err-join',
 };
 

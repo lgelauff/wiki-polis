@@ -1,11 +1,13 @@
 import {Component, type ErrorInfo, type ReactNode} from 'react';
-import {useSuspenseQuery} from '@tanstack/react-query';
+import {useQueryErrorResetBoundary, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation} from 'react-router-dom';
 
 import {ApiContractError} from '../../api/client';
 import {sessionQuery} from '../../api/queries';
 import {loginHref} from '../../login-href';
+import {isMaintenance} from '../../maintenance';
 import {AccessDeniedPage} from '../legacy/access-denied-page';
+import {MaintenancePage} from '../legacy/maintenance-page';
 import {NavigationRedirect} from '../legacy/external-redirect';
 
 /** A signed-out visitor on a console page that needs a sign-in goes to the login, and comes
@@ -18,10 +20,16 @@ function LoginRedirect() {
 }
 
 class AdminErrorBoundary extends Component<
-  {children: ReactNode},
+  {children: ReactNode; onReset: () => void},
   {error: unknown | null}
 > {
   state: {error: unknown | null} = {error: null};
+
+  /** Shows the page again, and lets its refused queries fetch anew instead of rethrowing. */
+  reset = () => {
+    this.props.onReset();
+    this.setState({error: null});
+  };
 
   static getDerivedStateFromError(error: unknown) {
     return {error};
@@ -40,6 +48,8 @@ class AdminErrorBoundary extends Component<
     if (error instanceof ApiContractError && error.code === 'unauthorized') {
       return <LoginRedirect />;
     }
+    // Organizer and moderator reads are paused while maintenance mode is on (#619).
+    if (isMaintenance(error)) return <MaintenancePage onOver={this.reset} />;
     if (error) throw error;
     return this.props.children;
   }
@@ -47,5 +57,6 @@ class AdminErrorBoundary extends Component<
 
 export function AdminAccessBoundary({children}: {children: ReactNode}) {
   const location = useLocation();
-  return <AdminErrorBoundary key={location.pathname}>{children}</AdminErrorBoundary>;
+  const {reset} = useQueryErrorResetBoundary();
+  return <AdminErrorBoundary key={location.pathname} onReset={reset}>{children}</AdminErrorBoundary>;
 }

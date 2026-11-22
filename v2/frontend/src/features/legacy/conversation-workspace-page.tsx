@@ -25,6 +25,8 @@ import {phaseLabel, statementErrorCopy, tabLabel, workspaceErrorCopy} from '../.
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 import {LoginPrompt} from './login-prompt';
+import {isMaintenance, maintenanceCopy} from '../../maintenance';
+import {countCharacters, fitsLimit} from '../../text-rules';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
@@ -232,8 +234,12 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   // Text over the limit is kept as typed, never cut (#558): the counter says how much to
   // remove and Submit waits until it fits. The server's 1–280 check stays the backstop.
   const countId = suggest ? 'composer-suggest-count' : 'composer-newstmt-count';
-  const overLimit = Math.max(0, text.length - STATEMENT_MAX_CHARACTERS);
-  const describedBy = [helperId, overLimit > 0 && countId, mutation.error && errorId].filter(Boolean).join(' ');
+  const characters = countCharacters(text);
+  const overLimit = Math.max(0, characters - STATEMENT_MAX_CHARACTERS);
+  // Within 280 but over the hidden storage caps (long emoji sequences): the server refuses it.
+  const fits = fitsLimit(text, STATEMENT_MAX_CHARACTERS);
+  const tooBig = !fits && overLimit === 0 && characters > 0;
+  const describedBy = [helperId, (overLimit > 0 || tooBig) && countId, mutation.error && errorId].filter(Boolean).join(' ');
   return (
     <div id={suggest ? 'composer-suggest' : 'composer-newstmt'} className="v2-composer">
       <div className="v2-composer-header">
@@ -241,14 +247,14 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
           <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink></div>
         </div>
-        <span className="propose-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : msg('conv-composer-charcount', text.length)}</span>
+        <span className="propose-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : tooBig ? msg('conv-composer-too-big') : msg('conv-composer-charcount', characters)}</span>
       </div>
-      <textarea className="v2-composer-textarea" aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={describedBy} aria-invalid={textRejected || overLimit > 0 || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
+      <textarea className="v2-composer-textarea" aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={describedBy} aria-invalid={textRejected || overLimit > 0 || tooBig || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
       <div className="v2-composer-footer">
         <span className="v2-composer-hint">{suggest ? msg('conv-suggest-hint') : msg('conv-newstmt-hint')}</span>
         <div className="v2-composer-btns">
           <button type="button" className="btn-small btn-muted" onClick={onCancel}>{msg('common-cancel')}</button>
-          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || overLimit > 0 || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
+          <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !fits || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
         </div>
       </div>
       {mutation.error && <p className="error" id={errorId} role="alert">{statementErrorCopy(msg, mutation.error)}</p>}
@@ -306,7 +312,8 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   const [composer, setComposer] = useState<ComposerMode>(null);
   const [submitted, setSubmitted] = useState(false);
   const [loadingNext, setLoadingNext] = useState(false);
-  const [nextFailed, setNextFailed] = useState(false);
+  // The error behind a failed reload of the next card, or null; false while none failed.
+  const [nextFailed, setNextFailed] = useState<unknown>(false);
   const nextPending = useRef(false);
   const statementId = data.currentStatement?.id ?? null;
   // A receipt belongs to the card it was given for: the next card never shows it, even in the
@@ -365,7 +372,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
     setLoadingNext(false);
     if (result.isError) {
       // The old card keeps its receipt, so Move on is right there to try again.
-      setNextFailed(true);
+      setNextFailed(result.error ?? true);
       return;
     }
     setReceipt(null);
@@ -433,8 +440,8 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
             {data.newStatement.unlocked && <p className="all-done-sub">{msg('conv-alldone-sub')}</p>}
           </div>
         )}
-        {vote.error && <div id="conv-error" role="alert"><p className="muted">{msg('conv-err-submit-vote')}</p></div>}
-        {nextFailed && <div id="conv-next-error" role="alert"><p className="muted">{msg('conv-unavailable-body')}</p></div>}
+        {vote.error && <div id="conv-error" role="alert"><p className="muted">{maintenanceCopy(msg, vote.error) ?? msg('conv-err-submit-vote')}</p></div>}
+        {nextFailed !== false && <div id="conv-next-error" role="alert"><p className="muted">{maintenanceCopy(msg, nextFailed) ?? msg('conv-unavailable-body')}</p></div>}
       </div>
     </div>
   );
@@ -533,7 +540,7 @@ export function ConversationWorkspacePage() {
   const restricted = inviteOnlyDetails(workspace.error);
   if (restricted) return <InviteOnlyPage details={restricted} />;
   if (workspace.error) {
-    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{workspace.error instanceof ApiContractError && workspace.error.code === 'not_found' ? msg('errorpage-404-title') : msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
+    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{workspace.error instanceof ApiContractError && workspace.error.code === 'not_found' ? msg('errorpage-404-title') : isMaintenance(workspace.error) ? msg('errorpage-503-title') : msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
   }
   const data = workspace.data;
   if (data.viewer.state === 'join_required') return <NavigationRedirect href={data.links.join} />;

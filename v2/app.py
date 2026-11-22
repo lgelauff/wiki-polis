@@ -9,6 +9,7 @@ import functools
 import hashlib
 import hmac
 import html
+import json
 import os
 import random
 import re
@@ -49,11 +50,13 @@ from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          polis_server_config_error)
 from http_pool import session as polis_http
 from seed_csv import (MAX_ROWS, MAX_TEXT_CHARS, strip_formula_prefixes)
+from services.text_rules import clean_text, fits
 from logging_setup import configure_logging
 import i18n
-from error_pages import render_error_page
+import maintenance
+from error_pages import maintenance_message, render_error_page
 from api.v1 import (
-    create_api_v1_blueprint, http_exception_json, is_api_request,
+    create_api_v1_blueprint, error_response, http_exception_json, is_api_request,
     register_api_error_handlers,
 )
 from services.identity import (
@@ -284,6 +287,8 @@ _VOUCHER_MESSAGES = {
     'invalid-excluded': ('voucher-invalid-excluded-letters',
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
+    'link-expired': ('voucher-link-resume-ended',
+                     'This link no longer signs you in. Type your access code to continue.'),
     'joined': ('voucher-already-joined',
                'You already take part in this consultation with an access code in this browser. '
                'Log out first to use a different code.'),
@@ -343,7 +348,7 @@ _VOUCHER_PAGE = (
     '{lead}'
     '<h1>{heading}</h1>'
     '{body}'
-    '</main></body></html>'
+    '</main>{address}</body></html>'
 )
 
 
@@ -417,6 +422,24 @@ def _voucher_lead(conv) -> str:
     )
 
 
+def _clear_code_from_address() -> str:
+    """A script that takes a linked ?v=<code> out of the address bar, or ''.
+
+    A voucher page answers a linked code in place (200, #412 decision b): a wrong or
+    ambiguous code shows the form, a code for another account asks first. The page
+    stays as it is; only the current history entry is replaced, so the address bar,
+    a reload or a bookmark made afterwards carry no code. It cannot clear what already
+    saw the address: the browser's global history and address-bar suggestions, or the
+    request log of a proxy. Other parameters such as ``uselang`` stay.
+    """
+    if 'v' not in request.args:
+        return ''
+    target = json.dumps(_keep_other_params(request.path)).replace('</', '<\\/')
+    nonce = html.escape(g.get('csp_nonce', ''))
+    return (f'<script nonce="{nonce}">'
+            f'history.replaceState(history.state,"",{target}+location.hash);</script>')
+
+
 def _voucher_response(conv, heading: str, body: str, *, lead: str = ''):
     """Self-contained page: it carries a credential, so it is never cached."""
     locale = g.get('locale') or i18n.SOURCE_LOCALE
@@ -424,6 +447,7 @@ def _voucher_response(conv, heading: str, body: str, *, lead: str = ''):
         lang=html.escape(locale), dir=i18n.text_direction(locale),
         doc_title=_voucher_text('doc-title', conv.title),
         heading=heading, body=body, lead=lead, notice=_take_logout_notice_html(),
+        address=_clear_code_from_address(),
     ))
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'
@@ -705,14 +729,14 @@ def _voucher_attempt_failed(_response) -> bool:
 def _voucher_throttled(request_limit):
     """The voucher page's own 429: the form, with how long to wait.
 
-    What was typed (or linked) stays in the field, so it can be sent again once
-    the wait is over. That depends only on the input, not on the code's state.
+    What was typed stays in the field, so it can be sent again once the wait is
+    over. A linked code does not: the page never shows a code that came in a link.
     """
     conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
     if conv is None:
         return None  # fall back to the generic 429
     wait = max(1, int(request_limit.reset_at - time.time()))
-    typed = request.form.get('code', '') or request.args.get('v', '')
+    typed = request.form.get('code', '') if request.method == 'POST' else ''
     response = _voucher_form_page(conv, error='throttled', code_value=typed,
                                   error_params=(wait,))
     response.status_code = 429
@@ -720,10 +744,22 @@ def _voucher_throttled(request_limit):
     return response
 
 
-def _voucher_submit(conv, code: str, *, confirmed: bool):
+def _link_resume_ended(voucher) -> bool:
+    """True once the code's batch no longer lets a link sign its holder back in (#412)."""
+    until = voucher.batch.link_resume_until if voucher.batch is not None else None
+    if until is None:
+        return False
+    if until.tzinfo is not None:
+        until = until.astimezone(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc).replace(tzinfo=None) >= until
+
+
+def _voucher_submit(conv, code: str, *, confirmed: bool, linked: bool = False):
     """Redeem or resume *code* on *conv*, then send the holder to the process.
 
     The code leaves the address bar on success: the redirect target carries none.
+    *linked* is a code that arrived in the address (?v=); after its batch's
+    link_resume_until it no longer resumes an account, it has to be typed (#412).
     """
     if not code.strip():
         return _voucher_form_page(conv, error='empty')
@@ -735,6 +771,16 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
     entry = classify_voucher(code, conv.id)
     if entry.outcome == 'invalid':
         return _voucher_not_valid(conv, code)
+
+    # A link past its batch's resume date asks for the code to be typed, unless this
+    # browser is already that account. The answer reveals that the code is valid, so
+    # it spends the failed-attempt budget like a miss; the field stays empty, so the
+    # page never shows the code.
+    if linked and entry.outcome == 'resume' and _link_resume_ended(entry.voucher):
+        current = _current_participant()
+        if current is None or current.id != entry.participant.id:
+            g.voucher_attempt_failed = True
+            return _voucher_form_page(conv, error='link-expired')
 
     # Both answers below reveal that the code is valid without using it, so they
     # spend the failed-attempt budgets like a miss: otherwise a signed-in browser
@@ -3732,8 +3778,8 @@ def _statement_api_payload(
     slug: str, body: dict, idempotency_key: str,
 ) -> tuple[dict, int]:
     conv, participant, participation = _require_explore_api_context(slug)
-    text_value = body['text'].strip()
-    if not text_value or len(text_value) > 280:
+    text_value = clean_text(body['text'])
+    if not fits(text_value):
         abort(400, description='Statement text must contain 1 to 280 characters.')
     derived_from = body.get('derivedFromStatementId')
     config = conv.argument_vote_data or {}
@@ -4741,7 +4787,6 @@ def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
         conversation=conv,
         candidates=body['statements'],
         existing_buckets=existing,
-        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
         strip_formula_prefixes=strip_formula_prefixes,
         bulk_add_seeds=_polis_server_client().bulk_add_seeds,
         max_rows=MAX_ROWS,
@@ -4776,7 +4821,6 @@ def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
         conversation=conv,
         text=body['text'],
         derived_from_id=body['derivedFromId'],
-        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
         statement_text_map=_statement_text_map,
         add_seed=_polis_server_client().add_seed,
         record_provenance=record_statement_provenance,
@@ -5643,9 +5687,6 @@ def _backfill_statement_texts(conv, confirmed: list) -> bool:
         db.session.commit()
     return changed
 
-# nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
-_NH3_NO_TAGS: frozenset[str] = frozenset()
-
 
 _FLAG_CATEGORY_LABELS = {
     'personal_attack': 'Personal attack',
@@ -6398,6 +6439,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['REMINDERS_EMAIL_DAILY_CAP'] = email_cap_from(
         os.environ.get('REMINDERS_EMAIL_DAILY_CAP', ''))
 
+    # Maintenance mode (#619): the flag file whose presence pauses participation.
+    app.config['MAINTENANCE_FLAG_PATH'] = maintenance.configured_flag_path()
+
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
     if test_config is not None:
@@ -6556,14 +6600,22 @@ def create_app(test_config: dict | None = None) -> Flask:
     vouchers_cli = click.Group('vouchers', help='Create voucher codes for a process.')
     app.cli.add_command(vouchers_cli)
 
-    def _voucher_batch_for(slug: str, label: str | None):
+    def _link_resume_end(day):
+        """A --link-resume-until day as the moment links stop: the end of that day, UTC."""
+        return None if day is None else day.replace(tzinfo=None) + timedelta(days=1)
+
+    _LINK_RESUME_HELP = ('Last day (YYYY-MM-DD, UTC) on which a link signs a returning holder '
+                         'back in; after it the code must be typed. Default: no end.')
+
+    def _voucher_batch_for(slug: str, label: str | None, link_resume_until=None):
         conv = Conversation.query.filter_by(slug=slug).first()
         if conv is None:
             raise click.ClickException(f'No conversation with slug {slug!r}.')
         if not (is_gated_conversation(conv) and conversation_gating_type(conv) == 'voucher'):
             click.echo(f'Warning: {slug!r} is not voucher-gated yet; the codes will not '
                        'work until its gating type is set to voucher.', err=True)
-        batch = VoucherBatch(conversation_id=conv.id, label=label)
+        batch = VoucherBatch(conversation_id=conv.id, label=label,
+                             link_resume_until=_link_resume_end(link_resume_until))
         db.session.add(batch)
         return batch
 
@@ -6571,9 +6623,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     @click.argument('slug')
     @click.argument('count', type=click.IntRange(1, 20000))
     @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
-    def vouchers_generate_cmd(slug, count, label):
+    @click.option('--link-resume-until', type=click.DateTime(formats=['%Y-%m-%d']),
+                  default=None, help=_LINK_RESUME_HELP)
+    def vouchers_generate_cmd(slug, count, label, link_resume_until):
         """Generate COUNT codes and print them, one per line. Shown only once."""
-        codes = generate_voucher_codes(_voucher_batch_for(slug, label), count)
+        codes = generate_voucher_codes(
+            _voucher_batch_for(slug, label, link_resume_until), count)
         db.session.commit()
         for code in codes:
             click.echo(' '.join(code[i:i + 4] for i in range(0, len(code), 4)))
@@ -6582,13 +6637,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     @click.argument('slug')
     @click.argument('source', type=click.File('r', encoding='utf-8'))
     @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
-    def vouchers_import_cmd(slug, source, label):
+    @click.option('--link-resume-until', type=click.DateTime(formats=['%Y-%m-%d']),
+                  default=None, help=_LINK_RESUME_HELP)
+    def vouchers_import_cmd(slug, source, label, link_resume_until):
         """Import organizer-made codes from SOURCE (a file, or - for stdin), one per line.
 
         Capitals, spaces and hyphens do not matter. Codes must be 5-64 letters and
         digits; a code is only as hard to guess as it is long and random.
         """
-        result = import_voucher_codes(_voucher_batch_for(slug, label), source)
+        result = import_voucher_codes(
+            _voucher_batch_for(slug, label, link_resume_until), source)
         if not result.added:
             db.session.rollback()
             raise click.ClickException('No codes imported.')
@@ -6610,9 +6668,170 @@ def create_app(test_config: dict | None = None) -> Flask:
             for line in result.rejected:
                 click.echo(f'  {line}', err=True)
 
+    @vouchers_cli.command('set-link-resume')
+    @click.argument('slug')
+    @click.argument('until')
+    @click.option('--label', default=None,
+                  help='Only the batches with this label; default: every batch of SLUG.')
+    def vouchers_set_link_resume_cmd(slug, until, label):
+        """Set the last day (YYYY-MM-DD, UTC) on which links resume, or 'never-ends'.
+
+        After that day a link opens the code page and the code must be typed; typing
+        still resumes the account. 'never-ends' lets links resume again with no end.
+        """
+        conv = Conversation.query.filter_by(slug=slug).first()
+        if conv is None:
+            raise click.ClickException(f'No conversation with slug {slug!r}.')
+        if until == 'never-ends':
+            end = None
+        else:
+            try:
+                end = _link_resume_end(datetime.strptime(until, '%Y-%m-%d'))
+            except ValueError:
+                raise click.ClickException('UNTIL is a date (YYYY-MM-DD) or never-ends.')
+        batches = VoucherBatch.query.filter_by(conversation_id=conv.id)
+        if label is not None:
+            batches = batches.filter_by(label=label)
+        changed = 0
+        for batch in batches:
+            batch.link_resume_until = end
+            changed += 1
+        if not changed:
+            raise click.ClickException('No voucher batch matched.')
+        db.session.commit()
+        click.echo(f'Updated {changed} batch(es).')
+
+    def _escaped(text: str) -> bool:
+        """True when ``text`` still holds an HTML entity nh3 wrote (any entity, &nbsp; too)."""
+        return html.unescape(text) != text
+
+    def _tsv_field(text: str) -> str:
+        """Seed text on one TSV line: backslash, tab, newline and other unprintable
+        characters as escapes, so a column never breaks and nothing reaches the
+        terminal as a control sequence."""
+        return ''.join(ch if ch.isprintable() and ch != '\\'
+                       else ch.encode('unicode_escape').decode('ascii')
+                       for ch in text)
+
+    @app.cli.command('escaped-seeds')
+    @click.argument('slug', required=False)
+    @click.option('--refresh-cache', is_flag=True,
+                  help="Replace the listed cache rows with the text now in Polis, once it is "
+                       "fixed there.")
+    def escaped_seeds_cmd(slug, refresh_cache):
+        """List seed statements stored HTML-escaped before #616, for a manual fix in Polis.
+
+        For every consultation (or only SLUG) it prints, tab-separated: the slug, where
+        the text is, the statement id, the text as stored and as it should read. Places:
+        polis (the seed in the consultation's Polis conversation), round6 (its copy in
+        the Round 6 conversation) and cache (Proto's copy in featured_statements).
+        Statements Polis returns without a seed flag follow as polis-unflagged and
+        round6-unflagged: check those by hand, they may be a participant's own text.
+        Text is printed with tabs, newlines and unprintable characters escaped.
+
+        Read-only, except --refresh-cache: it copies the text now in Polis into each
+        listed cache row, and only once that seed is fixed in Polis and its own Round 6
+        copy is no longer escaped (the Round 6 re-sync matches by text). Other
+        statements in Round 6, a participant's included, do not hold it back. A row it
+        cannot refresh is left as it is, with the reason on stderr.
+        """
+        query = Conversation.query.filter(Conversation.polis_id.isnot(None))
+        if slug:
+            query = query.filter_by(slug=slug)
+        conversations = query.order_by(Conversation.slug).all()
+        if slug and not conversations:
+            raise click.ClickException(f'No conversation with slug {slug!r}.')
+        found = refreshed = 0
+
+        def listed(buckets, place):
+            """(flagged, unflagged) TSV lines for the escaped statements in ``buckets``."""
+            flagged, unflagged = [], []
+            for bucket in buckets:
+                for row in bucket:
+                    text = str(row.get('txt') or row.get('text') or '')
+                    if row.get('is_seed') is False or not _escaped(text):
+                        continue
+                    target, where = ((flagged, place) if 'is_seed' in row
+                                     else (unflagged, f'{place}-unflagged'))
+                    target.append((where, row.get('tid'), text))
+            return flagged, unflagged
+
+        def say(conv, message):
+            click.echo(f'{conv.slug}: {message}', err=True)
+
+        for conv in conversations:
+            buckets, _strict = _load_admin_statement_sources(conv)
+            if buckets is None:
+                say(conv, 'Polis could not be reached; not checked.')
+                continue
+            flagged, unflagged = listed(buckets, 'polis')
+            # The Round 6 re-sync finds a featured statement's copy by text. A copy still
+            # escaped there would no longer match a refreshed cache, so that statement
+            # waits; the mapped id is checked too, in case its text differs. Only those
+            # statements wait, not the whole consultation.
+            round6_readable = True
+            r6_escaped_tids, r6_escaped_texts = set(), set()
+            if conv.phase6_polis_conversation_id:
+                round6 = _polis_server_client().get_statements(conv.phase6_polis_conversation_id)
+                if round6 is None:
+                    round6_readable = False
+                    say(conv, 'the Round 6 conversation could not be read; not checked.')
+                else:
+                    r6_flagged, r6_unflagged = listed(round6, 'round6')
+                    flagged += r6_flagged
+                    unflagged += r6_unflagged
+                    for bucket in round6:
+                        for row in bucket:
+                            r6_text = str(row.get('txt') or row.get('text') or '')
+                            if _escaped(r6_text):
+                                r6_escaped_tids.add(row.get('tid'))
+                                r6_escaped_texts.add(_norm(r6_text))
+            polis_text = {row.get('tid'): str(row.get('txt') or row.get('text') or '')
+                          for bucket in buckets for row in bucket}
+            cache = []
+            for featured in (FeaturedStatement.query.filter_by(conversation_id=conv.id)
+                             .order_by(FeaturedStatement.polis_statement_id)):
+                text = featured.statement_text or ''
+                if _escaped(text):
+                    cache.append(('cache', featured.polis_statement_id, text))
+                    if not refresh_cache:
+                        continue
+                    live = polis_text.get(featured.polis_statement_id)
+                    if live is None:
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'not found in Polis.')
+                    elif _escaped(live):
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'still escaped in Polis; fix it there first.')
+                    elif not round6_readable:
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'the Round 6 conversation could not be read.')
+                    elif (featured.phase6_polis_statement_id in r6_escaped_tids
+                          or _norm(text) in r6_escaped_texts):
+                        say(conv, f'cache {featured.polis_statement_id} not refreshed: '
+                                  'its Round 6 copy is still escaped; fix it there first.')
+                    else:
+                        featured.statement_text = live
+                        refreshed += 1
+            for where, tid, text in flagged + cache + unflagged:
+                click.echo('\t'.join((conv.slug, where, str(tid), _tsv_field(text),
+                                       _tsv_field(html.unescape(text)))))
+            found += len(flagged) + len(cache) + len(unflagged)
+        if refresh_cache:
+            db.session.commit()
+            click.echo(f'{refreshed} cache row(s) refreshed.', err=True)
+        click.echo(f'{found} escaped text(s) found.', err=True)
+
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():
         """Fire due scheduled active-to-passive phase transitions."""
+        # Maintenance mode (#619): a phase change must not fire while Polis is restarted or
+        # a backup is taken. The next run after the switch is off fires whatever is due.
+        if maintenance.is_on():
+            msg = maintenance.skip_message()
+            app.logger.info('phase scheduler: %s', msg)
+            click.echo(msg)
+            return
         # A deploy checks out the new code minutes before it runs `flask db upgrade` (#456).
         # A run in that gap would query columns the database does not have yet; the next
         # run after the migration fires whatever is due, so skip without failing the job.
@@ -6646,12 +6865,21 @@ def create_app(test_config: dict | None = None) -> Flask:
     def process_reminders_cmd(day, reminder_id, by_username):
         """Handle one day's reminders (#577). Dry run: nothing is sent yet.
 
-        Exit codes: 0 done; 1 done, but a wiki was unknown or the bot was blocked;
+        Exit codes: 0 done, or skipped because maintenance mode is on (#619); 1 done, but a
+        wiki was unknown or the bot was blocked;
         2 refused, nothing changed; 3 the run broke off (see the log).
         """
         def refuse(text):
             click.echo(text, err=True)
             raise SystemExit(2)
+
+        # Maintenance mode (#619): a run writes claim and status rows, so it waits. The next
+        # run after the switch is off handles the day.
+        if maintenance.is_on():
+            msg = maintenance.skip_message()
+            app.logger.info('process-reminders: %s', msg)
+            click.echo(msg)
+            return
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         if day is not None and day.date() > now.date():
@@ -6816,6 +7044,25 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.dir = i18n.text_direction(locale)
         g._persist_locale = persist
 
+
+    @app.before_request
+    def _pause_for_maintenance():
+        # Registered after locale negotiation, so the refusal is in the reader's language,
+        # and before the SPA shell, so the paused pages it knows answer with the 503 page. A
+        # route it does not list (such as /app/c/<slug>) loads the shell, whose API reads are
+        # refused, so the app shows the maintenance notice instead.
+        if not maintenance.is_on():
+            return None
+        if not maintenance.blocks(request.method, request.path,
+                                  site_admin=_is_global_admin()):
+            return None
+        headers = {'Retry-After': str(maintenance.RETRY_AFTER_SECONDS)}
+        if is_api_request():
+            body, status = error_response(
+                'maintenance', maintenance_message(), 503)
+            body.headers.update(headers)
+            return body, status
+        return render_error_page(503), 503, headers
 
     @app.before_request
     def _serve_canonical_spa_request():
@@ -7152,7 +7399,7 @@ def _register_routes(app: Flask) -> None:
             )
         code = request.args.get('v', '')
         if code.strip():
-            return _voucher_submit(conv, code, confirmed=False)
+            return _voucher_submit(conv, code, confirmed=False, linked=True)
         return _voucher_form_page(conv)
 
 

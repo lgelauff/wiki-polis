@@ -414,7 +414,7 @@ _RUNTIME_KEYS = {
     # error_pages.py: f'errorpage-{code}-{part}' over its _ERRORS table, plus the code label.
     'error_pages.py': [
         f'errorpage-{code}-{part}'
-        for code in (403, 404, 500)
+        for code in (403, 404, 500, 503)
         for part in ('title', 'message', 'hint')
     ] + ['errorpage-code'],
     # app.py: _SPA_BOOTSTRAP_MESSAGES, stamped onto <html> as data-msg-* before the SPA has

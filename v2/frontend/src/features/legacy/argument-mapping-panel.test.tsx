@@ -377,10 +377,74 @@ test('an argument over the limit is kept in full and waits at Submit until it fi
   expect(box).toHaveAttribute('aria-invalid', 'true');
   const count = wrapper.querySelector('.contribute-charcount')!;
   expect(count).toHaveTextContent('(conv-composer-over-limit: 3)');
-  expect(box.getAttribute('aria-describedby')).toBe(count.id);
+  const guidance = wrapper.querySelector('.contribute-guidance')!;
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toEqual([guidance.id, count.id]);
 
   fireEvent.change(box, {target: {value: over.slice(3)}});
   expect(submit).toBeEnabled();
+  expect(box).not.toHaveAttribute('aria-invalid');
+  expect(box.getAttribute('aria-describedby')).toBe(guidance.id);
+});
+
+test('each side\'s writing box shows its own guidance line, and the text field is described by it', async () => {
+  serve(mapping());
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the two sides' lines swapped or shared, the line placed outside the writing box,
+  // and a screen reader landing in the text field without hearing it (#401).
+  for (const [side, key] of [['pro', '(conv-arg-guidance-for)'], ['con', '(conv-arg-guidance-against)']] as const) {
+    const wrapper = document.querySelector<HTMLElement>(`#fs-9 .contribute-wrapper[data-side="${side}"]`)!;
+    const composer = wrapper.querySelector('.contribute-composer')!;
+    const guidance = within(composer as HTMLElement).getByText(key);
+    expect(guidance.id).toBe(`contribute-guidance-9-${side}`);
+    expect(composer.querySelector('textarea')).toHaveAttribute('aria-describedby', guidance.id);
+    // The "Argument tips" link stays, opening in a new tab. The composer is hidden until
+    // "Add" is pressed, so the link is found by its class, not its role.
+    const tips = composer.querySelector('a.contribute-help-link')!;
+    expect(tips).toHaveTextContent('(conv-arg-tips)');
+    expect(tips).toHaveAttribute('target', '_blank');
+  }
+});
+
+test('the argument counter counts characters as displayed, not UTF-16 units (#616)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  const box = wrapper.querySelector('textarea')!;
+  const submit = wrapper.querySelector<HTMLButtonElement>('.contribute-submit-btn')!;
+  // 280 flags are 560 code points and 1120 UTF-16 units, and 280 characters on screen.
+  const flags = '\u{1F1F3}\u{1F1F1}'.repeat(ARGUMENT_MAX_CHARACTERS);
+  fireEvent.change(box, {target: {value: flags}});
+  expect(wrapper.querySelector('.cc-len')).toHaveTextContent(String(ARGUMENT_MAX_CHARACTERS));
+  expect(submit).toBeEnabled();
+  fireEvent.change(box, {target: {value: 'Tom & Jerry'}});
+  expect(wrapper.querySelector('.cc-len')).toHaveTextContent('11');
+});
+
+test('Submit waits when the text is within 280 characters but over the storage cap (#616)', async () => {
+  serve(mapping());
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  const box = wrapper.querySelector('textarea')!;
+  const submit = wrapper.querySelector<HTMLButtonElement>('.contribute-submit-btn')!;
+  // 150 family emoji: 150 characters on screen, 1050 code points, which the server refuses.
+  const families = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}'.repeat(150);
+  fireEvent.change(box, {target: {value: families}});
+  expect(submit).toBeDisabled();
+  expect(box).toHaveAttribute('aria-invalid', 'true');
+  // The counter gives the reason in place of the number.
+  expect(wrapper.querySelector('.cc-len')).toBeNull();
+  // Described by the guidance line (#401) and then the counter that gives the reason.
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toEqual([wrapper.querySelector('.contribute-guidance')!.id, wrapper.querySelector('.contribute-charcount')!.id]);
+
+  fireEvent.change(box, {target: {value: '   '}});
+  expect(submit).toBeDisabled();
   expect(box).not.toHaveAttribute('aria-invalid');
 });
 
@@ -475,4 +539,40 @@ test('the number in each progress circle meets text contrast against what is beh
       expect(Number(text.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(2);
     }
   }
+});
+
+test('a mark refused for maintenance is reverted and says why (#619)', async () => {
+  serve(mapping());
+  server.use(http.put(url('/api/v1/conversations/community-strategy/arguments/:id/priority'),
+    () => HttpResponse.json({error: {code: 'maintenance', message: 'Paused.'}}, {status: 503})));
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+  const card = document.querySelector<HTMLElement>('[data-arg-id="92"]')!;
+  fireEvent.click(card);
+  expect(await within(card).findByText('(maintenance-error)')).toBeInTheDocument();
+  await waitFor(() => expect(card.querySelector('.argument-checkbox')).toHaveAttribute('aria-pressed', 'false'));
+});
+
+test('a failed save is announced with the text box: its error is in the box\'s description', async () => {
+  serve(mapping());
+  server.use(http.post(url('/api/v1/conversations/community-strategy/featured-statements/:id/arguments'),
+    () => HttpResponse.json({error: {code: 'upstream_unavailable', message: 'The voting service is down.'}}, {status: 502})));
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  fireEvent.click(wrapper.querySelector('.contribute-affordance')!);
+  const box = wrapper.querySelector('textarea')!;
+  // Before a failure the box is described by its guidance line only (#401).
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toHaveLength(1);
+  fireEvent.change(box, {target: {value: 'A reason'}});
+  fireEvent.click(wrapper.querySelector('.contribute-submit-btn')!);
+
+  await waitFor(() => expect(wrapper.querySelector('[role="alert"]')).not.toBeNull());
+  const error = wrapper.querySelector<HTMLElement>('[role="alert"]')!;
+  expect(error.id).not.toBe('');
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toContain(error.id);
+  expect(document.getElementById(error.id)).toBe(error);
 });

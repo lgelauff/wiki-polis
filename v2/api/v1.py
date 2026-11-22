@@ -14,6 +14,7 @@ from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
 import i18n
+import maintenance
 from error_pages import render_error_page
 from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Conversation, Participant, db
@@ -33,6 +34,7 @@ from services.argument_commands import (
     InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
 )
 from services.content_flags import InvalidFlag
+from services.text_rules import clean_text, fits
 from services.identity_reveal import RevealUnavailable
 from services.access import AccessRequired
 
@@ -195,6 +197,9 @@ def create_api_v1_blueprint(
                 'capabilities': {
                     'administerSite': bool(resolve_global_admin(participant)),
                 },
+                # Maintenance mode (#619): participation is paused. Site admins see a banner;
+                # everyone else sees the notice where a page or a write is refused.
+                'maintenance': maintenance.is_on(),
                 'csrfToken': generate_csrf(),
                 'developerLogins': resolve_developer_logins(),
                 'gitVersion': resolve_git_version(),
@@ -519,8 +524,7 @@ def create_api_v1_blueprint(
                 or set(body) - {'side', 'body'}
                 or body.get('side') not in {'pro', 'con'}
                 or not isinstance(body.get('body'), str)
-                or not body['body'].strip()
-                or len(body['body'].strip()) > 280):
+                or not fits(clean_text(body['body']))):
             return error_response(
                 'validation_failed', 'Check the argument side and text.', 400,
             )
@@ -663,7 +667,7 @@ def create_api_v1_blueprint(
         text_value = body.get('text')
         if not isinstance(text_value, str):
             fields['text'] = ['Write a statement.']
-        elif not text_value.strip() or len(text_value.strip()) > 280:
+        elif not fits(clean_text(text_value)):
             fields['text'] = ['Write between 1 and 280 characters.']
         parent = body.get('derivedFromStatementId')
         if parent is not None and (not isinstance(parent, int) or isinstance(parent, bool)):

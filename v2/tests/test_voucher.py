@@ -479,6 +479,69 @@ def test_missed_code_with_excluded_letters_gets_a_hint(app, client, voucher_conv
     assert _voucher_participants() == []
 
 
+# ── #412: a linked code leaves the address bar on a page answered in place ──────
+
+def _address_script(resp):
+    """The replaceState target the page sets, or None; checks the CSP admits it."""
+    import json as _json
+    import re as _re
+    html = resp.data.decode()
+    match = _re.search(r'<script nonce="([^"]+)">history\.replaceState\(history\.state,"",'
+                       r'("[^"]*")\+location\.hash\);</script>', html)
+    if match is None:
+        assert 'replaceState' not in html
+        return None
+    assert f"'nonce-{match.group(1)}'" in resp.headers['Content-Security-Policy']
+    return _json.loads(match.group(2).replace('<\\/', '</'))
+
+
+def test_a_wrong_linked_code_stays_200_and_leaves_the_address(app, client, voucher_conv):
+    """#412 (b): the form is answered in place (200) and the code is taken out of the
+    address bar, so history and bookmarks keep no code."""
+    _make_voucher(voucher_conv)
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v=WRONG-9999')
+    assert resp.status_code == 200
+    assert _address_script(resp) == f'/c/{voucher_conv.slug}/v'
+    assert _voucher_participants() == []
+
+
+def test_a_cleared_address_keeps_the_other_parameters(app, client, voucher_conv):
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v=WRONG-9999&uselang=qqx')
+    assert _address_script(resp) == f'/c/{voucher_conv.slug}/v?uselang=qqx'
+
+
+def test_a_linked_code_with_excluded_letters_is_kept_as_typed_in_the_field(
+    app, client, voucher_conv,
+):
+    """Only the address changes: the field keeps the code exactly as it arrived, with
+    the 1-and-0 hint, and nothing is corrected."""
+    _make_voucher(voucher_conv, code='0011ABCDEFGH')
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v=OO1l-abcd-efgh')
+    html = resp.data.decode()
+    assert resp.status_code == 200
+    assert 'value="OO1l-abcd-efgh"' in html
+    assert _address_script(resp) == f'/c/{voucher_conv.slug}/v'
+
+
+def test_the_switch_question_for_a_linked_code_leaves_the_address(
+    app, client, voucher_conv, participant,
+):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
+    assert resp.status_code == 200
+    target = _address_script(resp)
+    assert target == f'/c/{voucher_conv.slug}/v'
+    assert CODE not in target
+
+
+def test_pages_without_a_linked_code_carry_no_address_script(app, client, voucher_conv):
+    assert _address_script(client.get(f'/c/{voucher_conv.slug}/v')) is None
+    assert _address_script(_redeem(client, voucher_conv, code='WRONG-9999')) is None
+
+
 def test_imported_code_with_excluded_letters_redeems(app, client, voucher_conv):
     """Organizers' own codes may contain I, L, O or U; entry must not refuse them."""
     import_voucher_codes(_batch(voucher_conv), ['OLIU-2024'])
@@ -1147,3 +1210,92 @@ def test_the_session_names_the_voucher_accounts_consultation(app, client, vouche
 
 def test_other_sessions_name_no_voucher_consultation(app, auth_client):
     assert auth_client.get('/api/v1/session').get_json()['data']['voucherConsultation'] is None
+
+
+# ── #412: an optional last day on which a link resumes ────────────────────────
+
+def _ended_batch(voucher, *, days=1):
+    voucher.batch.link_resume_until = (datetime.now(timezone.utc).replace(tzinfo=None)
+                                       - timedelta(days=days))
+    db.session.commit()
+
+
+def test_after_the_date_a_link_asks_for_the_code_to_be_typed(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    holder = app.test_client()
+    _redeem(holder, voucher_conv)
+    _ended_batch(voucher)
+
+    finder = app.test_client()
+    resp = finder.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
+    html = resp.data.decode()
+    assert resp.status_code == 200
+    assert 'This link no longer signs you in' in html
+    assert 'value=""' in html and CODE not in html      # the page never shows the code
+    assert _session_xid(finder) is None
+    assert _address_script(resp) == f'/c/{voucher_conv.slug}/v'
+
+
+def test_after_the_date_the_typed_code_still_resumes(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    holder = app.test_client()
+    _redeem(holder, voucher_conv)
+    _ended_batch(voucher)
+
+    other = app.test_client()
+    assert _redeem(other, voucher_conv).status_code == 302
+    assert _session_xid(other) == _session_xid(holder)
+
+
+def test_before_the_date_a_link_resumes(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    holder = app.test_client()
+    _redeem(holder, voucher_conv)
+    _ended_batch(voucher, days=-1)                      # the date is tomorrow
+
+    other = app.test_client()
+    assert other.get(f'/c/{voucher_conv.slug}/v?v={CODE}').status_code == 302
+    assert _session_xid(other) == _session_xid(holder)
+
+
+def test_the_date_only_ends_resuming_a_first_use_by_link_still_joins(app, client, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    _ended_batch(voucher)
+    assert client.get(f'/c/{voucher_conv.slug}/v?v={CODE}').status_code == 302
+    assert len(_voucher_participants()) == 1
+
+
+def test_the_same_account_opening_its_ended_link_is_not_asked_again(app, client, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+    xid = _session_xid(client)
+    _ended_batch(voucher)
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
+    assert resp.status_code == 302
+    assert _session_xid(client) == xid
+
+
+def test_cli_sets_the_last_day_links_resume(app, voucher_conv):
+    result = app.test_cli_runner().invoke(args=[
+        'vouchers', 'generate', voucher_conv.slug, '1', '--label', 'Event',
+        '--link-resume-until', '2026-12-01',
+    ])
+    assert result.exit_code == 0, result.output
+    batch = VoucherBatch.query.filter_by(label='Event').one()
+    assert batch.link_resume_until == datetime(2026, 12, 2)   # links work all of 1 December
+
+
+def test_cli_changes_and_clears_the_last_day(app, voucher_conv):
+    _make_voucher(voucher_conv)
+    runner = app.test_cli_runner()
+    changed = runner.invoke(args=['vouchers', 'set-link-resume', voucher_conv.slug, '2026-12-01'])
+    assert changed.exit_code == 0, changed.output
+    assert VoucherBatch.query.one().link_resume_until == datetime(2026, 12, 2)
+    cleared = runner.invoke(args=['vouchers', 'set-link-resume', voucher_conv.slug, 'never-ends'])
+    assert cleared.exit_code == 0, cleared.output
+    assert VoucherBatch.query.one().link_resume_until is None
+    bad = runner.invoke(args=['vouchers', 'set-link-resume', voucher_conv.slug, 'tomorrow'])
+    assert bad.exit_code != 0
+    none = runner.invoke(args=['vouchers', 'set-link-resume', voucher_conv.slug, '2026-12-01',
+                               '--label', 'no such batch'])
+    assert none.exit_code != 0

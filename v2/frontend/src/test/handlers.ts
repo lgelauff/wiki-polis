@@ -394,6 +394,7 @@ export const handlers = [
         state: 'authenticated',
         user: {username: 'Example editor', emailable: true},
         capabilities: {administerSite: false},
+        maintenance: false,
         csrfToken: 'test-csrf-token',
         developerLogins: [],
         gitVersion: 'test-version',

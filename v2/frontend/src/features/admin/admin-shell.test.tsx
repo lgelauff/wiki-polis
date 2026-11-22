@@ -47,6 +47,7 @@ function serveSession(overrides: Partial<Session> = {}) {
     state: 'authenticated',
     user: {username: 'Example editor', emailable: true},
     capabilities: {administerSite: false},
+    maintenance: false,
     csrfToken: 'test-csrf-token',
     developerLogins: [],
     gitVersion: 'test-version',
@@ -506,4 +507,30 @@ test('at site level the role a site admin opens the dashboard with says Site adm
   const identity = (await screen.findByText('Example editor')).closest('.admin-shell__identity')!;
   expect(identity).toHaveTextContent('Site admin');
   expect(identity).not.toHaveTextContent('Global admin');
+});
+
+test('a site administrator sees that maintenance mode is on (#619)', async () => {
+  renderAsQqx();
+  serveSession({capabilities: {administerSite: true}, maintenance: true});
+  renderShell();
+
+  expect(await screen.findByText('(maintenance-banner)')).toBeInTheDocument();
+});
+
+test('the maintenance banner is for site administrators only', async () => {
+  renderAsQqx();
+  serveSession({capabilities: {administerSite: false}, maintenance: true});
+  renderShell();
+
+  await screen.findByRole('navigation', {name: '(admin-shell-nav-aria)'});
+  expect(screen.queryByText('(maintenance-banner)')).toBeNull();
+});
+
+test('no banner while maintenance mode is off', async () => {
+  renderAsQqx();
+  serveSession({capabilities: {administerSite: true}, maintenance: false});
+  renderShell();
+
+  await screen.findByRole('navigation', {name: '(admin-shell-nav-aria)'});
+  expect(screen.queryByText('(maintenance-banner)')).toBeNull();
 });

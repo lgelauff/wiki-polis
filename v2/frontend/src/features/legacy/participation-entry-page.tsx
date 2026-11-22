@@ -17,6 +17,7 @@ import {useMessage} from '../../i18n/messages';
 import {joinErrorCopy} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {LoginPrompt} from './login-prompt';
+import {maintenanceCopy} from '../../maintenance';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -122,7 +123,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
         ? msg('accept-js-regenerated', result.pseudonyms[0] ?? '')
         : msg('accept-js-error'));
     },
-    onError: () => setStatus(msg('accept-js-error')),
+    onError: (error) => setStatus(maintenanceCopy(msg, error) ?? msg('accept-js-error')),
   });
   const join = useMutation({
     mutationFn: () => createParticipation(data.conversation.slug, {
@@ -206,6 +207,9 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
               ))}
             </div>
           </div>
+
+          {/* Whoever has the link or code is this account (#412): say so where it is first used. */}
+          {voucher && <div className="accept-section"><p id="accept-voucher-credential">{msg('accept-voucher-credential')}</p></div>}
 
           {/* A voucher account has no Wikimedia email or talk page to notify (#368). */}
           {!voucher && <div className="accept-section" role="group" aria-labelledby="notification-title" aria-describedby="notification-help">

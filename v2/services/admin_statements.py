@@ -1,8 +1,11 @@
 """Privacy-safe statement administration projections and moderation commands."""
 
+import html
 from dataclasses import dataclass
 
 from sqlalchemy.exc import SQLAlchemyError
+
+from services.text_rules import clean_text, fits
 
 
 _MOD_BY_STATUS = {'hidden': -1, 'pending': 0, 'approved': 1}
@@ -244,18 +247,15 @@ class SeedStatementResult:
 
 def add_seed_statement(
     *, conversation, text: str, derived_from_id: int | None,
-    sanitize, statement_text_map, add_seed,
+    statement_text_map, add_seed,
     record_provenance, audit, audit_approval, max_characters: int,
     upstream_errors: tuple[type[Exception], ...],
     is_meta: bool = False, set_meta=None, audit_meta=None,
 ) -> SeedStatementResult:
-    # The limit applies to what the organizer typed, as the counter beside the box counts
-    # it, not to the sanitized text: escaping turns one "&" into five characters, so
-    # measuring after it refused a statement the counter had accepted (#558). The bulk
-    # import below measures the raw text the same way.
-    raw = text.strip()
-    clean = sanitize(raw)
-    if not clean or len(raw) > max_characters:
+    # Stored and sent to Polis as typed, not HTML-escaped, and counted the way the counter
+    # beside the box counts it: characters as displayed (#558, #616).
+    clean = clean_text(text)
+    if not fits(clean, max_characters):
         raise SeedStatementValidationFailed()
 
     text_by_id: dict = {}
@@ -320,7 +320,7 @@ def add_seed_statement(
 
 def import_seed_statements(
     *, conversation, candidates: list[str], existing_buckets,
-    sanitize, strip_formula_prefixes, bulk_add_seeds,
+    strip_formula_prefixes, bulk_add_seeds,
     max_rows: int, max_characters: int,
     upstream_errors: tuple[type[Exception], ...], audit,
 ) -> SeedImportResult:
@@ -341,14 +341,14 @@ def import_seed_statements(
             raise SeedImportValidationFailed(
                 f'Statement {index} must be text.',
             )
-        raw = candidate.strip()
+        raw = clean_text(candidate)
         if not raw:
             continue
-        if len(raw) > max_characters:
+        if not fits(raw, max_characters):
             raise SeedImportValidationFailed(
                 f'Statement {index} exceeds {max_characters} characters.',
             )
-        clean = strip_formula_prefixes(sanitize(raw)).strip()
+        clean = strip_formula_prefixes(raw).strip()
         if not clean:
             raise SeedImportValidationFailed(
                 f'Statement {index} is empty after sanitization.',
@@ -362,10 +362,14 @@ def import_seed_statements(
     if not normalized:
         raise SeedImportValidationFailed('Provide at least one non-empty statement.')
 
-    existing = {
-        str(row.get('txt') or '').strip().casefold()
-        for bucket in existing_buckets for row in bucket
-    }
+    # Seeds sent before #616 sit in Polis HTML-escaped ("Tom &amp; Jerry"); compare
+    # their unescaped form as well, so the same statement typed again is a duplicate.
+    existing = set()
+    for bucket in existing_buckets:
+        for row in bucket:
+            text = str(row.get('txt') or '')
+            existing.add(text.strip().casefold())
+            existing.add(clean_text(html.unescape(text)).casefold())
     pending = [text for text in normalized if text.casefold() not in existing]
     skipped_existing = len(normalized) - len(pending)
     imported = failed = failed_approval = 0

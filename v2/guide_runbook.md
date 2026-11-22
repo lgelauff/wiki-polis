@@ -16,6 +16,43 @@ them:
 - **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
 - **Create voucher codes** → [Voucher codes](#voucher-codes) below (until the organizer screens exist).
 
+## Seeds stored escaped before #616
+
+Until #616, organizer seed statements were HTML-escaped before they were sent to Polis,
+so some show "&amp;", "&lt;" or "&nbsp;" there. Deploy #616 with the webservice stopped
+during `flask db upgrade`: the old code still escapes, and a row it writes between the
+migration and the restart stays escaped. If it was not stopped, check rows created since
+the migration for "&amp;", "&lt;" and "&gt;".
+
+After the migration, list the escaped seeds once, inside the webservice shell like a
+migration, and correct each one in Polis by hand:
+
+```bash
+# Read-only. Tab-separated: slug, place, statement id, text as stored, as it should read.
+flask --app app escaped-seeds > escaped-seeds.tsv        # every consultation
+flask --app app escaped-seeds <slug>                    # one consultation
+
+# Once those seeds are fixed in Polis (Round 6 copies too): copy the fixed text into
+# Proto's own copies.
+flask --app app escaped-seeds --refresh-cache
+```
+
+Places:
+
+- **polis**: the seed in the consultation's Polis conversation.
+- **round6**: its copy in the Round 6 conversation. Fix these too: the Round 6 re-sync
+  matches featured statements to Round 6 by text.
+- **cache**: Proto's own copy of a featured statement, used by informed voting and the
+  results. It only fills while empty, so `--refresh-cache` replaces it.
+- **polis-unflagged**, **round6-unflagged**: Polis did not say whether the statement is a
+  seed. Check by hand; it may be a participant's own text.
+
+Tabs, newlines and other unprintable characters in the text are printed as escapes
+(`\t`, `\n`, `\xa0`). `--refresh-cache` only copies a seed that is no longer escaped
+in Polis and whose own Round 6 copy is fixed too; other Round 6 statements don't matter.
+It refreshes nothing for a consultation whose Round 6 conversation could not be read. It
+says why on stderr for each row it leaves.
+
 ## Voucher codes
 
 Until the organizer screens exist (#368), codes for a voucher-gated process are created
@@ -30,7 +67,20 @@ flask --app app vouchers generate <slug> 200 --label "Workshop Utrecht 12 Oct" >
 
 # Import the organizers' own codes, one per line (a file, or - for stdin).
 flask --app app vouchers import <slug> organizer-codes.txt --label "Printed cards"
+
+# Optional: the last day (UTC) on which a link signs a returning holder back in (#412).
+# Set it when creating a batch, or change it later; never-ends removes the date.
+flask --app app vouchers generate <slug> 200 --label "Event" --link-resume-until 2026-12-01
+flask --app app vouchers set-link-resume <slug> 2026-12-01 --label "Event"
+flask --app app vouchers set-link-resume <slug> never-ends
 ```
+
+- **Links and their last day (#412).** Every code works as a link (`/c/<slug>/v?v=<code>`)
+  and typed. Without a date, a link signs its holder back in for as long as the code
+  lives. After the batch's last day, a link to a code that is already in use opens the
+  code page and asks for the code to be typed; typing it still signs the holder back in,
+  and a first use by link still joins. `set-link-resume` without `--label` changes every
+  batch of the process.
 
 - **Same codes in several processes:** import the same list into each process. Each
   process stores its own HMACs, and each code makes a separate account per process.

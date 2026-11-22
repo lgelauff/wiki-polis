@@ -4,10 +4,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import nh3
 from sqlalchemy.orm import joinedload
 
 from db import ContentFlag, Conversation, Participant, db
+from services.text_rules import clean_note as clean_text_note
 
 
 def _utc_iso(value) -> str | None:
@@ -160,7 +160,7 @@ def resolve_content_flag(
         db.session.commit()
         return FlagResolutionResult(flag=flag, changed=False)
 
-    clean_note = nh3.clean((note or '').strip(), tags=frozenset())[:1000]
+    clean_note = clean_text_note(note)
     flag.status = 'resolved'
     flag.resolved_at = datetime.now(timezone.utc)
     flag.resolved_by_id = actor.id if actor else None

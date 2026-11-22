@@ -2,7 +2,8 @@ import {describe, expect, test} from 'vitest';
 
 import type {Message} from './messages';
 import {ApiContractError} from '../api/client';
-import {accessPolicyLabel, outputLabel, outputPending, outputTooltip, phaseLabel, refusedFields, roleLabel, routeLabel, tabLabel} from './server-labels';
+import {accessPolicyLabel, joinErrorCopy, outputLabel, outputPending, outputTooltip, phaseLabel, refusedFields, roleLabel, routeLabel, statementErrorCopy, tabLabel, workspaceErrorCopy} from './server-labels';
+import {maintenanceCopy} from '../maintenance';
 
 /** A catalogue whose values are deliberately UNLIKE the server's English. Every assertion
  *  below distinguishes "read the catalogue" from "echoed the server label" -- which the
@@ -23,6 +24,8 @@ const CATALOGUE: Record<string, string> = {
   'admin-access-policy-refused-unlisted': 'CATALOGUE choose from the list',
   'admin-access-policy-unavailable': 'CATALOGUE list cannot be loaded',
   'admin-access-policy-not-configured': 'CATALOGUE list not configured',
+  'maintenance-error': 'CATALOGUE maintenance',
+  'errorpage-503-message': 'CATALOGUE maintenance page',
 };
 
 /** Stands in for banana: returns the key itself for a message it does not hold, which is
@@ -147,5 +150,21 @@ describe('a refused field, by its code (#454)', () => {
   test('anything but a validation refusal has no field messages', () => {
     expect(refusedFields(msg, new ApiContractError('x', 'slug_conflict', {codes: {slug: 'eligibility_policy_unlisted'}}))).toEqual({});
     expect(refusedFields(msg, new Error('network'))).toEqual({});
+  });
+});
+
+describe('maintenance mode (#619)', () => {
+  const refused = new ApiContractError('server English', 'maintenance');
+
+  test('a refused write shows the maintenance notice, not the screen\'s own failure', () => {
+    expect(statementErrorCopy(msg, refused)).toBe('CATALOGUE maintenance');
+    expect(joinErrorCopy(msg, refused)).toBe('CATALOGUE maintenance');
+    expect(workspaceErrorCopy(msg, refused)).toBe('CATALOGUE maintenance page');
+    expect(maintenanceCopy(msg, refused)).toBe('CATALOGUE maintenance');
+  });
+
+  test('any other error leaves the screen\'s own copy in place', () => {
+    expect(maintenanceCopy(msg, new ApiContractError('x', 'conflict'))).toBeNull();
+    expect(maintenanceCopy(msg, new Error('network'))).toBeNull();
   });
 });

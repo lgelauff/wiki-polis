@@ -1265,9 +1265,9 @@
       "AdminStatementModerationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "status", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "status": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
       "AdminStatementMetaRequest": {"type": "object", "required": ["meta"], "additionalProperties": false, "properties": {"meta": {"type": "boolean"}, "acknowledgeResponses": {"type": "boolean", "default": false}}},
       "AdminStatementMetaResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "meta", "changed", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "meta": {"type": "boolean"}, "changed": {"type": "boolean"}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
-      "AdminSeedStatementRequest": {"type": "object", "required": ["text", "derivedFromId"], "additionalProperties": false, "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 280}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "isMeta": {"type": "boolean", "default": false}}},
+      "AdminSeedStatementRequest": {"type": "object", "required": ["text", "derivedFromId"], "additionalProperties": false, "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 1000, "description": "At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped."}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "isMeta": {"type": "boolean", "default": false}}},
       "AdminSeedStatementResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "derivedFromId", "provenanceRecorded", "metaRecorded", "links"], "additionalProperties": false, "properties": {"statementId": {"type": ["integer", "null"], "minimum": 0}, "derivedFromId": {"type": ["integer", "null"], "minimum": 0}, "provenanceRecorded": {"type": ["boolean", "null"]}, "metaRecorded": {"type": ["boolean", "null"], "description": "null: not asked to be meta; false: added, but not marked meta."}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
-      "AdminStatementImportRequest": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 280}}}},
+      "AdminStatementImportRequest": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 1000, "description": "At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped."}}}},
       "AdminStatementImportResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["outcome", "links"], "additionalProperties": false, "properties": {
         "outcome": {"type": "object", "required": ["imported", "skippedExisting", "skippedDuplicateInput", "failedUpstream"], "additionalProperties": false, "properties": {"imported": {"type": "integer", "minimum": 0}, "skippedExisting": {"type": "integer", "minimum": 0}, "skippedDuplicateInput": {"type": "integer", "minimum": 0}, "failedUpstream": {"type": "integer", "minimum": 0}}},
         "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}
@@ -1761,7 +1761,7 @@
       },
       "Session": {
         "type": "object",
-        "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "gitVersion", "locales", "links"],
+        "required": ["state", "user", "capabilities", "maintenance", "csrfToken", "developerLogins", "gitVersion", "locales", "links"],
         "additionalProperties": false,
         "properties": {
           "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo", "voucher"], "description": "voucher: signed in with a voucher account, which has no username (#368)."},
@@ -1786,6 +1786,7 @@
             ]
           },
           "capabilities": {"$ref": "#/components/schemas/SiteCapabilities"},
+          "maintenance": {"type": "boolean", "description": "Maintenance mode is on (#619): participation is paused. Writes answer 503 with error code `maintenance` and a Retry-After header, for everyone; reads of the participation pages do too, except for site admins."},
           "csrfToken": {"type": "string", "minLength": 1},
           "developerLogins": {
             "type": "array",
@@ -2921,7 +2922,7 @@
         "additionalProperties": false,
         "properties": {
           "id": {"type": "integer"},
-          "body": {"type": "string", "maxLength": 280},
+          "body": {"type": "string", "maxLength": 1000, "description": "At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped."},
           "own": {"type": "boolean"},
           "selected": {"type": "boolean"},
           "hidden": {"type": "boolean"},
@@ -2957,7 +2958,7 @@
         "additionalProperties": false,
         "properties": {
           "side": {"type": "string", "enum": ["pro", "con"]},
-          "body": {"type": "string", "minLength": 1, "maxLength": 280}
+          "body": {"type": "string", "minLength": 1, "maxLength": 1000, "description": "At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped."}
         }
       },
       "ArgumentCommandLinks": {
@@ -3065,7 +3066,7 @@
         "required": ["text"],
         "additionalProperties": false,
         "properties": {
-          "text": {"type": "string", "minLength": 1, "maxLength": 280},
+          "text": {"type": "string", "minLength": 1, "maxLength": 1000, "description": "At most 280 characters as displayed (grapheme clusters, after NFC); 1000 code points is the storage cap. Stored as typed, not HTML-escaped."},
           "derivedFromStatementId": {"type": ["integer", "null"], "minimum": 0}
         }
       },

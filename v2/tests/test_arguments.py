@@ -165,6 +165,24 @@ def test_submit_body_too_long_rejected(auth_client, arg_conv, arg_part, fs):
     assert Argument.query.filter_by(featured_statement_id=fs.id).count() == 0
 
 
+def test_submit_argument_is_stored_as_typed_and_counted_as_displayed(
+    auth_client, arg_conv, arg_part, fs,
+):
+    """#616: "&" and "<" are stored as typed, not HTML-escaped, and 280 flags (560 code
+    points) are 280 characters."""
+    flags = '\U0001F1F3\U0001F1F1' * 280
+    typed = auth_client.post(_arguments_path('arg-conv', fs.id), json={
+        'side': 'pro', 'body': '  Tom & Jerry <3 \u202e ',
+    })
+    long = auth_client.post(_arguments_path('arg-conv', fs.id), json={
+        'side': 'con', 'body': flags,
+    })
+    assert typed.status_code == 201
+    assert long.status_code == 201
+    bodies = {arg.side: arg.body for arg in Argument.query.filter_by(featured_statement_id=fs.id)}
+    assert bodies == {'pro': 'Tom & Jerry <3', 'con': flags}
+
+
 def test_submit_duplicate_keeps_single_argument(auth_client, arg_conv, arg_part, fs,
                                                 participant):
     """A second, different argument on the same side never creates a second row.
@@ -641,7 +659,7 @@ def test_participant_can_flag_argument(auth_client, arg_conv, arg_part, fs, part
     arg = _make_visible_arg(fs.id)
     resp = auth_client.post(_flags_path(), json={
         'contentType': 'argument', 'targetId': arg.id,
-        'category': 'personal_attack', 'detail': '<b>bad</b>',
+        'category': 'personal_attack', 'detail': '<b>bad</b> & worse',
     })
     assert resp.status_code == 201
     assert resp.is_json
@@ -654,7 +672,7 @@ def test_participant_can_flag_argument(auth_client, arg_conv, arg_part, fs, part
     ).first()
     assert flag is not None
     assert flag.category == 'personal_attack'
-    assert flag.detail == 'bad'
+    assert flag.detail == '<b>bad</b> & worse'   # #616: stored as typed
 
 
 # DELETED: test_participant_flag_argument_via_fetch_returns_json and
@@ -672,7 +690,7 @@ def test_participant_flag_argument_requires_detail_for_other(
 
     resp = auth_client.post(_flags_path(), json={
         'contentType': 'argument', 'targetId': arg.id,
-        'category': 'other', 'detail': '<b></b>',
+        'category': 'other', 'detail': ' \u202e \u0000 ',
     })
 
     assert resp.status_code == 400
