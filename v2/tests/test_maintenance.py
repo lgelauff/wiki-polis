@@ -1,11 +1,14 @@
 """Maintenance mode (#619): one flag file pauses participation without stopping the site."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 import maintenance
+from db import AdminRole, db
+from tests.conftest import login
 
 _EMPTY_RUN = {'fired': 0, 'aborted': 0, 'skipped': 0, 'failed': 0}
 _WRITE_METHODS = ('POST', 'PUT', 'PATCH', 'DELETE')
@@ -49,15 +52,37 @@ def _assert_maintenance_page(response):
 
 # ── The switch ────────────────────────────────────────────────────────────────
 
-def test_an_unreadable_flag_counts_as_off_and_is_logged(app, monkeypatch, caplog):
-    def denied(path):
-        raise PermissionError(13, 'Permission denied', path)
-    monkeypatch.setattr(maintenance.os, 'stat', denied)
-    monkeypatch.setattr(maintenance, '_last_warning', 0.0)
-    monkeypatch.setattr(maintenance.time, 'monotonic', lambda: 1_000.0)
-    with caplog.at_level('WARNING', logger='maintenance'):
-        assert not maintenance.is_on()
-    assert app.config['MAINTENANCE_FLAG_PATH'] in caplog.text
+def _unreadable_through_a_file(tmp_path):
+    """A flag path under a regular file: stat fails with ENOTDIR, even as root."""
+    (tmp_path / 'not-a-dir').touch()
+    return tmp_path / 'not-a-dir' / 'maintenance.flag'
+
+
+def _unreadable_through_a_locked_dir(tmp_path):
+    """A flag path in a directory nobody may enter: stat fails with EACCES."""
+    if os.geteuid() == 0:
+        pytest.skip('root can stat inside a mode-000 directory')
+    locked = tmp_path / 'locked'
+    locked.mkdir()
+    (locked / 'maintenance.flag').touch()
+    locked.chmod(0)
+    return locked / 'maintenance.flag'
+
+
+@pytest.mark.parametrize('make_path', [_unreadable_through_a_file,
+                                       _unreadable_through_a_locked_dir])
+def test_an_unreadable_flag_counts_as_off_and_is_logged(app, monkeypatch, caplog, tmp_path,
+                                                        make_path):
+    flag = make_path(tmp_path)
+    monkeypatch.setitem(app.config, 'MAINTENANCE_FLAG_PATH', str(flag))
+    monkeypatch.setattr(maintenance, '_last_warning', float('-inf'))
+    try:
+        with caplog.at_level('WARNING', logger='maintenance'):
+            assert not maintenance.is_on()
+    finally:
+        if (tmp_path / 'locked').exists():
+            (tmp_path / 'locked').chmod(0o700)  # so pytest can clean tmp_path up
+    assert str(flag) in caplog.text
 
 
 def test_a_missing_flag_is_not_logged(app, caplog):
@@ -160,11 +185,15 @@ def test_site_admins_can_still_open_participation_pages(app, admin_client, conve
 
 @pytest.mark.parametrize('read', ['statements', 'featured-statements', 'report-preview',
                                   'termination'])
-def test_console_reads_that_need_polis_answer_503_for_organizers(app, auth_client,
+def test_console_reads_that_need_polis_answer_503_for_organizers(app, client, participant,
                                                                  conversation, read):
+    db.session.add(AdminRole(participant_id=participant.id, conversation_id=conversation.id,
+                             role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
     _switch_on(app)
     _assert_maintenance_json(
-        auth_client.get(f'/api/v1/admin/conversations/{conversation.id}/{read}'))
+        client.get(f'/api/v1/admin/conversations/{conversation.id}/{read}'))
 
 
 def test_site_admins_can_still_open_the_console_reads(app, admin_client, conversation):
