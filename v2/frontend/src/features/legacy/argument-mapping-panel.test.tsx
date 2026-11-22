@@ -440,7 +440,8 @@ test('Submit waits when the text is within 280 characters but over the storage c
   expect(box).toHaveAttribute('aria-invalid', 'true');
   // The counter gives the reason in place of the number.
   expect(wrapper.querySelector('.cc-len')).toBeNull();
-  expect(box.getAttribute('aria-describedby')).toBe(wrapper.querySelector('.contribute-charcount')!.id);
+  // Described by the guidance line (#401) and then the counter that gives the reason.
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toEqual([wrapper.querySelector('.contribute-guidance')!.id, wrapper.querySelector('.contribute-charcount')!.id]);
 
   fireEvent.change(box, {target: {value: '   '}});
   expect(submit).toBeDisabled();
