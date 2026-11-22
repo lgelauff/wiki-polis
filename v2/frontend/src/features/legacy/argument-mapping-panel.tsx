@@ -66,6 +66,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
   const overLimit = Math.max(0, body.length - ARGUMENT_MAX_CHARACTERS);
   const countId = `contribute-count-${featuredId}-${side}`;
   const guidanceId = `contribute-guidance-${featuredId}-${side}`;
+  const errorId = `contribute-error-${featuredId}-${side}`;
   const copy = sideCopy[side];
   const text = sideMessages(msg, side);
   useEffect(() => {
@@ -117,7 +118,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
           <span className="contribute-charcount" id={countId}>{overLimit > 0 ? msg('conv-composer-over-limit', overLimit) : <><span className="cc-len">{body.length}</span> / {ARGUMENT_MAX_CHARACTERS}</>}</span>
         </div>
         <p className="contribute-guidance" id={guidanceId}>{text.guidance}</p>
-        <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={overLimit > 0 ? `${guidanceId} ${countId}` : guidanceId} aria-invalid={overLimit > 0 || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
+        <textarea ref={textareaRef} className="contribute-textarea" rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} aria-describedby={[guidanceId, overLimit > 0 && countId, (submit.error || skip.error) && errorId].filter(Boolean).join(' ')} aria-invalid={overLimit > 0 || undefined} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
         <div className="contribute-actions">
           <button type="button" className="btn-secondary contribute-skip-btn" disabled={skip.isPending} onClick={() => skip.mutate()}>{msg('conv-arg-nothing')}</button>
           <button type="submit" className="btn-primary contribute-submit-btn" disabled={!body.length || overLimit > 0 || submit.isPending}>{msg('conv-arg-submit')}</button>
@@ -132,7 +133,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
         {msg('conv-arg-skipped')}
         <button type="button" className="at-link contribute-changemind" onClick={compose}>{msg('conv-arg-changemind')}</button>
       </div>
-      {(submit.error || skip.error) && <p className="muted" role="alert">{maintenanceCopy(msg, submit.error ?? skip.error) ?? msg('conv-arg-save-error')}</p>}
+      {(submit.error || skip.error) && <p className="muted" id={errorId} role="alert">{maintenanceCopy(msg, submit.error ?? skip.error) ?? msg('conv-arg-save-error')}</p>}
     </div>
   );
 }

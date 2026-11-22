@@ -513,3 +513,26 @@ test('a mark refused for maintenance is reverted and says why (#619)', async () 
   expect(await within(card).findByText('(maintenance-error)')).toBeInTheDocument();
   await waitFor(() => expect(card.querySelector('.argument-checkbox')).toHaveAttribute('aria-pressed', 'false'));
 });
+
+test('a failed save is announced with the text box: its error is in the box\'s description', async () => {
+  serve(mapping());
+  server.use(http.post(url('/api/v1/conversations/community-strategy/featured-statements/:id/arguments'),
+    () => HttpResponse.json({error: {code: 'upstream_unavailable', message: 'The voting service is down.'}}, {status: 502})));
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  const wrapper = document.querySelector<HTMLElement>('#fs-9 .contribute-wrapper[data-side="con"]')!;
+  fireEvent.click(wrapper.querySelector('.contribute-affordance')!);
+  const box = wrapper.querySelector('textarea')!;
+  // Before a failure the box is described by its guidance line only (#401).
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toHaveLength(1);
+  fireEvent.change(box, {target: {value: 'A reason'}});
+  fireEvent.click(wrapper.querySelector('.contribute-submit-btn')!);
+
+  await waitFor(() => expect(wrapper.querySelector('[role="alert"]')).not.toBeNull());
+  const error = wrapper.querySelector<HTMLElement>('[role="alert"]')!;
+  expect(error.id).not.toBe('');
+  expect(box.getAttribute('aria-describedby')?.split(' ')).toContain(error.id);
+  expect(document.getElementById(error.id)).toBe(error);
+});
