@@ -1151,7 +1151,7 @@ test('renders explicit argument contribution states and submits through the type
   expect(screen.getByText('Opens after step 1')).toBeVisible();
 
   fireEvent.click(screen.getByRole('button', {name: 'Add your argument in favour'}));
-  const forArgument = screen.getByRole('textbox', {name: 'Your argument in favour · one sentence, one point'});
+  const forArgument = screen.getByRole('textbox', {name: 'Your argument in favour'});
   fireEvent.change(forArgument, {
     target: {value: 'Shared maintenance reduces duplicated work.'},
   });

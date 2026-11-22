@@ -127,3 +127,13 @@ def test_the_circle_contrast_test_uses_the_colours_style_css_defines():
     assert copied, 'the TOKENS table is empty'
     for name, value in copied.items():
         assert root.get(name, '').lower() == value.lower(), f'{name}: test has {value}, style.css {root.get(name)}'
+
+
+def test_the_argument_guidance_line_reads_as_text_not_as_a_hint():
+    """The guidance line above the argument box (#401) takes the body-text colour, not the
+    muted hint tone, so it does not run together with the field's placeholder."""
+    colours = [declarations.get('color') for selectors, declarations in _rules()
+               if '.contribute-guidance' in selectors]
+
+    assert colours, 'no rule styles .contribute-guidance'
+    assert colours[-1] in ('var(--body)', 'var(--ink)'), f'guidance colour is {colours[-1]}'
