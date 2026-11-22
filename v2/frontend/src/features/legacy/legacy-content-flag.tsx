@@ -4,6 +4,7 @@ import {useMutation} from '@tanstack/react-query';
 import type {components} from '../../api/schema';
 import {createContentFlag} from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
+import {maintenanceCopy} from '../../maintenance';
 
 type ContentType = components['schemas']['CreateContentFlagRequest']['contentType'];
 
@@ -125,6 +126,8 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
         <textarea id={`${fieldId}-detail`} name="detail" rows={2} maxLength={1000} required={category === 'other'} placeholder={category === 'other' ? msg('conv-flag-details-required-placeholder') : msg('conv-flag-details-placeholder')} value={detail} onChange={(event) => setDetail(event.target.value)} />
         <button type="submit" className="btn-small" disabled={mutation.isPending}>{msg('conv-flag-send')}</button>
       </form>
+      {/* Maintenance mode (#619): the flag was not sent; say why rather than nothing. */}
+      {maintenanceCopy(msg, mutation.error) && <p className="error" role="alert">{maintenanceCopy(msg, mutation.error)}</p>}
       {/* Always present, so screen readers announce the thanks when it is filled in (#254). */}
       <p className={mutation.data ? 'content-flag-thanks' : 'sr-only'} role="status">{mutation.data ? msg('conv-flag-thanks') : null}</p>
     </details>

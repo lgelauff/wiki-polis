@@ -139,6 +139,9 @@ def app(tmp_path):
             'REMINDERS_BOT_EMAIL_USERNAME': '', 'REMINDERS_BOT_EMAIL_PASSWORD': '',
             'REMINDERS_BOT_TALK_USERNAME': '', 'REMINDERS_BOT_TALK_PASSWORD': '',
             'REMINDERS_TEST_RECIPIENTS': [],
+            # Maintenance mode (#619) is off unless a test creates this file; never the
+            # developer's own ~/maintenance.flag.
+            'MAINTENANCE_FLAG_PATH': str(tmp_path / 'maintenance.flag'),
         })
     with a.app_context():
         db.create_all()

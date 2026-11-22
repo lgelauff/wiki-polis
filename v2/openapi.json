@@ -1761,7 +1761,7 @@
       },
       "Session": {
         "type": "object",
-        "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "gitVersion", "locales", "links"],
+        "required": ["state", "user", "capabilities", "maintenance", "csrfToken", "developerLogins", "gitVersion", "locales", "links"],
         "additionalProperties": false,
         "properties": {
           "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo", "voucher"], "description": "voucher: signed in with a voucher account, which has no username (#368)."},
@@ -1786,6 +1786,7 @@
             ]
           },
           "capabilities": {"$ref": "#/components/schemas/SiteCapabilities"},
+          "maintenance": {"type": "boolean", "description": "Maintenance mode is on (#619): participation is paused. Writes answer 503 with error code `maintenance` and a Retry-After header, for everyone; reads of the participation pages do too, except for site admins."},
           "csrfToken": {"type": "string", "minLength": 1},
           "developerLogins": {
             "type": "array",

@@ -263,6 +263,22 @@ For production, the same steps with `particiapp-docker_polis-server_1`,
 `~/particiapp-docker/docker-compose.yaml`, project `particiapp-docker` and
 `particiapp-docker_postgres_1`. Then record it with `ops/capture_stack_overview.sh`.
 
+**On production, pause participation around it with [maintenance mode](#maintenance-mode),
+not `toolforge webservice stop`.** The site stays up, participants see a page that says
+Proto is being updated and nothing is lost, and no votes, statements or arguments arrive
+while the backup is taken and Polis restarts. In order:
+
+1. On the Toolforge bastion, as the `wiki-polis` tool: turn maintenance mode on and check
+   that it took (see [Maintenance mode](#maintenance-mode) for the commands).
+2. Take the backups by hand: the production Polis Postgres and ToolsDB lines under
+   [Backups](#backups), run once now rather than waiting for cron.
+3. Steps 1–5 above, on the production stack.
+4. Deploy the app on Toolforge as usual (`deploy.sh`, with `--migrate` if the release has
+   migrations). Maintenance mode stays on through it; the webservice restart at the end
+   is the only moment the site itself is down, for a few seconds.
+5. Check the site as a site admin (the maintenance banner shows on every page), then turn
+   maintenance mode off. The next `phase-scheduler` run fires whatever came due.
+
 To undo: put the `image:` line back to the image the patch started from,
 `registry.gitlab.com/particiapp/polis/server@sha256:adf9b8b45e134ad4da3596cbdf1748cb3f9f0cbf88b6d77bef0fbee43c16c8e2`
 (not `:latest`, which could move), and run step 3's `up -d` again. The stamps already made
@@ -585,6 +601,115 @@ guessed.
 > It is not run automatically from `deploy.sh` on purpose: `deploy.sh` operates inside a
 > checkout it also pulls into, and writing tracked files there would collide with the next
 > deploy.
+
+## Maintenance mode
+
+One switch pauses participation without stopping the site (#619): a flag file in the
+tool's home. The app checks it on every request, so turning it on or off needs no deploy
+and no restart.
+
+While it is on:
+
+- **Every write is refused, for everyone, site admins included**: votes, statements,
+  arguments, flags, joining, identity reveal and every admin command answer `503` with
+  error code `maintenance` and `Retry-After: 300`. The SPA shows "Proto is being updated"
+  in place of its own error. No participation data changes, so a backup taken now has
+  every vote, statement and argument there is. Some rows still change: login sessions
+  are stored in the database, logging in creates or updates the participant's row, and a
+  site admin who opens a voucher link still redeems it.
+- **Participants** who open a consultation (`/c/<slug>`, the voucher page, an invitation
+  link, the reveal page) get the branded 503 page: Proto is being updated, nothing they
+  entered is lost, try again in a few minutes.
+- **Organizers and moderators** get the same notice on the console screens that need Polis
+  (statements, featured statements, report preview, ending a consultation).
+- **Reading stays possible** where it needs no Polis call: the front page, the
+  consultation lists, about pages, the moderation log, the published report and
+  outputs, the help pages. Logging in and out still works.
+- **Site admins** can still open every page, and see a banner that maintenance mode is
+  on, so it is not left on by mistake.
+- **The `phase-scheduler` job and `process-reminders`** skip their run and log
+  `Skipping: maintenance mode is on (<path of the flag file>).` The first run after the
+  switch is off handles whatever came due.
+- **Open pages come back by themselves**: a screen showing the maintenance notice asks
+  again every 30 seconds, and so does a site admin's banner.
+
+Not covered: the few seconds of the webservice restart at the end of a deploy.
+
+The commands run on the Toolforge bastion, from any folder.
+
+### Production (`wiki-polis`)
+
+Become the tool:
+
+```bash
+become wiki-polis
+```
+
+Turn it on:
+
+```bash
+touch /data/project/wiki-polis/maintenance.flag
+```
+
+Check that the app sees it. It must print `True`. A webservice that is down answers
+`503` too, so this asks the app itself rather than looking at a status code:
+
+```bash
+curl -s https://wiki-polis.toolforge.org/api/v1/session | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["maintenance"])'
+```
+
+Turn it off:
+
+```bash
+rm -f /data/project/wiki-polis/maintenance.flag
+```
+
+Check that it is off. It must print `False`:
+
+```bash
+curl -s https://wiki-polis.toolforge.org/api/v1/session | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["maintenance"])'
+```
+
+### Staging (`wiki-polis-dev`)
+
+Become the tool:
+
+```bash
+become wiki-polis-dev
+```
+
+Turn it on:
+
+```bash
+touch /data/project/wiki-polis-dev/maintenance.flag
+```
+
+Check that the app sees it. It must print `True`:
+
+```bash
+curl -s https://wiki-polis-dev.toolforge.org/api/v1/session | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["maintenance"])'
+```
+
+Turn it off:
+
+```bash
+rm -f /data/project/wiki-polis-dev/maintenance.flag
+```
+
+Check that it is off. It must print `False`:
+
+```bash
+curl -s https://wiki-polis-dev.toolforge.org/api/v1/session | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["maintenance"])'
+```
+
+### Where the file lives
+
+The app reads `maintenance.flag` in the tool's home (`$TOOL_DATA_DIR`, or the home
+directory where that is not set). The webservice, the scheduled jobs and the bastion must
+all see the same file: the session check above shows the webservice does, and a job's
+`Skipping:` line names the file it read. A flag file that cannot be read (a permission
+error, say) counts as off, and the app logs a warning. The `MAINTENANCE_FLAG_PATH` envvar
+moves the file, which is not normally needed.
 
 ## Ongoing deploys
 

@@ -8,6 +8,7 @@ import {useLoginHref} from '../../login-href';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {LogoutNotice} from './logout-notice';
+import {MaintenanceBanner} from '../../maintenance';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'plain';
 
@@ -219,6 +220,7 @@ export function LegacyShell({
           </div>
         </div>
       </header>
+      <MaintenanceBanner session={session} msg={msg} />
 
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
       <div id="toast-container">{toast}</div>

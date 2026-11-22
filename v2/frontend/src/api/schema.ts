@@ -2251,6 +2251,8 @@ export interface components {
             /** @description Once, on the first page after a logout: which note to show (logged-out: any account; voucher: a single-consultation account, with how to come back to it; revoked: logged out because its code was withdrawn). Null on every other request. */
             logoutNotice?: ("logged-out" | "voucher" | "revoked") | null;
             capabilities: components["schemas"]["SiteCapabilities"];
+            /** @description Maintenance mode is on (#619): participation is paused. Writes answer 503 with error code `maintenance` and a Retry-After header, for everyone; reads of the participation pages do too, except for site admins. */
+            maintenance: boolean;
             csrfToken: string;
             developerLogins: components["schemas"]["DeveloperLogin"][];
             gitVersion: string;

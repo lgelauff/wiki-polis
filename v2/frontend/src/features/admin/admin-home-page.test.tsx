@@ -57,6 +57,7 @@ function serveSession(administerSite: boolean) {
     state: 'authenticated',
     user: {username: 'Example editor', emailable: true},
     capabilities: {administerSite},
+    maintenance: false,
     csrfToken: 'test-csrf-token',
     developerLogins: [],
     gitVersion: 'test-version',
