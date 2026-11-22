@@ -668,13 +668,19 @@ def test_a_run_that_breaks_off_exits_3(app, monkeypatch):
 # ── Before real sending: the lock, what counts as sent, consent per message ──
 
 class _FakeConnection:
-    def __init__(self, calls, held=True):
-        self.calls, self._held = calls, held
+    def __init__(self, calls, held=True, database='s00000__wikipolis_p'):
+        self.calls, self._held, self._database = calls, held, database
+        self.names = []
 
     def execute(self, statement, params=None):
         sql = str(statement)
         self.calls.append(sql.split('(')[0].replace('SELECT ', ''))
-        answer = 1 if 'GET_LOCK' in sql or 'RELEASE_LOCK' in sql else int(self._held)
+        if params:
+            self.names.append(params['n'])
+        if 'DATABASE()' in sql:
+            answer = self._database
+        else:
+            answer = 1 if 'GET_LOCK' in sql or 'RELEASE_LOCK' in sql else int(self._held)
         return type('R', (), {'scalar': lambda self: answer})()
 
     def close(self):
@@ -682,13 +688,14 @@ class _FakeConnection:
 
 
 class _FakeEngine:
-    def __init__(self, calls):
+    def __init__(self, calls, database='s00000__wikipolis_p'):
         self.dialect = type('D', (), {'name': 'mysql'})()
         self.connections = []
         self._calls = calls
+        self._database = database
 
     def connect(self):
-        self.connections.append(_FakeConnection(self._calls))
+        self.connections.append(_FakeConnection(self._calls, database=self._database))
         return self.connections[-1]
 
 
@@ -698,7 +705,28 @@ def test_the_lock_lives_on_one_connection_of_its_own_for_the_whole_run(app):
     with reminder_batch.single_flight(engine) as lock:
         assert lock.held()
     assert len(engine.connections) == 1
-    assert calls == ['GET_LOCK', 'IS_USED_LOCK', 'RELEASE_LOCK', 'close']
+    assert calls == ['DATABASE', 'GET_LOCK', 'IS_USED_LOCK', 'RELEASE_LOCK', 'close']
+
+
+def test_two_tools_on_one_server_take_different_locks(app):
+    # Named locks are server-wide (#589): production and staging must not share one.
+    names = {}
+    for database in ('s00001__wikipolis_p', 's00002__wikipolisdev_p'):
+        engine = _FakeEngine([], database=database)
+        with reminder_batch.single_flight(engine):
+            pass
+        used = set(engine.connections[0].names)
+        assert len(used) == 1          # the same name to take, check and release
+        names[database] = used.pop()
+    assert names['s00001__wikipolis_p'] != names['s00002__wikipolisdev_p']
+    assert reminder_batch.lock_name('s00001__wikipolis_p') == names['s00001__wikipolis_p']
+
+
+def test_the_lock_name_stays_within_64_characters_and_apart(app):
+    long_a, long_b = 'a' * 64, 'a' * 63 + 'b'
+    assert len(reminder_batch.lock_name(long_a)) <= 64
+    assert reminder_batch.lock_name(long_a) != reminder_batch.lock_name(long_b)
+    assert reminder_batch.lock_name(long_a) == reminder_batch.lock_name(long_a)
 
 
 def test_a_lost_lock_stops_the_run_before_the_next_message(app, monkeypatch):

@@ -24,6 +24,7 @@ would send and calls no wiki. Nothing here logs or returns a username or any
 message text.
 """
 
+import hashlib
 import logging
 import random
 from collections import Counter, defaultdict
@@ -51,6 +52,24 @@ MAX_EMAIL_CAP = 20            # Wikimedia's limit for an unflagged bot
 # shows what a live run would do; it also uses up that day's room (#576).
 _DELIVERED = ('sent', 'dry_run')
 _LOCK_NAME = 'proto-reminder-batch'
+_LOCK_NAME_MAX = 64           # MySQL/MariaDB limit on a named lock
+
+
+def lock_name(database: str | None) -> str:
+    """The run lock's name for one database (#589).
+
+    Named locks are server-wide, and production and staging use databases on
+    the same ToolsDB server, so the name carries the database: it differs per
+    tool and stays the same within one. A name that would pass the 64-character
+    limit carries a hash of the database name instead.
+    """
+    if not database:
+        return _LOCK_NAME
+    name = f'{_LOCK_NAME}:{database}'
+    if len(name) <= _LOCK_NAME_MAX:
+        return name
+    digest = hashlib.sha256(database.encode('utf-8')).hexdigest()
+    return f'{_LOCK_NAME}:{digest}'[:_LOCK_NAME_MAX]
 
 
 @dataclass(frozen=True)
@@ -136,13 +155,14 @@ class _NamedLock:
     separate connection that stays open for the whole run.
     """
 
-    def __init__(self, connection):
+    def __init__(self, connection, name):
         self._connection = connection
+        self._name = name
 
     def held(self) -> bool:
         try:
             return self._connection.execute(
-                sa.text('SELECT IS_USED_LOCK(:n) = CONNECTION_ID()'), {'n': _LOCK_NAME}
+                sa.text('SELECT IS_USED_LOCK(:n) = CONNECTION_ID()'), {'n': self._name}
             ).scalar() == 1
         except DBAPIError:
             return False        # the connection died, and the lock with it
@@ -157,14 +177,18 @@ def single_flight(engine=None):
         return
     connection = engine.connect()
     try:
-        got = connection.execute(sa.text('SELECT GET_LOCK(:n, 0)'), {'n': _LOCK_NAME}).scalar()
+        database = connection.execute(sa.text('SELECT DATABASE()')).scalar()
+        if not database:
+            log.warning('reminders: no database selected; the run lock is not per tool')
+        name = lock_name(database)
+        got = connection.execute(sa.text('SELECT GET_LOCK(:n, 0)'), {'n': name}).scalar()
         if got != 1:
             raise BatchBusy()
         try:
-            yield _NamedLock(connection)
+            yield _NamedLock(connection, name)
         finally:
             try:
-                connection.execute(sa.text('SELECT RELEASE_LOCK(:n)'), {'n': _LOCK_NAME})
+                connection.execute(sa.text('SELECT RELEASE_LOCK(:n)'), {'n': name})
             except DBAPIError:
                 log.warning('reminders: could not release the run lock; it ends with the connection')
     finally:
